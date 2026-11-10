@@ -70,6 +70,44 @@ defmodule Hypatia.KyamlTest do
     refute Kyaml.within_budget?(doc, 1)
   end
 
+  # verification/proofs/idris2/KyamlBudget.idr proves, of a model of this
+  # count, that a total within the limit is the expanded size and that a
+  # document within the limit is passed. This holds the Elixir count to that
+  # model's `size` on every tree of a small domain: scalars, sequences,
+  # mappings, and aliases (to a non-alias, as the reader allows) sharing a
+  # subtree.
+  test "within_budget?/2 passes exactly the trees whose expanded size is within the limit" do
+    leaf = %{kind: :string, value: "x"}
+    seq = &%{kind: :seq, items: &1}
+    map = fn values -> %{kind: :map, entries: Enum.map(values, &%{key: leaf, value: &1})} end
+    ali = &%{kind: :alias, target: &1}
+
+    size = fn
+      size, %{kind: :alias, target: t} -> size.(size, t)
+      size, %{kind: :seq, items: items} -> 1 + Enum.sum(Enum.map(items, &size.(size, &1)))
+      size, %{kind: :map, entries: es} -> 1 + Enum.sum(Enum.map(es, &size.(size, &1.value)))
+      _, _ -> 1
+    end
+
+    grow = fn trees ->
+      non_alias = Enum.reject(trees, &(&1.kind == :alias))
+      lists = [[]] ++ for(a <- trees, do: [a]) ++ for(a <- trees, b <- trees, do: [a, b])
+      trees ++ Enum.map(non_alias, ali) ++ Enum.map(lists, seq) ++ Enum.map(lists, map)
+    end
+
+    trees = [leaf] |> grow.() |> grow.() |> Enum.uniq()
+    assert length(trees) > 150
+
+    mismatches =
+      for t <- trees,
+          n = size.(size, t),
+          limit <- 0..(n + 1),
+          Kyaml.within_budget?(t, limit) != n <= limit,
+          do: {t, limit}
+
+    assert mismatches == []
+  end
+
   test "within_budget?/2 stops counting at the limit (the billion-laughs document)" do
     anchors =
       for i <- 1..9 do
@@ -169,6 +207,27 @@ defmodule Hypatia.KyamlTest do
       {"anchored-first-key-refused", "&k a: 1\n", {:error, "KEY_PROPERTY", 1, 1, ""}},
       {"flow-tagged-key-refused", "x: {!!str a: 1}\n", {:error, "KEY_PROPERTY", 1, 5, ""}},
       {"flow-alias-decorated", "a: &a 1\nb: [!!int *a]\n", {:error, "ALIAS_DECORATED", 2, 5, ""}},
+      # A bare property's value on the next line is the node itself: an alias
+      # there carries the property as surely as on the same line, and would
+      # otherwise chain aliases past the node budget's per-step count.
+      {"alias-decorated-next-line", "a: &a [x]\nb: &b\n  *a\n",
+       {:error, "ALIAS_DECORATED", 2, 4, ""}},
+      {"alias-tagged-next-line", "a: &a x\nb: !!str\n  *a\n",
+       {:error, "ALIAS_DECORATED", 2, 4, ""}},
+      {"root-alias-decorated-next-line", "&b\n*a\n", {:error, "ALIAS_DECORATED", 1, 1, ""}},
+      # A flow collection or block scalar on the line after its key is
+      # measured from the key's block, not from its own column.
+      {"next-line-flow-continues-at-own-column", "a:\n  [x,\n  y]\n",
+       {:ok, %{"a" => ["x", "y"]}}},
+      {"next-line-flow-under-parent-refused", "a:\n  [x,\ny]\n",
+       {:error, "BAD_INDENT", 3, 1, ""}},
+      {"next-line-block-scalar-at-own-column", "a:\n  |\n  x\n", {:ok, %{"a" => "x\n"}}},
+      # ns-plain-first: a later key starting with an indicator is not that string.
+      {"indicator-flow-key-refused", "a: 1\n[b]: 2\n", {:error, "PLAIN_INDICATOR", 2, 1, ""}},
+      {"indicator-block-key-refused", "a: 1\n|b: 1\n", {:error, "PLAIN_INDICATOR", 2, 1, ""}},
+      {"indicator-in-flow-refused", "x: [>a]\n", {:error, "PLAIN_INDICATOR", 1, 5, ""}},
+      {"bare-anchor-then-sibling-alias", "a: &a x\nb: &b\nc: *a\n",
+       {:ok, %{"a" => "x", "b" => nil, "c" => "x"}}},
       # The printable set (YAML 1.2 c-printable) is checked over the whole
       # stream, so the error stands at the character, wherever it is.
       {"control-character-in-plain", "a: x\u0001y\n", {:error, "CONTROL_CHARACTER", 1, 5, ""}},

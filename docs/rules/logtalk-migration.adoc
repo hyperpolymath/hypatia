@@ -583,16 +583,13 @@ evidence, not a standards-gate receipt.
 [[proofing]]
 == Proofing: policy, grades, and exact statuses
 
-Proofing follows hyperpolymath/mathesis'
-`estate-mathematical-architecture` (§§5–6) for grades and
-metadatastician/standards `3-practice/PROOF-POLICY.adoc` for evidence
-discipline; everything else follows the standards repo. In Mathesis'
-ladder, *Grade 3* means the statement is formulated in Agda and
-type-checks under the strict profile; Grade 2 additionally requires
-translation into independent foundational system(s); Grade 1
-additionally requires those witnesses to compile in headless isolated
-CI through verified checker APIs. Statuses are recorded exactly
-(Open / Claimed / AGDA-PENDING / Grade 3 / …), never as a percentage,
+Proofing follows metadatastician/standards `3-practice/PROOF-POLICY.adoc`:
+§5 for status tokens and §8 for Proof Witness Grades (owner ruling
+2026-11-04, which supersedes the ladder of the Mathesis architecture
+brief). `PWG-3` means the Agda proof is checked under the §2.1
+invocation; `PWG-2i` adds one counted Rocq or Lean recheck leg and
+`PWG-2ii` both; `PWG-1` adds a current per-commit receipt for every
+witness. Statuses and grades are recorded exactly, never as a percentage,
 and a checked model never silently becomes a runtime-refinement or
 reconciliation claim.
 
@@ -609,7 +606,7 @@ exactly
 |`verification/proofs/agda/LogtalkMigration.agda`
 (`categoriesAgree`, `severitiesAgree`, `autoFixableAgrees`,
 `fixPresenceAgrees`, `prevention*`, `catchAll*Low`)
-|*Grade 3 — AGDA-VERIFIED.* Receipt recorded in
+|*PROVEN, `PWG-3`.* Receipt recorded in
 `verification/PROOF-STATUS.adoc`: official pinned Agda 2.8.0.2 Linux
 release (builtins only, no stdlib), invocation `agda --safe
 --without-K --cubical-compatible LogtalkMigration.agda`, success in
@@ -617,7 +614,7 @@ Verify Proofs run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e
 source SHA-256
 bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
 The `agda strict-profile check` job fails hard (never skips) on every
-relevant change. No Grade 2/1, Rocq/Lean reconciliation, or Elixir
+relevant change. No `PWG-2i`, `PWG-2ii` or `PWG-1`, Rocq/Lean reconciliation, or Elixir
 runtime-refinement claim is made.
 
 |VeriSimDB connector field preservation
@@ -706,7 +703,7 @@ sibling repositories from this branch):
   coordinated. ✓ (landing: siblings)
 * Repository guard against new active `.lgt` files / Logtalk output
   settings, exact-path shrink-only allowlist, wired into CI. ✓
-* Proofing graded honestly: finite correspondence at Mathesis
-  *Grade 3 / AGDA-VERIFIED* on the recorded strict-profile Agda
+* Proofing graded honestly: finite correspondence PROVEN at
+  `PWG-3` on the recorded strict-profile Agda
   receipt; Idris statement supersession recorded and re-checked; no
   claim inflated beyond its evidence. ✓

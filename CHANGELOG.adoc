@@ -118,6 +118,105 @@ a comment keeps its `run:`. WH014 reads each job's steps through the same
 reader. On the hypatia, echidna and standards trees, WH013, WH014 and RE001
 report exactly what they did before.
 
+==== One parsed workflow model; RE001 and RE002 read it (#971) (2026-11-09)
+
+`Hypatia.Workflow` is #971's model: each workflow is parsed once by
+`Hypatia.Kyaml`, the port of kyq's KYAML reader, into `Workflow`, `Job` and
+`Step` records. Scalars a rule compares (`uses`, `run`, `if`) are their YAML
+values, folded and unquoted; mappings a rule walks (`env`, `with`) keep their
+nodes, so every value keeps its source line. RE001 and RE002 now read the
+model instead of scanning lines (WH013 and WH014 follow, and
+`Hypatia.WorkflowYaml` with them):
+
+* **Layout no longer changes a finding.** Block or flow YAML, plain or quoted
+  keys, literal or folded `run:` blocks and aliases all read the same. A new
+  equivalence harness (`test/research_extensions_equivalence_test.exs`)
+  renders seeded random workflows four ways and requires the same findings
+  from each. Run against the old line-based RE001, it fails on its seventh
+  case.
+* **An unreadable workflow is reported, not guessed at.** A workflow the
+  reader refuses (a `<<` merge key, which GitHub also refuses; aliases past
+  kyq's node budget; any other KYAML error) gets a `:warn` RE001 finding at
+  the error, if it names `secrets`. Its deed declarations are not reported
+  stale.
+* **The three post-merge review threads on #975 are closed by construction,**
+  each with a test that fails on the line reader: `<<: [*defaults]` is
+  refused and reported, not misplaced; text in a `name: |` block beside the
+  hardener is not its input, so an audit hardener no longer passes for a
+  block one; a folded `egress-policy: >-` is read as its value, and a
+  literal block is trimmed as the action's `core.getInput` trims it.
+* **Declared endpoints are checked** against the workflow (`:warn`): a host
+  outside GitHub that a step names literally (a URL or a `git@host:` remote,
+  shell comments aside) must be covered by the job's `:endpoints`, and
+  harden-runner's `allowed-endpoints`, when listed, must agree with them.
+  An allowed entry written with an expression
+  (`${{ secrets.SMTP_HOST }}:465`) names its host only at run time and is not
+  compared, and GitHub's own hosts are outside the comparison on both sides.
+  `Hypatia.Deed.egress_declarations/1` now returns `:endpoints`.
+* **RE002** finds harden-runner the way RE001 does: a real step, the owner in
+  any case, its own `with: egress-policy`. A step with no policy runs
+  harden-runner's default, `audit`, and is now reported. The trigger is a
+  `push` or `release` key of `on:`, not a `push:` anywhere in the file.
+* **Review fixes on #1036**, each with a test that fails without it. The
+  endpoint comparison no longer takes `notgithubusercontent.com` for a
+  GitHub host; reads a URL's scheme in any case (`HTTPS://`); compares a
+  literal IPv4 host (loopback aside; a single-label name such as
+  `localhost` or a service container is still not egress); treats a URL
+  port written as an expression as unknown instead of the scheme's default;
+  reads `git@gitlab.com:123team/x.git` as a remote but
+  `owner@example.com: failed` as prose; ignores a `#` inside shell quotes
+  (`git commit -m "fix #12" && git push …`) when looking for comments;
+  keeps the literal host of an allowed entry whose port is an expression;
+  and holds an allowed entry with no port (every port) to a declaration
+  with none, and a declaration with no port to an allowed entry with none.
+  Hosts are now also read from the job's and the workflow's `env:` (a
+  value is not counted where the job or the step sets the same
+  variable again), but not from a
+  step's `name`, `id` or `if`; database and broker URLs
+  (`postgres://`, `rediss://`, `mongodb+srv://`, AMQP, MQTT, LDAP, SMTP,
+  SFTP) are read at their scheme's default port; and a `#` after a shell
+  control operator (`done;# …`) opens a comment. `scan/2` parses each
+  workflow once for RE001 and RE002. RE002 skips a job whose `if:` admits only events other than
+  `push` and `release`, and reports a workflow the reader refuses if it
+  names harden-runner (the line reader used to find its `audit` there).
+  A job or step read through an alias is reported at the alias again, not
+  at the anchor. On the six repositories above, RE001 and RE002 give the
+  same 6 findings before and after.
+
+The `code_safety/elixir_atom_from_user` description was backwards: it named
+`String.to_existing_atom` as the danger. It now names `String.to_atom`. The
+pattern was always right.
+
+Measured on 2026-11-09 against the main branches of hyperpolymath/hypatia,
+rsr-template-repo, choreographic-types and mathesis, and
+metadatastician/standards and kyq: RE001 and RE002 give the same 6 findings
+as the line reader did. Two defects in the endpoint comparison surfaced only
+there and are fixed with tests: an `allowed-endpoints` entry written with an
+expression crashed it (hypatia's own `push-email-notify.yml`), and a deed
+listing GitHub hosts drew 12 false findings on hypatia.
+
+The decision and the alias budget are proved, and the code is held to the
+proofs (verification/PROOF-STATUS.adoc, "Egress declarations and the KYAML
+reader"):
+
+* `src/Hypatia/ABI/Egress.idr` models RE001's acceptance of a job as a
+  decidable type and proves that an audit hardener never satisfies a block
+  claim, that a declaration lists exactly the secrets read, and that a key
+  computed at run time is never declared. Three expected rejections and a
+  positive control run in `scripts/check-verdicts.sh`.
+  `test/egress_decision_mirror_test.exs` runs RE001 on all 280 cases of a
+  small domain and requires it to agree with the proved decision.
+* `verification/proofs/idris2/KyamlBudget.idr` models `within_budget?/2`
+  and proves that, on a document in which no alias names another alias
+  (which the reader guarantees), it passes exactly the documents whose
+  expanded size is within the limit, in at most 2 · (limit + 1) + 2 calls
+  of `count/3` however far the aliases expand. The bound counts calls, not
+  the work inside one or allocation. `test/kyaml_test.exs` holds the
+  Elixir count to the model on 154 trees at every limit.
+
+The reader as a whole is tested, not proved, and endpoints are not
+modelled; both are recorded as such.
+
 ==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
 
 The estate-wide decision on `step-security/harden-runner` (standards ADR-009) is

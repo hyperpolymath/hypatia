@@ -357,6 +357,9 @@ jobs:
             test/rules/audit_prevention_test.exs \
             test/security_errors_test.exs \
             test/research_extensions_test.exs \
+            test/research_extensions_equivalence_test.exs \
+            test/workflow_test.exs \
+            test/egress_decision_mirror_test.exs \
             test/deed_test.exs \
             test/kyaml_test.exs \
             test/kyaml_conformance_test.exs

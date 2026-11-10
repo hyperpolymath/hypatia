@@ -353,7 +353,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
-    test "a quoted scalar spanning lines keeps its quotes: a ` #` inside it is not a comment" do
+    # A quoted scalar spanning lines is outside the KYAML subset, so the reader
+    # refuses the file instead of guessing where the quote ends: a ` #` inside
+    # it is never read as a comment. RE001 still reports the file, loudly.
+    test "a quoted scalar spanning lines is refused, not misread as a comment" do
       repo =
         create_repo_with_workflow("""
         on: {workflow_dispatch: {inputs: {why: {description: "first line
@@ -365,10 +368,11 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - run: ./reply.sh ${{ secrets.BOT_PAT }}
         """)
 
-      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+      assert [%{rule: "RE001", severity: :warn, reason: reason}] =
                ResearchExtensions.re001_missing_harden_runner(repo)
 
-      assert exposure =~ "issue_comment"
+      assert reason =~ "UNTERMINATED_QUOTE"
+      assert reason =~ "cannot check its secret-bearing jobs"
       File.rm_rf!(repo)
     end
 
@@ -1191,7 +1195,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
         write_deed(
           repo,
           ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
-            ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+            ~s|:secrets ("SMTP_PASS") :endpoints ("a.com:443" "b.com:443") :enforcement harden-runner-block))|
         )
 
         findings = ResearchExtensions.re001_missing_harden_runner(repo)
@@ -1394,8 +1398,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert plain =~ "`deploy`"
       assert plain =~ "HIDDEN"
 
-      # A merge key, `<<: *common`, inside the job's own env:.
-      assert [%{reason: merged}] =
+      # A merge key, `<<: *common`, is outside YAML 1.2 and GitHub refuses it:
+      # the workflow is reported as unreadable, at the key, not guessed at.
+      assert [%{line: 11, severity: :warn, reason: merged}] =
                check.("""
                  deploy:
                    runs-on: ubuntu-24.04
@@ -1406,7 +1411,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                      - run: send ${{ secrets.VISIBLE }}
                """)
 
-      assert merged =~ "HIDDEN"
+      assert merged =~ "UNSUPPORTED_MERGE_KEY"
 
       # The same declaration, without the alias, is exact.
       assert check.("""
@@ -1427,9 +1432,6 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               steps:
                 - run: send ${{ secrets.SMTP_PASS }}
             deploy: *job
-            release:
-              <<: *job
-              name: release
           """,
           "notify.yml"
         )
@@ -1440,16 +1442,20 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
       )
 
-      findings = ResearchExtensions.re001_missing_harden_runner(repo)
-      assert Enum.map(findings, & &1.line) == [6, 8]
-      assert Enum.all?(findings, &(&1.detail.fix =~ ~s|:secrets ("SMTP_PASS")|))
-      assert Enum.any?(findings, &(&1.reason =~ "`deploy`"))
-      assert Enum.any?(findings, &(&1.reason =~ "`release`"))
+      # deploy is build, read through the alias and reported at it.
+      assert [%{line: 6, reason: reason, detail: %{fix: fix}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert reason =~ "`deploy`"
+      assert fix =~ ~s|:secrets ("SMTP_PASS")|
       File.rm_rf!(repo)
     end
 
-    test "a key the job sets itself wins over the same key from a merge" do
-      # The anchor's steps install harden-runner; the job's own steps do not.
+    test "a merge key makes the workflow unreadable: reported, never read in part" do
+      # Read as YAML 1.1, deploy's own steps: would win over the merged,
+      # hardened ones. GitHub reads YAML 1.2, which has no merge key, and so
+      # does RE001: one finding at the key, and the workflow's declarations
+      # are not reported stale, because they cannot be checked.
       repo =
         create_repo_with_workflow(
           """
@@ -1473,14 +1479,17 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           "notify.yml"
         )
 
-      write_deed(repo, "")
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "deploy" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
 
-      # deploy holds VISIBLE only (its env: replaces the merged one) and has
-      # no hardener (its steps: replace the merged ones).
-      assert [%{line: 16, detail: %{fix: fix}}] =
+      assert [%{line: 12, severity: :warn, reason: reason, detail: %{fix: fix}}] =
                ResearchExtensions.re001_missing_harden_runner(repo)
 
-      assert fix =~ ~s|:job "deploy" :secrets ("VISIBLE")|
+      assert reason =~ "UNSUPPORTED_MERGE_KEY at line 12, column 5"
+      assert fix =~ "`<<` merge key"
       File.rm_rf!(repo)
     end
 
@@ -1551,10 +1560,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
-    test "nested anchors that multiply (the billion-laughs file) are expanded within a budget" do
+    test "nested anchors that multiply (the billion-laughs file) are refused within a budget" do
       anchors =
         for i <- 1..9 do
-          prev = if i == 1, do: "${{ secrets.SMTP_PASS }}", else: "*a#{i - 1}"
+          prev = if i == 1, do: ~s|"${{ secrets.SMTP_PASS }}"|, else: "*a#{i - 1}"
           "  a#{i}: &a#{i} [#{Enum.map_join(1..10, ", ", fn _ -> prev end)}]"
         end
 
@@ -1578,8 +1587,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       {micros, findings} =
         :timer.tc(fn -> ResearchExtensions.re001_missing_harden_runner(repo) end)
 
-      assert [%{detail: %{fix: fix}}] = findings
-      assert fix =~ ~s|:secrets ("SMTP_PASS")|
+      # Past kyq's node budget the workflow is refused, as kyq refuses it, and
+      # the refusal is a finding: a job it hides is never a silent pass.
+      assert [%{severity: :warn, reason: reason}] = findings
+      assert reason =~ "NODE_BUDGET_EXCEEDED"
       assert micros < 10_000_000
       File.rm_rf!(repo)
     end
@@ -1992,11 +2003,635 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
+
+    # ─── declared endpoints against the workflow ──────────────────────
+
+    defp endpoint_findings(steps, endpoints) do
+      repo =
+        create_repo_with_workflow(
+          "on: push\njobs:\n  ship:\n    runs-on: ubuntu-latest\n    steps:\n" <> steps,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints (#{endpoints}) :enforcement none))|
+      )
+
+      findings = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+      findings
+    end
+
+    test "a host a step names literally must be declared" do
+      steps = """
+            - run: |
+                # docs: https://docs.example.org/upload
+                curl -H "t: ${{ secrets.TOKEN }}" https://upload.example.com/v1#frag
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.severity == :warn
+      assert finding.line == 8
+      assert finding.reason =~ ~s|names "upload.example.com:443" literally|
+      refute finding.reason =~ "docs.example.org"
+
+      assert endpoint_findings(steps, ~s|"upload.example.com"|) == []
+      assert endpoint_findings(steps, ~s|"*.example.com"|) == []
+      assert endpoint_findings(steps, ~s|"upload.example.com:443"|) == []
+      assert [_] = endpoint_findings(steps, ~s|"upload.example.com:8443"|)
+      # A wildcard covers subdomains, not the apex; a secret covers no literal host.
+      assert [_] = endpoint_findings(steps, ~s|"*.upload.example.com"|)
+      assert [_] = endpoint_findings(steps, ~s|"secret:TOKEN"|)
+    end
+
+    # hypatia's own push-email-notify.yml lets out
+    # `${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}`: an entry
+    # whose host is known only at run time. It is one unit however it is
+    # spaced, and it is not a literal host to compare (it crashed the
+    # comparison while it was split on its spaces).
+    test "an allowed endpoint written with expressions is not a literal host" do
+      run = fn allowed, endpoints ->
+        workflow =
+          Enum.join(
+            [
+              "on: push",
+              "jobs:",
+              "  ship:",
+              "    runs-on: ubuntu-latest",
+              "    steps:",
+              "      - uses: step-security/harden-runner@v2",
+              "        with:",
+              "          egress-policy: block",
+              "          allowed-endpoints: >"
+            ] ++
+              Enum.map(allowed, &("            " <> &1)) ++
+              [~S|      - run: send --token "${{ secrets.TOKEN }}"|],
+            "\n"
+          ) <> "\n"
+
+        repo = create_repo_with_workflow(workflow, "ship.yml")
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+            ~s|:secrets ("SMTP_HOST" "SMTP_PORT" "TOKEN") :endpoints (#{endpoints}) | <>
+            ~s|:enforcement harden-runner-block))|
+        )
+
+        # The deed must be readable, or a hardened job passes vacuously.
+        assert {:ok, _, [_]} = Hypatia.Deed.egress_declarations(repo)
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      smtp = "${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}"
+
+      assert run.(["github.com:443", smtp], ~s|"secret:SMTP_HOST"|) == []
+
+      # A literal host beside the expression is still held to the deed.
+      assert [finding] =
+               run.(["github.com:443", "relay.example.net:587", smtp], ~s|"secret:SMTP_HOST"|)
+
+      assert finding.reason =~ "relay.example.net:587"
+
+      assert run.(
+               ["github.com:443", "relay.example.net:587", smtp],
+               ~s|"secret:SMTP_HOST" "relay.example.net:587"|
+             ) == []
+
+      # GitHub's own hosts are outside the comparison on both sides: a deed
+      # may list them (hypatia_chora.deed does) and is not held to them.
+      assert run.(
+               ["github.com:443", smtp],
+               ~s|"github.com:443" "api.github.com:443" "secret:SMTP_HOST"|
+             ) ==
+               []
+    end
+
+    test "an ssh remote is port 22, and GitHub's own hosts are never declared" do
+      steps = """
+            - run: git push git@gitlab.com:o/x.git && git push https://github.com/o/x
+              env:
+                KEY: ${{ secrets.TOKEN }}
+            - uses: actions/checkout@v4
+              with:
+                repository: https://raw.githubusercontent.com/o/x
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"gitlab.com:22"|
+      refute finding.reason =~ "github.com"
+      refute finding.reason =~ "githubusercontent"
+      assert endpoint_findings(steps, ~s|"gitlab.com:22"|) == []
+      assert [_] = endpoint_findings(steps, ~s|"gitlab.com:443"|)
+    end
+
+    test "harden-runner's allowed-endpoints and the declaration must agree" do
+      steps = fn allowed ->
+        """
+              - uses: step-security/harden-runner@v2
+                with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                    #{allowed}
+              - run: deploy --token ${{ secrets.TOKEN }}
+        """
+      end
+
+      agree = steps.("api.github.com:443 hex.pm:443 repo.hex.pm:443")
+      assert endpoint_findings(agree, ~s|"hex.pm:443" "*.hex.pm:443"|) == []
+
+      assert [finding] = endpoint_findings(agree, ~s|"hex.pm:443"|)
+      assert finding.reason =~ ~s|lets out undeclared "repo.hex.pm:443"|
+
+      assert [finding] =
+               endpoint_findings(steps.("hex.pm:443"), ~s|"hex.pm:443" "cdn.example.com"|)
+
+      assert finding.reason =~ ~s|does not allow declared "cdn.example.com"|
+    end
+
+    # A literal host with an expression for its port is still a literal host;
+    # an entry with no port lets out every port, which a deed listing one
+    # port does not declare.
+    test "allowed-endpoints: a run-time port keeps its host; no port means every port" do
+      steps = fn allowed ->
+        """
+              - uses: step-security/harden-runner@v2
+                with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                    #{allowed}
+              - run: deploy --token ${{ secrets.TOKEN }}
+        """
+      end
+
+      dynamic = steps.("smtp.example.com:${{ vars.SMTP_PORT }}")
+      assert [finding] = endpoint_findings(dynamic, "")
+      assert finding.reason =~ ~s|lets out undeclared "smtp.example.com"|
+      assert endpoint_findings(dynamic, ~s|"smtp.example.com:465"|) == []
+
+      portless = steps.("api.example.com")
+      assert [finding] = endpoint_findings(portless, ~s|"api.example.com:443"|)
+      assert finding.reason =~ ~s|lets out undeclared "api.example.com"|
+      assert endpoint_findings(portless, ~s|"api.example.com"|) == []
+    end
+
+    test "GitHub's own hosts are whole domains, not suffixes" do
+      steps = """
+            - run: curl https://notgithubusercontent.com/x https://raw.githubusercontent.com/y
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|names "notgithubusercontent.com:443" literally|
+      refute finding.reason =~ "raw.githubusercontent.com"
+
+      allowed = """
+            - uses: step-security/harden-runner@v2
+              with:
+                egress-policy: block
+                allowed-endpoints: notgithubusercontent.com:443 githubusercontent.com:443
+            - run: deploy --token ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(allowed, "")
+      assert finding.reason =~ ~s|lets out undeclared "notgithubusercontent.com:443"|
+      refute finding.reason =~ ~s|"githubusercontent.com:443"|
+    end
+
+    test "a URL is read with its scheme in any case, and a literal IPv4 host is a host" do
+      steps = """
+            - run: |
+                curl HTTPS://upload.example.com/x https://10.0.0.5/upload
+                curl http://127.0.0.1:8080/health http://localhost:9000 http://postgres:5432
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"upload.example.com:443"|
+      assert finding.reason =~ ~s|"10.0.0.5:443"|
+      # Loopback and single-label names (service containers) are not egress.
+      refute finding.reason =~ "127.0.0.1"
+      refute finding.reason =~ "localhost"
+      refute finding.reason =~ "postgres"
+      assert endpoint_findings(steps, ~s|"upload.example.com:443" "10.0.0.5:443"|) == []
+    end
+
+    test "a URL port written as an expression is unknown, not the scheme's default" do
+      steps = """
+            - run: curl https://api.example.com:${{ vars.PORT }}/upload
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert endpoint_findings(steps, ~s|"api.example.com:8443"|) == []
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|names "api.example.com" literally|
+    end
+
+    test "an scp remote has a path, which may start with a digit" do
+      remote = fn line ->
+        """
+              - run: |
+                  #{line}
+                env:
+                  K: ${{ secrets.TOKEN }}
+        """
+      end
+
+      assert [finding] = endpoint_findings(remote.("git push git@gitlab.com:123team/x.git"), "")
+      assert finding.reason =~ ~s|"gitlab.com:22"|
+
+      # Prose with an address and a colon is no remote.
+      assert endpoint_findings(remote.(~s|echo "owner@example.com: deployment failed"|), "") ==
+               []
+
+      # A URL's userinfo before a port is the URL's, not an scp remote.
+      assert endpoint_findings(
+               remote.("psql postgres://u:pass@db.example.com:5432/x"),
+               ~s|"db.example.com:5432"|
+             ) == []
+    end
+
+    test "a quoted # opens no shell comment" do
+      steps = """
+            - run: |
+                git commit -m "fix #12" && git push https://gitlab.example.com/o/x.git
+                echo 'a # b' https://up.example.com # https://c.example.org
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"gitlab.example.com:443"|
+      assert finding.reason =~ ~s|"up.example.com:443"|
+      refute finding.reason =~ "c.example.org"
+    end
+
+    test "a host in the job's or the workflow's env is named by every step" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            MIRROR: git@mirror.example.org:o/x.git
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              env:
+                UPLOAD_URL: https://upload.example.com/v1
+              steps:
+                - run: |
+                  curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL" && git push "$MIRROR"
+          """,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|"upload.example.com:443"|
+      assert finding.reason =~ ~s|"mirror.example.org:22"|
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow env value the job overrides is not the job's" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            UPLOAD_URL: https://old.example.com/v1
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              env:
+                UPLOAD_URL: https://new.example.com/v1
+              steps:
+                - run: |
+                    curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL"
+          """,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints ("new.example.com:443") :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a job env value every step sets again reaches no step" do
+      job = fn second_step ->
+        """
+        on: push
+        jobs:
+          ship:
+            runs-on: ubuntu-latest
+            env:
+              UPLOAD_URL: https://old.example.com/v1
+            steps:
+              - run: |
+                  curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL"
+                env:
+                  UPLOAD_URL: https://new.example.com/v1
+        #{second_step}
+        """
+      end
+
+      findings = fn yaml ->
+        repo = create_repo_with_workflow(yaml, "ship.yml")
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+            ~s|:secrets ("TOKEN") :endpoints ("new.example.com:443") :enforcement none))|
+        )
+
+        result = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        result
+      end
+
+      overridden =
+        "      - run: echo done\n        env:\n          UPLOAD_URL: https://new.example.com/v2"
+
+      assert findings.(job.(overridden)) == []
+
+      # One step that does not set it sees the job's value.
+      assert [finding] = findings.(job.("      - run: echo done"))
+      assert finding.reason =~ ~s|"old.example.com:443"|
+    end
+
+    test "a step's name, id and condition name no endpoint" do
+      steps = """
+            - name: Read https://docs.example.com before deploying
+              id: deploy
+              if: ${{ !contains(github.event.head_commit.message, 'https://skip.example.com') }}
+              run: ./deploy --token ${{ secrets.TOKEN }}
+      """
+
+      assert endpoint_findings(steps, "") == []
+    end
+
+    test "a database or broker URL names its host, at the scheme's default port" do
+      steps = """
+            - run: |
+                psql postgres://db.example.com/app
+                redis-cli -u rediss://cache.example.com:6380
+                mongosh "mongodb+srv://cluster0.example.net/app"
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"db.example.com:5432"|
+      assert finding.reason =~ ~s|"cache.example.com:6380"|
+      # An SRV record names the port, so any declared port of the host covers it.
+      assert finding.reason =~ ~s|"cluster0.example.net"|
+
+      assert endpoint_findings(
+               steps,
+               ~s|"db.example.com:5432" "cache.example.com:6380" "cluster0.example.net:27017"|
+             ) == []
+    end
+
+    test "a # after a shell control operator opens a comment" do
+      steps = """
+            - run: |
+                echo done;# curl https://comment.example.com
+                make&&#curl https://comment2.example.com
+                echo 'a;# b' https://up.example.com
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"up.example.com:443"|
+      refute finding.reason =~ "comment"
+    end
+
+    test "a declaration without a port claims every port, so one allowed port blocks it" do
+      steps = """
+            - uses: step-security/harden-runner@v2
+              with:
+                egress-policy: block
+                allowed-endpoints: api.example.com:443
+            - run: deploy --token ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, ~s|"api.example.com"|)
+      assert finding.reason =~ ~s|does not allow declared "api.example.com"|
+      assert endpoint_findings(steps, ~s|"api.example.com:443"|) == []
+    end
+  end
+
+  describe "scan/2" do
+    test "gives RE001 and RE002 exactly as their own entry points do" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: step-security/harden-runner@v2
+                  with:
+                    egress-policy: audit
+                - run: npm ci && deploy --token ${{ secrets.TOKEN }}
+          """,
+          "ship.yml"
+        )
+
+      findings = ResearchExtensions.scan(repo).findings
+      re00x = Enum.filter(findings, &(&1.rule in ["RE001", "RE002"]))
+
+      assert re00x ==
+               ResearchExtensions.re001_missing_harden_runner(repo) ++
+                 ResearchExtensions.re002_harden_runner_audit_mode(repo)
+
+      assert Enum.any?(re00x, &(&1.rule == "RE002"))
+      File.rm_rf!(repo)
+    end
+  end
+
+  # What is read through an alias is reported at the alias (the old line
+  # reader did so); the parsed model reported the anchor.
+  describe "re001_missing_harden_runner/1 through an alias" do
+    test "a job or a step read through an alias is reported at the alias" do
+      job_alias = """
+      on: push
+      jobs:
+        a: &j
+          runs-on: ubuntu-latest
+          steps:
+            - run: npm ci
+              env:
+                K: ${{ secrets.TOKEN }}
+        b: *j
+      """
+
+      step_alias = """
+      on: push
+      jobs:
+        a:
+          runs-on: ubuntu-latest
+          steps:
+            - &s
+              run: npm ci
+              env:
+                K: ${{ secrets.TOKEN }}
+        b:
+          runs-on: ubuntu-latest
+          steps:
+            - *s
+      """
+
+      for {yaml, lines} <- [
+            {job_alias, %{"a" => 8, "b" => 9}},
+            {step_alias, %{"a" => 9, "b" => 13}}
+          ] do
+        repo = create_repo_with_workflow(yaml)
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+
+        job_of = fn f -> hd(Regex.run(~r/job `(\w+)`/, f.reason, capture: :all_but_first)) end
+        assert Map.new(findings, &{job_of.(&1), &1.line}) == lines
+
+        assert Enum.all?(findings, &(&1.severity == :high))
+      end
+    end
   end
 
   # ─── RE002 ──────────────────────────────────────────────────────────
 
+  # The three shapes Codex raised on #975 after it merged, each one a line
+  # reader's misreading of YAML. Read from the parsed model they cannot occur.
+  describe "re001_missing_harden_runner/1 on the #975 post-merge shapes" do
+    @sha "1234567890abcdef1234567890abcdef12345678"
+
+    # A hardened job whose harden-runner step carries `hardener_lines` (step
+    # properties, given at the step's own column) and a block declaration.
+    defp hardened_repo(hardener_lines) do
+      workflow =
+        Enum.join(
+          [
+            "jobs:",
+            "  notify:",
+            "    runs-on: ubuntu-24.04",
+            "    steps:",
+            "      - uses: step-security/harden-runner@#{@sha}"
+          ] ++
+            Enum.map(hardener_lines, &("        " <> &1)) ++
+            [~S|      - run: curl -u "$U:${{ secrets.SMTP_PASS }}" https://mail.example.com|],
+          "\n"
+        ) <> "\n"
+
+      repo = create_repo_with_workflow(workflow, "notify.yml")
+
+      write_deed(
+        repo,
+        ~s|(egress :policy "standards ADR-009" (job :workflow ".github/workflows/notify.yml" | <>
+          ~s|:job "notify" :secrets ("SMTP_PASS") :endpoints ("mail.example.com:443") | <>
+          ~s|:enforcement harden-runner-block))|
+      )
+
+      repo
+    end
+
+    test "a `<<: [*defaults]` merge is not guessed at: the workflow is reported unreadable" do
+      repo =
+        create_repo_with_workflow(
+          """
+          x-defaults: &defaults
+            runs-on: ubuntu-24.04
+            env:
+              TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          jobs:
+            deploy:
+              <<: [*defaults]
+              steps:
+                - run: ./deploy.sh
+          """,
+          "deploy.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :warn
+      assert finding.line == 7
+      assert finding.reason =~ "UNSUPPORTED_MERGE_KEY"
+      File.rm_rf!(repo)
+    end
+
+    test "text in a block scalar beside the hardener is not its input" do
+      repo = hardened_repo(["name: |", "  with:", "    egress-policy: block"])
+
+      # harden-runner runs its default, audit: the block claim is false.
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ":enforcement harden-runner-block"
+      File.rm_rf!(repo)
+    end
+
+    test "a folded egress-policy is read as its value" do
+      repo =
+        hardened_repo([
+          "with:",
+          "  egress-policy: >-",
+          "    block",
+          "  allowed-endpoints: mail.example.com:443"
+        ])
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a literal-block egress-policy is read as the action reads it, trimmed" do
+      repo =
+        hardened_repo([
+          "with:",
+          "  egress-policy: |",
+          "    block",
+          "  allowed-endpoints: mail.example.com:443"
+        ])
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+  end
+
   describe "re002_harden_runner_audit_mode/1" do
+    test "a literal-block audit policy on push is still audit" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: |
+                    audit
+              - run: build
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      File.rm_rf!(repo)
+    end
+
     test "flags harden-runner in audit mode on push trigger" do
       repo =
         create_repo_with_workflow("""
@@ -2034,6 +2669,142 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
         """)
 
       assert ResearchExtensions.re002_harden_runner_audit_mode(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "matches the action owner in any case, as RE001 does" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: Step-Security/Harden-Runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: audit
+        """)
+
+      assert [%{rule: "RE002"}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a hardener with no egress-policy runs harden-runner's default, audit" do
+      repo =
+        create_repo_with_workflow("""
+        on: {release: {types: [published]}}
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: "step-security/harden-runner@1234567890abcdef1234567890abcdef12345678"
+        """)
+
+      assert [%{reason: reason}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      assert reason =~ "its default"
+      File.rm_rf!(repo)
+    end
+
+    test "only a real hardener step and a real push or release trigger count" do
+      repo =
+        create_repo_with_workflow("""
+        on:
+          pull_request:
+            branches: [main]
+        jobs:
+          push:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: audit
+          release:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  echo "uses: step-security/harden-runner@x"
+                  echo "egress-policy: audit"
+        """)
+
+      assert ResearchExtensions.re002_harden_runner_audit_mode(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    # The fixture above is also held back by its pull_request trigger; on push
+    # only the step test stands between the text and a finding.
+    test "hardener text in a run block on push is not a hardener" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  echo "uses: step-security/harden-runner@x"
+                  echo "egress-policy: audit"
+        """)
+
+      assert ResearchExtensions.re002_harden_runner_audit_mode(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    # A job whose `if:` admits only pull_request never runs on push: its
+    # hardener, defaulted or explicit, is not on a protected trigger.
+    test "a job gated away from push and release is not on a protected trigger" do
+      run = fn gate, policy ->
+        repo =
+          create_repo_with_workflow("""
+          on:
+            push:
+            pull_request:
+          jobs:
+            x:
+              if: github.event_name == '#{gate}'
+              runs-on: ubuntu-latest
+              steps:
+                - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+          #{policy}
+          """)
+
+        findings = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      explicit = "        with: {egress-policy: audit}"
+
+      assert run.("pull_request", "") == []
+      assert run.("pull_request", explicit) == []
+      assert [%{severity: :high}] = run.("push", "")
+      assert [%{severity: :high}] = run.("push", explicit)
+    end
+
+    # The line reader found `egress-policy: audit` in any file; a workflow
+    # the KYAML reader refuses must not now pass silently.
+    test "an unreadable workflow that names harden-runner is reported" do
+      repo =
+        create_repo_with_workflow("""
+        on: push
+        base: &b {k: 1}
+        m:
+          <<: *b
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: audit
+        """)
+
+      assert [finding] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      assert finding.severity == :warn
+      assert finding.line == 4
+      assert finding.reason =~ "UNSUPPORTED_MERGE_KEY"
+      assert finding.reason =~ "RE002 cannot check"
+      # It names no secret, so RE001 has nothing to report.
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
   end

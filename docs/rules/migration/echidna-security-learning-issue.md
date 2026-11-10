@@ -33,7 +33,7 @@ Deliberate divergences, all ledgered in Hypatia `docs/rules/logtalk-migration.ad
 - `BranchProtectionID` prevention is `scorecard-enforcer.yml` (long-standing Elixir value), not the Logtalk `branch-protection-enforcer.yml`; `CodeReviewID` gained a prevention mapping with no Logtalk counterpart.
 - Wholly unknown alert ids get severity `:info` in Elixir rather than the Logtalk catch-all `low`; all 18 known ids agree exactly.
 
-Proof status, stated exactly: the finite table correspondence is modelled in Hypatia `verification/proofs/agda/LogtalkMigration.agda` and is **Mathesis Grade 3 / AGDA-VERIFIED** on a strict-profile receipt (Agda 2.8.0.2, `agda --safe --without-K --cubical-compatible`, Hypatia Verify Proofs run 41328302925 at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331; full receipt in Hypatia `verification/PROOF-STATUS.adoc`). Elixir behaviour is pinned by ExUnit tests in the same PR's CI. The Agda model grades the finite table correspondence only — no runtime-refinement or Grade 2/1 claim is being sold here.
+Proof status, stated exactly: the finite table correspondence is modelled in Hypatia `verification/proofs/agda/LogtalkMigration.agda` and is **PROVEN, `PWG-3`** (metadatastician/standards `3-practice/PROOF-POLICY.adoc` §5 and §8) on a strict-profile receipt (Agda 2.8.0.2, `agda --safe --without-K --cubical-compatible`, Hypatia Verify Proofs run 41328302925 at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331; full receipt in Hypatia `verification/PROOF-STATUS.adoc`). Elixir behaviour is pinned by ExUnit tests in the same PR's CI. The Agda model grades the finite table correspondence only — no runtime-refinement, `PWG-2i`, `PWG-2ii` or `PWG-1` claim is being sold here.
 
 ## Requested changes in ECHIDNA
 

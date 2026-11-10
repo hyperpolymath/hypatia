@@ -105,23 +105,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   require Logger
 
-  # The workflow reader these rules share with the others that read inside
-  # workflows (Hypatia.WorkflowYaml).
-  import Hypatia.WorkflowYaml,
-    only: [
-      active_lines: 1,
-      direct_job_field?: 2,
-      indent_of: 1,
-      job_field_indent: 1,
-      job_steps: 1,
-      key_line?: 2,
-      lines_in_steps: 2,
-      nesting_at: 2,
-      step_indent: 2,
-      step_key_column: 1,
-      strip_yaml_comment: 1,
-      workflow_job_lines: 1
-    ]
+  alias Hypatia.Workflow
+  alias Hypatia.Workflow.Step
+
+  # The rules after RE002 still read lines; they share this primitive with
+  # Hypatia.WorkflowYaml until they move to the model too (#971).
+  import Hypatia.WorkflowYaml, only: [indent_of: 1]
 
   # ─── Workflow-file discovery ────────────────────────────────────────
 
@@ -197,9 +186,6 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # Where naming that head means fetching its code: a checkout's `ref:` or
   # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
   # SHA in `env:`, an `if:` or a `concurrency:` group only names it.
-  # Block (`ref: …`) or flow (`with: {ref: …}`) form, the key plain or quoted.
-  @re001_checkout_key ~r/(?:^|[\s{,])["']?(?:ref|repository)["']?\s*:/
-  @re001_checkout_action ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?actions\/checkout@/
   # One git command naming the head: no `;`, `&` or `|` between them. `\s`
   # spans the line break of a folded `run: >-`.
   @re001_git_head_fetch ~r/\bgit\s+(?:checkout|fetch|switch)\b[^;&|]*?(?:github\.event\.pull_request\.head\.|github\.event\.workflow_run\.head(?:\.|_(?:sha|branch|repository)\b)|github\.head_ref)/
@@ -224,7 +210,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
       whose `(:workflow, :job)` names the job and whose `:secrets` equal the
       secrets it references.
 
-  An undeclared job is reported. Its **exposures** are the evidence:
+  A declaration is checked even when a hardener is present. Enforcement
+  `none` needs no hardener, `harden-runner-audit` needs a hardener in any
+  mode, and `harden-runner-block` needs its policy to be `block`.
+
+  A job with neither a hardener nor a declaration is reported. Its
+  **exposures** are the evidence:
 
     * the workflow runs on an untrusted-input event (`pull_request_target`,
       `issue_comment`, `issues`, `workflow_run`, …), narrowed by a job `if:`
@@ -253,40 +244,59 @@ defmodule Hypatia.Rules.ResearchExtensions do
       secret (stale), reported against the deed.
 
   An unreadable deed or clause declares nothing, and the finding says why.
-  `:endpoints` are not compared with the workflow: that needs run-time
-  observation or a model of what each action reaches.
+  `:endpoints` are compared with what the workflow shows, as `:warn` findings:
 
-  Full-line comments and reusable-workflow jobs without a direct `runs-on`
-  field are ignored. Keys are matched plain or quoted, as YAML reads them, and
-  YAML aliases are expanded before jobs are read (`expand_aliases/1`).
+    * a host outside GitHub that a step names literally (a domain name or an
+      IPv4 address other than loopback, in a URL or a `git@host:path`
+      remote; not in a `#` comment outside quotes) must be covered by a
+      declared endpoint, where `*.x` covers the subdomains of x and an
+      endpoint without a port covers every port; a port written as an
+      expression is unknown, and any port of the host covers it;
+    * when the job's harden-runner step lists `allowed-endpoints`, every host
+      outside GitHub on it must be declared (an entry without a port lets out
+      every port, so only a declaration without one covers it), and every
+      declared literal host must be on it.
+
+  What an action or a variable reaches at run time is not modelled: that
+  needs run-time observation.
+
+  ## Read from the parse tree (#971)
+
+  Each workflow is read once into `Hypatia.Workflow` (#971), over `Hypatia.Kyaml`, the port of kyq's KYAML reader
+  (block and flow YAML, YAML 1.2 Core Schema), and every check reads the
+  tree. So:
+
+    * **`runs-on` belongs to the job directly.** A reusable job (`uses:` at
+      job level) delegates its runtime to the source workflow; it is local
+      only with its own `runs-on` key, never a sibling's.
+    * **The hardener is a real step.** A step whose `uses:` names
+      `step-security/harden-runner` (in any case, and in any scalar style)
+      installs it. The same text in a `run:` block, a comment or `env:` data
+      is not a step.
+    * **Layout does not change the answer.** Block or flow, plain or quoted
+      keys, aliases (read through, within kyq's node budget): the findings are
+      the same, apart from line numbers. The equivalence harness in
+      `test/research_extensions_equivalence_test.exs` checks this on seeded
+      random workflows.
+
+  A workflow kyq would refuse (a `<<` merge key, which GitHub also refuses;
+  a document past the node budget; any other KYAML error) is not guessed at.
+  If it names `secrets`, RE001 reports it as unreadable, at the error's
+  location. Its declarations are not reported stale, since they cannot be
+  checked.
   Provenance: StepSecurity Harden-Runner deployment guide.
 
-  ## Why this is structural, not a regex
-
-  The check is per job, and both halves of it are indentation-sensitive:
-
-    * **`runs-on` must belong to this job directly.** A reusable job
-      (`uses:` at job level) delegates its runtime to the source workflow, so a
-      sibling job's `runs-on` must not satisfy it. `direct_job_field?/2`
-      therefore compares against the job's own field indent rather than
-      matching `runs-on:` anywhere in the block.
-
-    * **The hardener must be a real step.** `harden_runner_step?/1` walks
-      `steps:` by indent and accepts the reference only as a step entry or a
-      direct property of one. Two cases make a line-oriented match wrong in
-      *opposite* directions, so both are handled explicitly:
-
-      - `uses: "step-security/harden-runner@..."` — quoted scalars are valid
-        YAML and still install the hardener. Missing them raises a **false
-        positive** against an already-hardened job.
-      - the same text inside a block scalar (`run: |`, `env: >`) is shell or
-        data, not a step. `block_scalar?/1` opens a skip region until the
-        indent closes, because treating it as a step raises a **false
-        negative** that suppresses a genuine finding.
-
-  Severity: `:high` or `:warn`, as above. Action: `:report`.
+  Severity: `:high` or `:warn`, as above (`:warn` for an unreadable
+  workflow). Action: `:report`.
+  Returns a list of findings, or `[]` when none are found.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
-  def re001_missing_harden_runner(repo_path) do
+  def re001_missing_harden_runner(repo_path),
+    do: re001_findings(repo_path, re001_workflows(repo_path))
+
+  # RE001 over workflows already read, so that scan/2 reads each once for
+  # RE001 and RE002.
+  defp re001_findings(repo_path, workflows) do
     {deed_file, declared, deed_note} =
       case Hypatia.Deed.egress_declarations(repo_path) do
         {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1}), nil}
@@ -294,10 +304,16 @@ defmodule Hypatia.Rules.ResearchExtensions do
         {:error, file, reason} -> {file, %{}, "the repo deed declares nothing (#{reason})"}
       end
 
-    jobs =
-      repo_path
-      |> workflow_files()
-      |> Enum.flat_map(fn path -> re001_jobs(path, Path.relative_to(path, repo_path)) end)
+    jobs = for {:ok, rel, doc} <- workflows, job <- re001_jobs(rel, doc), do: job
+
+    # A workflow that names secrets but cannot be read is reported. Its
+    # declarations cannot be checked, so they are not reported stale.
+    unreadable =
+      for {:unreadable, rel, error, bytes} <- workflows,
+          Regex.match?(~r/secrets/i, bytes),
+          do: {rel, error}
+
+    unread = MapSet.new(for {:unreadable, rel, _, _} <- workflows, do: rel)
 
     job_findings =
       Enum.flat_map(jobs, fn job ->
@@ -338,7 +354,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
                   []
               end
 
-            dynamic ++ drift ++ enforcement
+            dynamic ++ drift ++ enforcement ++ re001_endpoint_findings(job, deed_file, decl)
         end
       end)
 
@@ -348,97 +364,135 @@ defmodule Hypatia.Rules.ResearchExtensions do
     stale_findings =
       declared
       |> Map.keys()
-      |> Enum.reject(&MapSet.member?(live, &1))
+      |> Enum.reject(fn {workflow, _} = key ->
+        MapSet.member?(live, key) or MapSet.member?(unread, workflow)
+      end)
       |> Enum.sort()
       |> Enum.map(&re001_stale(&1, deed_file))
 
-    job_findings ++ stale_findings
+    Enum.map(unreadable, fn {rel, error} -> re001_unreadable(rel, error) end) ++
+      job_findings ++ stale_findings
+  end
+
+  # The workflows of a repo as RE001 reads them: the parsed model
+  # (Hypatia.Workflow, over kyq's KYAML reader). A workflow the reader refuses
+  # is {:unreadable, rel, error, bytes}.
+  defp re001_workflows(repo_path) do
+    for path <- workflow_files(repo_path) do
+      rel = Path.relative_to(path, repo_path)
+      bytes = File.read!(path)
+
+      case Workflow.parse(bytes, rel) do
+        {:ok, workflow} -> {:ok, rel, workflow}
+        {:error, error} -> {:unreadable, rel, error, bytes}
+      end
+    end
+  end
+
+  # A workflow that names secrets but cannot be read is reported, not skipped:
+  # its jobs cannot be checked, and a silent skip would read as a pass.
+  defp re001_unreadable(rel, error) do
+    %{
+      rule: "RE001",
+      file: rel,
+      severity: :warn,
+      line: error.line,
+      reason:
+        "#{rel} could not be read as KYAML (#{error.code} at line #{error.line}, column " <>
+          "#{error.column}: #{error.message}), so RE001 cannot check its secret-bearing jobs",
+      action: :report,
+      detail: %{
+        exposures: [],
+        fix:
+          "Rewrite the construct the reader names in the KYAML subset (kyq " <>
+            "docs/KYAML_SPEC.adoc; standards YAML-POLICY). GitHub Actions refuses some of " <>
+            "these too, such as the `<<` merge key."
+      }
+    }
   end
 
   # The locally executed jobs of one workflow that read a real secret, with
   # what each holds and what it runs next to the credential.
-  defp re001_jobs(path, rel) do
-    # Comments are not runner configuration. Preserve physical line numbers
-    # so existing findings are not reported against a newly added line-1 header.
-    active_lines = path |> read_workflow() |> active_lines()
+  defp re001_jobs(_rel, nil), do: []
 
-    untrusted_events =
-      active_lines
-      |> workflow_events()
-      |> Enum.filter(&(&1 in @re001_untrusted_events))
+  defp re001_jobs(rel, %Workflow{} = workflow) do
+    untrusted_events = Enum.filter(workflow.triggers, &(&1 in @re001_untrusted_events))
 
     # Secrets in the workflow's top-level `env:` are inherited by every job,
     # so each job reads them too, and a declaration must list them.
-    workflow_env = workflow_env_lines(active_lines)
-    workflow_refs = secret_refs(workflow_env)
+    workflow_refs = node_secret_refs(workflow.env)
+    workflow_env_credentials = env_credentials(workflow.env)
 
-    active_lines
-    |> workflow_job_lines()
-    # Reusable jobs delegate their runtime to the source workflow. A sibling's
-    # runner or hardener cannot establish this job's execution policy.
-    |> Enum.filter(&direct_job_field?(&1, "runs-on"))
-    |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
-      refs =
-        for {name, n} <- secret_refs(job_lines) ++ workflow_refs,
-            name not in @re001_ambient_secrets,
-            do: {name, n}
+    for job <- workflow.jobs,
+        # Reusable jobs delegate their runtime to the source workflow: only a
+        # job's own `runs-on` makes it local.
+        job.runs_on != nil,
+        refs =
+          Enum.reject(
+            node_secret_refs(job.node) ++ workflow_refs,
+            &(elem(&1, 0) in @re001_ambient_secrets)
+          ),
+        refs != [] do
+      steps = job.steps
 
-      case refs do
-        [] ->
-          []
+      # A credential in the job's or the workflow's `env:` is in every step's
+      # environment, unless the step sets the same variable itself.
+      env_credentials = env_credentials(job.env) ++ workflow_env_credentials
 
-        [{_, first_line} | _] ->
-          # A line that reads a real secret, by name or by a computed key.
-          credential_lines = MapSet.new(refs, &elem(&1, 1))
-          credential? = fn {_, n} -> MapSet.member?(credential_lines, n) end
-          steps = job_steps(job_lines)
-          # A credential in the job's or the workflow's `env:` is in every step's
-          # environment.
-          job_env_credentials = Enum.filter(job_env_lines(job_lines) ++ workflow_env, credential?)
+      job_untrusted_events =
+        case job_event_gate(job) do
+          nil -> untrusted_events
+          gated -> Enum.filter(untrusted_events, &(&1 in gated))
+        end
 
-          job_untrusted_events =
-            case job_event_gate(job_lines) do
-              nil -> untrusted_events
-              gated -> Enum.filter(untrusted_events, &(&1 in gated))
-            end
+      # A step that both holds the credential and runs fetched or head code
+      # hands the credential straight to that code.
+      shared_line =
+        Enum.find_value(steps, fn step ->
+          step_refs =
+            Enum.reject(node_secret_refs(step.node), &(elem(&1, 0) in @re001_ambient_secrets))
 
-          # A step that both holds the credential and runs fetched or head code
-          # hands the credential straight to that code.
-          shared_line =
-            Enum.find_value(steps, fn step ->
-              credential =
-                Enum.find(step, credential?) ||
-                  Enum.find(job_env_credentials, &(not overrides_env?(step, &1)))
+          step_env = step.env |> Workflow.entries() |> Enum.map(& &1.key.value)
 
-              credential && step_code_exposures(step) != [] && elem(credential, 1)
-            end)
+          credential =
+            List.first(step_refs) ||
+              Enum.find(env_credentials, fn {name, _} -> name not in step_env end)
 
-          [
-            %{
-              workflow: rel,
-              id: job_id(header),
-              line: shared_line || first_line,
-              secrets: MapSet.new(for {name, _} <- refs, is_binary(name), do: name),
-              dynamic_line: Enum.find_value(refs, fn {name, n} -> name == :dynamic && n end),
-              hardened?: harden_runner_step?(job_lines),
-              harden_policy: harden_runner_policy(steps),
-              exposures: re001_exposures(steps, job_untrusted_events),
-              shared?: shared_line != nil
-            }
-          ]
-      end
-    end)
+          credential && step_code_exposures(step) != [] && elem(credential, 1)
+        end)
+
+      harden_step = Enum.find(steps, &harden_runner_step?/1)
+
+      %{
+        workflow: rel,
+        id: job.id,
+        line: shared_line || elem(hd(refs), 1),
+        secrets: MapSet.new(for {name, _} <- refs, is_binary(name), do: name),
+        dynamic_line: Enum.find_value(refs, fn {name, n} -> name == :dynamic && n end),
+        hardened?: harden_step != nil,
+        harden_policy: harden_step && harden_runner_policy(harden_step),
+        allowed_endpoints: harden_step && harden_runner_allowed(harden_step),
+        # A literal endpoint in the job's or the workflow's `env:` reaches a
+        # step (`$UPLOAD_URL`) that does not set the same variable itself, so
+        # it is named as surely as one in that step.
+        named_hosts: job_named_hosts(workflow, job, steps),
+        exposures: re001_exposures(steps, job_untrusted_events),
+        shared?: shared_line != nil
+      }
+    end
   end
 
-  # Every secret a job reads inside ${{ … }}, as {NAME, line}: the property
-  # form secrets.NAME and the index form secrets['NAME'] / secrets["NAME"],
-  # anywhere in the expression (${{ vars.X || secrets.Y }} reads Y). GitHub
-  # matches secret names without regard to case and stores them uppercase; the
-  # deed declares that stored form, so names are uppercased here.
+  # Every secret a node reads inside ${{ … }}, as {NAME, line}, in document
+  # order: the property form secrets.NAME and the index form secrets['NAME'] /
+  # secrets["NAME"], anywhere in the expression (${{ vars.X || secrets.Y }}
+  # reads Y). GitHub matches secret names without regard to case and stores
+  # them uppercase; the deed declares that stored form, so names are
+  # uppercased here.
   #
-  # The job is scanned as one text, not line by line: a folded YAML scalar can
-  # split one expression across physical lines, and GitHub evaluates it whole.
-  # A valid workflow has no unclosed ${{, so every match is a real expression.
+  # Each string value is read whole, as GitHub evaluates it, so an expression
+  # a folded block scalar spreads over lines is one expression. A read is
+  # reported at its own source line: a block scalar maps each of its lines, and
+  # what is read through an alias is reported at the alias.
   #
   # Both scans step over string literals ('…', with '' for a quote) whole, so
   # text inside one is never read: an expression ends at the first }} outside
@@ -452,19 +506,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # {:dynamic, line}, which no declaration can cover.
   @expression ~r/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/
   @secret_ref ~r/(?<![\w.-])(?i:secrets)(?:\.([A-Za-z_][A-Za-z0-9_]*)\b(?![.\[-])|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\]|(?![\w-]))|'(?:[^']|'')*'|"[^"]*"/
-  defp secret_refs(job_lines) do
-    text = Enum.map_join(job_lines, "\n", &elem(&1, 0))
+  defp node_secret_refs(nil), do: []
 
-    # {byte offset where each kept line starts, its physical line number}
-    {starts, _} =
-      Enum.map_reduce(job_lines, 0, fn {line, n}, at -> {{at, n}, at + byte_size(line) + 1} end)
-
-    line_of = fn at ->
-      {_, n} = starts |> Enum.take_while(fn {start, _} -> start <= at end) |> List.last()
-      n
-    end
-
-    for [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
+  defp node_secret_refs(node) do
+    for {text, line_of} <- Workflow.strings(node),
+        [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
         [{m_at, _} | groups] <-
           Regex.scan(@secret_ref, binary_part(text, body_at, body_len), return: :index),
         # A match that opens with a quote is a string literal, read past.
@@ -476,9 +522,87 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  defp job_id(header) do
-    [_, id] = Regex.run(~r/^\s+("[^"]+"|'[^']+'|[A-Za-z0-9_-]+):/, header)
-    String.trim(id, "\"") |> String.trim("'")
+  # The `env:` variables of a workflow or job that hold a real secret, as
+  # {NAME, line of the read}.
+  defp env_credentials(env) do
+    for %{key: key, value: value} <- Workflow.entries(env),
+        {name, line} <- node_secret_refs(value),
+        name not in @re001_ambient_secrets,
+        do: {key.value, line}
+  end
+
+  # The events a job-level `if:` restricts the job to, when the condition is
+  # nothing but `github.event_name == '<event>'` tests joined by `||`.
+  # Anything more complex is not interpreted, and the job is judged on all the
+  # workflow's events.
+  defp job_event_gate(job) do
+    test = ~S"github\.event_name\s*==\s*'([a-z_]+)'"
+
+    with condition when is_binary(condition) <- job.if,
+         condition = condition |> String.trim() |> String.replace(~r/^\$\{\{\s*|\s*\}\}$/, ""),
+         true <- Regex.match?(~r/^\s*#{test}(?:\s*\|\|\s*#{test})*\s*$/, condition) do
+      ~r/github\.event_name\s*==\s*'([a-z_]+)'/
+      |> Regex.scan(condition, capture: :all_but_first)
+      |> List.flatten()
+    else
+      _ -> nil
+    end
+  end
+
+  defp re001_exposures(steps, untrusted_events) do
+    code = Enum.flat_map(steps, &step_code_exposures/1)
+
+    [
+      untrusted_events != [] &&
+        "an untrusted-input trigger (#{Enum.join(untrusted_events, ", ")})",
+      :head in code && "a pull-request or triggering-run head checkout",
+      :fetched in code && "fetched code (a piped installer or a dependency install/build)"
+    ]
+    |> Enum.filter(&is_binary/1)
+  end
+
+  # What a step executes that the job cannot vouch for: `:head` when it checks
+  # out or fetches the head of a pull request or triggering run, `:fetched`
+  # when its `run:` script pipes a download into a shell or installs or builds
+  # dependencies. Only executable content counts: an `env:` value or a comment
+  # that mentions `npm ci` runs nothing.
+  defp step_code_exposures(step) do
+    # Shell comments removed; a folded command keeps its line breaks or spaces
+    # as YAML gives them, and the patterns' `\s+` spans either.
+    run =
+      (step.run || "")
+      |> String.split("\n")
+      |> Enum.map_join("\n", &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
+
+    # A `ref:`/`repository:` input fetches the head only on a checkout; the
+    # same input on a reporting action merely names it.
+    checkout? = String.starts_with?(step.uses || "", "actions/checkout@")
+
+    head? =
+      (checkout? and
+         Enum.any?(["ref", "repository"], fn input ->
+           Regex.match?(@re001_head_ref, Workflow.input(step, input) || "")
+         end)) or Regex.match?(@re001_git_head_fetch, run)
+
+    [head? && :head, Regex.match?(@re001_fetched_code, run) && :fetched]
+    |> Enum.filter(& &1)
+  end
+
+  # GitHub resolves an action's owner/repo without regard to case
+  # (Step-Security/Harden-Runner@v2 installs the same action).
+  defp harden_runner_step?(%Step{uses: uses}) do
+    Regex.match?(~r/\A(?i:step-security\/harden-runner)@/, uses || "")
+  end
+
+  # The egress-policy input of a harden-runner step; harden-runner defaults to
+  # audit when none is set. Actions read inputs through core.getInput, which
+  # trims surrounding white space, so a literal block (`egress-policy: |`
+  # then `block`) is the policy `block`, not "block\n".
+  defp harden_runner_policy(step) do
+    case Workflow.input(step, "egress-policy") do
+      nil -> "audit"
+      policy -> String.trim(policy)
+    end
   end
 
   # What the job runs next to its credential, for a finding's reason.
@@ -620,6 +744,315 @@ defmodule Hypatia.Rules.ResearchExtensions do
     }
   end
 
+  # ─── RE001: declared endpoints against the workflow ─────────────────
+  #
+  # A declaration's :endpoints are compared with what the workflow itself
+  # shows, never with what it might reach at run time:
+  #
+  #   * every host outside GitHub that a step names literally (a URL, or a
+  #     `git@host:` remote) must be covered by a declared endpoint;
+  #   * when the job's harden-runner step lists `allowed-endpoints`, the
+  #     hosts outside GitHub on that list and the declared literal endpoints
+  #     must agree: the hardener enforces one list, the deed attests to it.
+  #
+  # An endpoint held in a secret or variable (`secret:`, `var:`) covers no
+  # literal host: a host written in the workflow is declared as itself.
+
+  # GitHub's own endpoints, which :endpoints leaves out (ADR-009). Each is a
+  # whole domain or a subdomain of one: `notgithubusercontent.com` is not.
+  @github_hosts ~r/\A(?:github\.com|[a-z0-9.-]+\.github\.com|(?:[a-z0-9.-]+\.)?githubusercontent\.com|ghcr\.io|[a-z0-9.-]+\.githubassets\.com|github\.io|[a-z0-9.-]+\.github\.io)\z/
+
+  # A host a workflow can name: a dotted domain name, or a literal IPv4
+  # address. A single-label name (`localhost`, a service container such as
+  # `postgres`) is not egress and is not compared.
+  @host ~S"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}(?![\w-]|\.\w)"
+  # A URL's scheme (in any case, as clients read it), host, and port: digits,
+  # or an expression (`:${{ vars.PORT }}`), whose value is known only at run time.
+  # The schemes are the web's, and the databases' and brokers' a job reaches.
+  @url_host ~r<\b(https?|wss?|ssh|s?ftp|ftps|git|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
+  # A `user@host:path` remote. The path is not blank (`a@example.com: failed`
+  # is prose) and not a port (`user:pass@host:5432/db` is a URL's userinfo),
+  # though it may start with a digit (`git@gitlab.com:123team/x.git`).
+  @scp_host ~r/(?<![\w.\/-])[A-Za-z0-9._-]+@(#{@host}):(?!\d++(?![A-Za-z_.-]))(?=[\w~.\/-])/
+  @default_port %{
+    "http" => 80,
+    "ws" => 80,
+    "https" => 443,
+    "wss" => 443,
+    "ssh" => 22,
+    "git" => 9418,
+    "ftp" => 21,
+    "ftps" => 990,
+    "sftp" => 22,
+    "postgres" => 5432,
+    "postgresql" => 5432,
+    "mysql" => 3306,
+    "mariadb" => 3306,
+    "redis" => 6379,
+    "rediss" => 6379,
+    "mongodb" => 27017,
+    # mongodb+srv: the SRV record names the port, so it is unknown (nil).
+    "amqp" => 5672,
+    "amqps" => 5671,
+    "mqtt" => 1883,
+    "mqtts" => 8883,
+    "ldap" => 389,
+    "ldaps" => 636,
+    "smtp" => 25,
+    "smtps" => 465
+  }
+
+  # The hosts a job's steps name: in each step's own entries, and in the
+  # inherited `env:` entries the step does not set again.
+  defp job_named_hosts(workflow, job, steps) do
+    inherited = job_env_entries(workflow.env, job.env)
+
+    steps
+    |> Enum.flat_map(fn step ->
+      own = MapSet.new(Workflow.entries(step.env), &Workflow.text(&1.key))
+      Enum.reject(inherited, &(Workflow.text(&1.key) in own)) ++ step_entries(step)
+    end)
+    |> Enum.uniq()
+    |> Enum.flat_map(&named_hosts(&1.value))
+  end
+
+  # The `env:` entries a job passes to its steps: its own, and the
+  # workflow's that the job does not set again.
+  defp job_env_entries(workflow_env, job_env) do
+    own = Workflow.entries(job_env)
+    keys = MapSet.new(own, &Workflow.text(&1.key))
+    Enum.reject(Workflow.entries(workflow_env), &(Workflow.text(&1.key) in keys)) ++ own
+  end
+
+  # A step's entries that can reach the network: not its label (`name`, `id`)
+  # or its condition (`if`), which the runner never connects to.
+  @step_labels ~w(name id if)
+  defp step_entries(step),
+    do: Enum.reject(Workflow.entries(step.node), &(Workflow.text(&1.key) in @step_labels))
+
+  # The hosts outside GitHub a node names literally, as {host, port, line}.
+  defp named_hosts(node) do
+    for {text, line_of} <- Workflow.strings(node),
+        {host, port, at} <- url_hosts(text) ++ scp_hosts(text),
+        not in_shell_comment?(text, at),
+        host = String.downcase(host),
+        not Regex.match?(@github_hosts, host),
+        not loopback?(host),
+        do: {host, port, line_of.(at)}
+  end
+
+  defp loopback?(host), do: Regex.match?(~r/\A(?:127\.|0\.0\.0\.0\z)/, host)
+
+  # Is offset `at` inside a `#` comment: after a `#` that starts a word (at
+  # the start of the line, or after a blank or a control or redirection
+  # operator: `; & | ( ) < >`), outside quotes? (A URL fragment, `/#x`, is
+  # not one, nor is the `#` of `git commit -m "fix #12"`.)
+  defp in_shell_comment?(text, at) do
+    line_start =
+      case :binary.matches(binary_part(text, 0, at), "\n") do
+        [] -> 0
+        matches -> matches |> List.last() |> elem(0) |> Kernel.+(1)
+      end
+
+    comment_opens?(binary_part(text, line_start, at - line_start), nil, true)
+  end
+
+  # Walks one line: `quote` is the open quote character or nil, `word_start?`
+  # whether the next character starts a word. A backslash escapes the next
+  # character outside single quotes, as the shell reads it.
+  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
+  defp comment_opens?(<<>>, _quote, _word_start?), do: false
+  defp comment_opens?(<<?#, _::binary>>, nil, true), do: true
+
+  defp comment_opens?(<<c, rest::binary>>, nil, _) when c in [?', ?"],
+    do: comment_opens?(rest, c, false)
+
+  defp comment_opens?(<<?\\, _, rest::binary>>, quote, _) when quote != ?',
+    do: comment_opens?(rest, quote, false)
+
+  defp comment_opens?(<<c, rest::binary>>, c, _), do: comment_opens?(rest, nil, false)
+
+  defp comment_opens?(<<c, rest::binary>>, quote, _),
+    do: comment_opens?(rest, quote, quote == nil and c in @word_breaks)
+
+  # A port written as an expression is unknown (nil), not the scheme's default.
+  defp url_hosts(text) do
+    for [{at, _}, {s, sl}, {h, hl} | port] <- Regex.scan(@url_host, text, return: :index) do
+      scheme = String.downcase(binary_part(text, s, sl))
+
+      port =
+        case port do
+          [{p, pl} | _] when p >= 0 -> String.to_integer(binary_part(text, p, pl))
+          [_, {e, _}] when e >= 0 -> nil
+          _ -> @default_port[scheme]
+        end
+
+      {binary_part(text, h, hl), port, at}
+    end
+  end
+
+  defp scp_hosts(text) do
+    for [{at, _}, {h, hl}] <- Regex.scan(@scp_host, text, return: :index),
+        do: {binary_part(text, h, hl), 22, at}
+  end
+
+  # The literal entries of a harden-runner step's `allowed-endpoints` input
+  # (`host:port`, separated by spaces, newlines or commas) as {host, port};
+  # nil when the step sets none. An entry written without a port lets out
+  # every port (`:any`). An entry whose host is an expression
+  # (`${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT }}`) names its host only
+  # at run time, as a declared `secret:` or `var:` endpoint does, so it is
+  # not a literal entry; a literal host with an expression for its port
+  # (`smtp.example.com:${{ vars.PORT }}`) is, with its port unknown (nil).
+  # An expression is one unit however it is spaced.
+  defp harden_runner_allowed(step) do
+    case Workflow.input(step, "allowed-endpoints") do
+      nil ->
+        nil
+
+      text ->
+        text
+        |> String.replace(@expression, "\0")
+        |> String.split(~r/[\s,]+/, trim: true)
+        |> Enum.flat_map(fn entry ->
+          case String.split(entry, ":\0") do
+            [host, ""] -> host |> literal_endpoint() |> List.wrap()
+            _ -> entry |> literal_endpoint() |> List.wrap() |> Enum.map(&any_port/1)
+          end
+        end)
+    end
+  end
+
+  defp any_port({host, nil}), do: {host, :any}
+  defp any_port(endpoint), do: endpoint
+
+  # A literal endpoint as {host pattern, port or nil}: `host` or
+  # `host:digits`. Anything else (secret:, var:, an expression) is nil.
+  defp literal_endpoint(endpoint) do
+    case Regex.run(~r/\A([a-z0-9*][a-z0-9.*-]*)(?::(\d{1,5}))?\z/, String.downcase(endpoint)) do
+      [_, host] -> {host, nil}
+      [_, host, port] -> {host, String.to_integer(port)}
+      nil -> nil
+    end
+  end
+
+  # Does a {pattern, port} cover a host and port? `*.x` covers the
+  # subdomains of x (as harden-runner reads it), not x itself; an endpoint
+  # without a port (nil or `:any`) covers every port. A port known only at
+  # run time (nil) is covered by any port of the host; every port (`:any`)
+  # only by an endpoint without a port.
+  defp covers?({pattern, want}, host, port) do
+    host_ok =
+      case pattern do
+        "*." <> suffix -> String.ends_with?(host, "." <> suffix)
+        _ -> pattern == host
+      end
+
+    host_ok and (want in [nil, :any] or port == nil or want == port)
+  end
+
+  defp re001_endpoint_findings(job, deed_file, decl) do
+    declared = decl.endpoints |> Enum.map(&literal_endpoint/1) |> Enum.reject(&is_nil/1)
+
+    uncovered =
+      job.named_hosts
+      |> Enum.reject(fn {host, port, _} -> Enum.any?(declared, &covers?(&1, host, port)) end)
+      |> Enum.uniq_by(fn {host, port, _} -> {host, port} end)
+
+    named =
+      if uncovered == [],
+        do: [],
+        else: [re001_unnamed_endpoints(job, deed_file, uncovered)]
+
+    named ++ allowed_endpoint_findings(job, deed_file, declared)
+  end
+
+  defp allowed_endpoint_findings(%{allowed_endpoints: nil}, _deed_file, _declared), do: []
+
+  defp allowed_endpoint_findings(job, deed_file, declared) do
+    allowed = Enum.reject(job.allowed_endpoints, &Regex.match?(@github_hosts, elem(&1, 0)))
+
+    # What the hardener lets out must be declared. A declared literal host
+    # must be let out, or block mode stops the job; a declared wildcard is a
+    # wider claim than any list it covers, and is not held to one. GitHub's
+    # own hosts are outside the comparison on both sides: a deed may list
+    # them, and the hardener's list is not held to them.
+    undeclared = Enum.reject(allowed, fn {h, p} -> Enum.any?(declared, &covers?(&1, h, p)) end)
+
+    # A declared endpoint without a port claims every port, so only an
+    # allowed entry without a port lets it out.
+    blocked =
+      Enum.reject(declared, fn {h, p} ->
+        String.starts_with?(h, "*.") or Regex.match?(@github_hosts, h) or
+          Enum.any?(allowed, &covers?(&1, h, p || :any))
+      end)
+
+    if undeclared == [] and blocked == [] do
+      []
+    else
+      [re001_allowed_mismatch(job, deed_file, undeclared, blocked)]
+    end
+  end
+
+  defp endpoint_text({host, port}) when port in [nil, :any], do: "\"#{host}\""
+  defp endpoint_text({host, port}), do: "\"#{host}:#{port}\""
+
+  defp re001_unnamed_endpoints(job, deed_file, uncovered) do
+    [{_, _, line} | _] = uncovered
+    names = Enum.map_join(uncovered, " ", fn {h, p, _} -> endpoint_text({h, p}) end)
+
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: :warn,
+      line: line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} names #{names} literally, but its egress " <>
+          "declaration in #{deed_file} does not list it",
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          "Add #{names} to :endpoints of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") " <>
+            "in #{deed_file}, or stop the job reaching it. An endpoint held in a secret " <>
+            "or variable does not cover a host written in the workflow."
+      }
+    }
+  end
+
+  defp re001_allowed_mismatch(job, deed_file, undeclared, blocked) do
+    parts =
+      Enum.reject(
+        [
+          if(undeclared != [],
+            do: "lets out undeclared #{Enum.map_join(undeclared, " ", &endpoint_text/1)}"
+          ),
+          if(blocked != [],
+            do: "does not allow declared #{Enum.map_join(blocked, " ", &endpoint_text/1)}"
+          )
+        ],
+        &is_nil/1
+      )
+
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: :warn,
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow}: harden-runner's allowed-endpoints " <>
+          Enum.join(parts, "; ") <> " (egress declaration in #{deed_file})",
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          "Make the hosts outside GitHub in the harden-runner step's allowed-endpoints and " <>
+            ":endpoints of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in " <>
+            "#{deed_file} name the same endpoints."
+      }
+    }
+  end
+
   defp re001_stale({workflow, id}, deed_file) do
     %{
       rule: "RE001",
@@ -639,429 +1072,6 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   defp quoted_list(names), do: names |> Enum.sort() |> Enum.map_join(" ", &"\"#{&1}\"")
 
-  defp re001_exposures(steps, untrusted_events) do
-    code = Enum.flat_map(steps, &step_code_exposures/1)
-
-    [
-      untrusted_events != [] &&
-        "an untrusted-input trigger (#{Enum.join(untrusted_events, ", ")})",
-      :head in code && "a pull-request or triggering-run head checkout",
-      :fetched in code && "fetched code (a piped installer or a dependency install/build)"
-    ]
-    |> Enum.filter(&is_binary/1)
-  end
-
-  # What a step executes that the job cannot vouch for: `:head` when it checks
-  # out or fetches the head of a pull request or triggering run, `:fetched`
-  # when its `run:` script pipes a download into a shell or installs or builds
-  # dependencies. Only executable content counts: an `env:` value or a YAML
-  # comment that mentions `npm ci` runs nothing.
-  defp step_code_exposures(step) do
-    run_lines = step_run_lines(step)
-    # Joined with newlines so a folded `run: >-` command split across lines
-    # still matches: the patterns' `\s+` spans the line break.
-    run = Enum.join(run_lines, "\n")
-
-    # A `ref:`/`repository:` input fetches the head only on a checkout; the
-    # same input on a reporting action merely names it.
-    checkout? = Enum.any?(step, fn {line, _} -> Regex.match?(@re001_checkout_action, line) end)
-
-    head? =
-      (checkout? and
-         Enum.any?(step, fn {line, _} ->
-           Regex.match?(@re001_checkout_key, line) and Regex.match?(@re001_head_ref, line)
-         end)) or Regex.match?(@re001_git_head_fetch, run)
-
-    [head? && :head, Regex.match?(@re001_fetched_code, run) && :fetched]
-    |> Enum.filter(& &1)
-  end
-
-  # The script of a step's `run:`, inline or as a block scalar, with comments
-  # removed (YAML and shell agree that `#` after whitespace starts one).
-  defp step_run_lines(step) do
-    key_column = step_key_column(step)
-
-    # Only the step's own `run:` property: an `env:` variable named `run` is a
-    # nested key, deeper than the step's properties.
-    case Enum.split_while(step, fn {line, _} ->
-           case Regex.run(~r/^(\s*(?:-\s+)?)(?:run|"run"|'run')\s*:/, line) do
-             [_, prefix] -> String.length(prefix) != key_column
-             _ -> true
-           end
-         end) do
-      {_, []} ->
-        []
-
-      {_, [{run_line, _} | rest]} ->
-        [prefix, value] =
-          Regex.run(~r/^(\s*(?:-\s+)?)(?:run|"run"|'run')\s*:\s*(.*)$/, run_line,
-            capture: :all_but_first
-          )
-
-        key_column = String.length(prefix)
-
-        # A block scalar, its header after any anchor (`run: &script |`).
-        body =
-          if Regex.match?(~r/^(?:&[A-Za-z0-9_-]+\s+)?[>|][0-9+-]*\s*(?:#.*)?$/, value) do
-            rest
-            |> Enum.take_while(fn {line, _} ->
-              String.trim(line) == "" or indent_of(line) > key_column
-            end)
-            |> Enum.map(&elem(&1, 0))
-          else
-            [value]
-          end
-
-        Enum.map(body, &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
-    end
-  end
-
-  # True when the step sets the same variable as the job-level `env:` line,
-  # so the step-level value replaces the inherited credential.
-  defp overrides_env?(step, {job_line, _}) do
-    case Regex.run(~r/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/, job_line) do
-      [_, key] ->
-        Enum.any?(step, fn {line, _} -> Regex.match?(~r/^\s*#{key}\s*:/, line) end)
-
-      _ ->
-        false
-    end
-  end
-
-  # The workflow's top-level `env:` (key at column 0) with its indented body.
-  # Every job, and every step in it, inherits these variables.
-  defp workflow_env_lines(active_lines) do
-    case Enum.drop_while(active_lines, fn {line, _} ->
-           not (indent_of(line) == 0 and key_line?(line, "env"))
-         end) do
-      [env_line | rest] ->
-        body = Enum.take_while(rest, fn {line, _} -> line == "" or indent_of(line) > 0 end)
-        [env_line | body]
-
-      [] ->
-        []
-    end
-  end
-
-  # The lines under the job's own `env:` key.
-  defp job_env_lines(job_lines) do
-    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
-         index when is_integer(index) <-
-           Enum.find_index(job_lines, fn {line, _} ->
-             indent_of(line) == field_indent and key_line?(line, "env")
-           end) do
-      job_lines
-      |> Enum.drop(index)
-      |> then(fn [env_line | rest] ->
-        [env_line | Enum.take_while(rest, fn {line, _} -> indent_of(line) > field_indent end)]
-      end)
-    else
-      _ -> []
-    end
-  end
-
-  # The events a job-level `if:` restricts the job to, when the condition is
-  # nothing but `github.event_name == '<event>'` tests joined by `||`.
-  # Anything more complex is not interpreted, and the job is judged on all the
-  # workflow's events.
-  defp job_event_gate(job_lines) do
-    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
-         {line, _} <-
-           Enum.find(job_lines, fn {line, _} ->
-             indent_of(line) == field_indent and key_line?(line, "if")
-           end),
-         [_, condition] <- Regex.run(~r/^\s*["']?if["']?\s*:\s*(.*?)\s*$/, line),
-         condition = condition |> String.replace(~r/^\$\{\{\s*|\s*\}\}$/, ""),
-         test = ~S"github\.event_name\s*==\s*'([a-z_]+)'",
-         true <- Regex.match?(~r/^\s*#{test}(?:\s*\|\|\s*#{test})*\s*$/, condition) do
-      ~r/github\.event_name\s*==\s*'([a-z_]+)'/
-      |> Regex.scan(condition, capture: :all_but_first)
-      |> List.flatten()
-    else
-      _ -> nil
-    end
-  end
-
-  # The event names under the workflow's top-level `on:`, in any of its forms:
-  # `on: push`, `on: [push, issues]`, or a block of event keys or list items.
-  defp workflow_events(lines) do
-    case Enum.split_while(lines, fn {line, _} ->
-           not Regex.match?(~r/^["']?on["']?:/, line)
-         end) do
-      {_, []} ->
-        []
-
-      {_, [{on_line, _} | rest]} ->
-        first = on_line |> String.split(":", parts: 2) |> List.last()
-        # `on: &events` anchors the block mapping that follows.
-        unanchor = &(&1 |> String.replace(~r/^\s*&[A-Za-z0-9_-]+/, "") |> String.trim())
-
-        if unanchor.(flow_text(first, false)) != "" do
-          # A flow collection may continue past the `on:` line: read on until
-          # its brackets balance. The lines are read as one text, so a quoted
-          # scalar spanning lines keeps its quotes and a comment ends at its
-          # own line; neither names an event or opens a bracket.
-          rest
-          |> Enum.map(&elem(&1, 0))
-          |> Enum.reduce_while(first, fn line, acc ->
-            if open_flow?(acc),
-              do: {:cont, acc <> "\n" <> line},
-              else: {:halt, acc}
-          end)
-          |> flow_text(false)
-          |> String.replace("\n", " ")
-          |> then(unanchor)
-          |> inline_events()
-        else
-          block =
-            Enum.take_while(rest, fn {line, _} ->
-              String.trim(line) == "" or indent_of(line) > 0
-            end)
-            |> Enum.reject(fn {line, _} -> String.trim(line) == "" end)
-
-          event_indent =
-            block |> Enum.map(fn {line, _} -> indent_of(line) end) |> Enum.min(fn -> nil end)
-
-          block
-          |> Enum.filter(fn {line, _} -> indent_of(line) == event_indent end)
-          |> Enum.flat_map(fn {line, _} ->
-            case Regex.run(~r/^\s*(?:-\s+)?["']?([A-Za-z_]+)["']?\s*:?/, line) do
-              [_, event] -> [event]
-              _ -> []
-            end
-          end)
-        end
-    end
-  end
-
-  # `on: {push: {paths: [issues/**]}}` names one event, push: only the map's
-  # top-level keys are events. A scalar or list names each of its words.
-  defp inline_events("{" <> _ = map) do
-    # Depth is read from the map with its quoted scalars blanked: a bracket
-    # in `tags: ["v1.0]"]` is text. Blanking keeps every byte offset.
-    code = flow_text(map, true)
-
-    ~r/["']?([A-Za-z_]+)["']?\s*:/
-    |> Regex.scan(map, return: :index)
-    |> Enum.flat_map(fn [{start, _}, {from, len}] ->
-      if nesting_at(code, min(start, byte_size(code))) == 1,
-        do: [binary_part(map, from, len)],
-        else: []
-    end)
-  end
-
-  defp inline_events(scalar_or_list) do
-    ~r/[A-Za-z_]+/ |> Regex.scan(scalar_or_list) |> List.flatten()
-  end
-
-  # Whether flow text still has an open `{` or `[`. nesting_at/2 counts every
-  # bracket it is given, so quoted scalars are blanked first; the text has no
-  # comments left by the time it is read here.
-  defp open_flow?(flow) do
-    code = flow_text(flow, true)
-    nesting_at(code, byte_size(code)) > 0
-  end
-
-  # Flow text, possibly spanning lines, with its comments blanked and, when
-  # `blank_quoted`, the insides of its quoted scalars blanked too. Every
-  # byte keeps its offset (a blanked byte becomes a space; newlines stay).
-  #
-  # Unlike strip_yaml_comment/2, which reads one line, this reads the whole
-  # value: a quoted scalar that spans lines keeps its state, so a ` #` inside
-  # it is text. A quote opens a scalar only where a flow node starts (at the
-  # start, or after `{`, `[`, `,` or `:` and optional spaces), so the
-  # apostrophe in the plain scalar `Say 'hi` is text as well.
-  defp flow_text(text, blank_quoted),
-    do: flow_scan(text, blank_quoted, :plain, ?\n, nil, [])
-
-  # state: :plain | :comment | {:quote, ?'} | {:quote, ?"} | :escape
-  # prev: the previous byte; sig: the previous non-space byte outside quotes
-  defp flow_scan(<<>>, _b, _state, _prev, _sig, acc),
-    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
-
-  defp flow_scan(<<c, rest::binary>>, b, state, prev, sig, acc) do
-    keep = fn byte -> if b and byte != ?\n, do: ?\s, else: byte end
-
-    case state do
-      :comment when c == ?\n ->
-        flow_scan(rest, b, :plain, c, sig, [c | acc])
-
-      :comment ->
-        flow_scan(rest, b, :comment, c, sig, [?\s | acc])
-
-      :escape ->
-        flow_scan(rest, b, {:quote, ?"}, c, sig, [keep.(c) | acc])
-
-      {:quote, ?"} when c == ?\\ ->
-        flow_scan(rest, b, :escape, c, sig, [keep.(c) | acc])
-
-      {:quote, q} when c == q ->
-        case {q, rest} do
-          # '' inside a single-quoted scalar is an escaped quote.
-          {?', <<?', more::binary>>} ->
-            flow_scan(more, b, {:quote, q}, ?', sig, [keep.(?'), keep.(?') | acc])
-
-          _ ->
-            flow_scan(rest, b, :plain, c, c, [c | acc])
-        end
-
-      {:quote, _} ->
-        flow_scan(rest, b, state, c, sig, [keep.(c) | acc])
-
-      :plain when c == ?# and prev in [?\s, ?\t, ?\n] ->
-        flow_scan(rest, b, :comment, c, sig, [?\s | acc])
-
-      :plain when c in [?', ?"] and sig in [nil, ?{, ?[, ?,, ?:] ->
-        flow_scan(rest, b, {:quote, c}, c, c, [c | acc])
-
-      :plain when c in [?\s, ?\t, ?\n, ?\r] ->
-        flow_scan(rest, b, :plain, c, sig, [c | acc])
-
-      :plain ->
-        flow_scan(rest, b, :plain, c, c, [c | acc])
-    end
-  end
-
-  defp harden_runner_step?(job_lines) do
-    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
-         step_lines when step_lines != [] <- lines_in_steps(job_lines, field_indent),
-         step_indent when is_integer(step_indent) <- step_indent(step_lines, field_indent) do
-      case Enum.reduce_while(step_lines, {false, nil, nil}, fn {line, _},
-                                                               {in_step, property_indent,
-                                                                scalar_indent} ->
-             indent = indent_of(line)
-
-             cond do
-               scalar_indent && indent > scalar_indent ->
-                 {:cont, {in_step, property_indent, scalar_indent}}
-
-               indent == step_indent and Regex.match?(~r/^\s*-\s+/, line) ->
-                 if harden_runner_uses?(line) do
-                   {:halt, true}
-                 else
-                   {:cont, {true, nil, block_scalar?(line) && indent}}
-                 end
-
-               in_step and indent > step_indent ->
-                 direct_property? = is_nil(property_indent) or indent == property_indent
-                 property_indent = property_indent || indent
-
-                 if direct_property? and harden_runner_uses?(line) do
-                   {:halt, true}
-                 else
-                   {:cont, {in_step, property_indent, block_scalar?(line) && indent}}
-                 end
-
-               true ->
-                 {:cont, {in_step, property_indent, nil}}
-             end
-           end) do
-        true -> true
-        _ -> false
-      end
-    else
-      _ -> false
-    end
-  end
-
-  # The egress-policy input of the job's harden-runner step; harden-runner
-  # defaults to audit when none is set. nil without the step.
-  defp harden_runner_policy(steps) do
-    case Enum.find(steps, fn step ->
-           Enum.any?(step, fn {line, _} -> harden_runner_uses?(line) end)
-         end) do
-      nil -> nil
-      step -> step |> step_inputs() |> Map.get("egress-policy", "audit")
-    end
-  end
-
-  # One step's `with:` inputs as %{name => value}, from a block mapping under
-  # the key or a flow mapping on its line. A YAML comment sets no input, so
-  # comments are stripped first: `uses: …@v2 # egress-policy: block` leaves
-  # the policy at its default.
-  @with_key ~r/^(\s*(?:-\s+)?)(?:with|"with"|'with')\s*:(?:\s(.*))?$/
-  @block_input ~r/^\s*["']?([A-Za-z0-9_-]+)["']?\s*:(?:\s+(.*))?$/
-  @flow_input ~r/[{,]\s*["']?([A-Za-z0-9_-]+)["']?\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,}]*)/
-  defp step_inputs(step) do
-    lines = Enum.map(step, fn {line, _} -> strip_yaml_comment(line) end)
-
-    case Enum.find_index(lines, &Regex.match?(@with_key, &1)) do
-      nil ->
-        %{}
-
-      index ->
-        [with_line | rest] = Enum.drop(lines, index)
-        [lead, inline] = with_key_parts(with_line)
-
-        if String.starts_with?(inline, "{") do
-          # A flow mapping may continue past the `with:` line.
-          rest
-          |> Enum.reduce_while(inline, fn line, acc ->
-            if open_flow?(acc),
-              do: {:cont, acc <> " " <> String.trim(line)},
-              else: {:halt, acc}
-          end)
-          |> then(&Regex.scan(@flow_input, &1, capture: :all_but_first))
-          |> Map.new(fn [name, value] -> {name, scalar_value(value)} end)
-        else
-          column = String.length(lead)
-          body = Enum.take_while(rest, &(String.trim(&1) == "" or indent_of(&1) > column))
-
-          child_indent =
-            body
-            |> Enum.reject(&(String.trim(&1) == ""))
-            |> Enum.map(&indent_of/1)
-            |> Enum.min(fn -> nil end)
-
-          for line <- body,
-              indent_of(line) == child_indent,
-              [_ | captures] <- [Regex.run(@block_input, line)],
-              into: %{} do
-            case captures do
-              [name, value] -> {name, scalar_value(value)}
-              [name] -> {name, ""}
-            end
-          end
-        end
-    end
-  end
-
-  defp with_key_parts(line) do
-    case Regex.run(@with_key, line) do
-      [_, lead, inline] -> [lead, String.trim(inline)]
-      [_, lead] -> [lead, ""]
-    end
-  end
-
-  # A plain or quoted scalar's text.
-  defp scalar_value(value) do
-    value = String.trim(value)
-
-    cond do
-      Regex.match?(~r/^"(?:[^"\\]|\\.)*"$/, value) ->
-        String.slice(value, 1..-2//1)
-
-      Regex.match?(~r/^'(?:[^']|'')*'$/, value) ->
-        value |> String.slice(1..-2//1) |> String.replace("''", "'")
-
-      true ->
-        value
-    end
-  end
-
-  # GitHub resolves an action's owner/repo without regard to case
-  # (Step-Security/Harden-Runner@v2 installs the same action); the `uses:`
-  # key itself is case-sensitive YAML.
-  defp harden_runner_uses?(line) do
-    Regex.match?(
-      ~r/^\s*(?:-\s+)?(?:uses|"uses"|'uses')\s*:\s*["']?(?i:step-security\/harden-runner)@/,
-      line
-    )
-  end
-
-  defp block_scalar?(line),
-    do: Regex.match?(~r/:\s*(?:&[A-Za-z0-9_-]+\s+)?[>|][0-9+-]*\s*(?:#.*)?$/, line)
-
   # ─── RE002: Harden-Runner in audit-only mode ─────────────────────────
 
   @doc """
@@ -1071,45 +1081,92 @@ defmodule Hypatia.Rules.ResearchExtensions do
   becomes a finding when it persists on a workflow that touches
   protected branches (or runs on `push` to default).
 
-  Severity: `:high`. Action: `:report`.
+  Read from the parsed workflow (`Hypatia.Workflow`), as RE001 is: a hardener
+  is a real step whose `uses:` names `step-security/harden-runner` (any
+  case, as RE001 accepts it), its policy is that step's own
+  `with: egress-policy`, and a step with no policy runs harden-runner's
+  default, `audit`. The trigger is a `push` or `release` event in the
+  workflow's `on:`, narrowed by a job `if:` that admits only listed events
+  (as RE001 narrows untrusted events): a job that runs only on
+  `pull_request` is not on a protected-branch trigger.
+
+  A workflow that cannot be read and names `harden-runner` is reported as
+  unreadable (`:warn`): its hardener cannot be checked, and a silent skip
+  would read as a pass.
+
+  Returns one finding per workflow with an audit-mode hardener on a
+  qualifying trigger, or `[]` when none are found.
+  Severity: `:high` (`:warn` for an unreadable workflow). Action: `:report`.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
-  def re002_harden_runner_audit_mode(repo_path) do
-    repo_path
-    |> workflow_files()
-    |> Enum.flat_map(fn path ->
-      content = File.read!(path)
-      rel = Path.relative_to(path, repo_path)
+  def re002_harden_runner_audit_mode(repo_path),
+    do: re002_findings(re001_workflows(repo_path))
 
-      installs_harden? = Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
+  defp re002_findings(workflows) do
+    unreadable =
+      for {:unreadable, rel, error, bytes} <- workflows,
+          Regex.match?(~r/harden-runner/i, bytes),
+          do: re002_unreadable(rel, error)
 
-      audit_mode? = Regex.match?(~r/egress-policy:\s*audit\b/, content)
+    unreadable ++ re002_audit_findings(workflows)
+  end
 
-      protected_branch_trigger? =
-        Regex.match?(~r/^\s*on:\s*push\b/m, content) or
-          Regex.match?(~r/^\s+push:/m, content) or
-          Regex.match?(~r/^\s+release:/m, content)
+  defp re002_audit_findings(workflows) do
+    for {:ok, rel, %Workflow{} = workflow} <- workflows,
+        audit = audit_hardeners(workflow),
+        audit != [] do
+      defaulted? = Enum.all?(audit, &(&1 == :default))
 
-      if installs_harden? and audit_mode? and protected_branch_trigger? do
-        [
-          %{
-            rule: "RE002",
-            file: rel,
-            severity: :high,
-            reason:
-              "workflow #{rel} runs harden-runner in `egress-policy: audit` — " <>
-                "telemetry-only, never blocks; on a protected-branch trigger this is not containment",
-            action: :report,
-            detail: %{
-              fix:
-                "Switch `egress-policy: audit` to `egress-policy: block` once " <>
-                  "the allow-list is stable. Keep `audit` only for first-rollout windows."
-            }
-          }
-        ]
-      else
-        []
-      end
-    end)
+      %{
+        rule: "RE002",
+        file: rel,
+        severity: :high,
+        reason:
+          "workflow #{rel} runs harden-runner in `egress-policy: audit`" <>
+            if(defaulted?, do: " (its default: no egress-policy is set)", else: "") <>
+            " — telemetry-only, never blocks; on a protected-branch trigger this is not containment",
+        action: :report,
+        detail: %{
+          fix:
+            "Set `egress-policy: block` on the harden-runner step once " <>
+              "the allow-list is stable. Keep `audit` only for first-rollout windows."
+        }
+      }
+    end
+  end
+
+  defp re002_unreadable(rel, error) do
+    %{
+      rule: "RE002",
+      file: rel,
+      severity: :warn,
+      line: error.line,
+      reason:
+        "#{rel} could not be read as KYAML (#{error.code} at line #{error.line}, column " <>
+          "#{error.column}: #{error.message}), so RE002 cannot check its harden-runner policy",
+      action: :report,
+      detail: %{
+        fix:
+          "Rewrite the construct the reader names in the KYAML subset (kyq " <>
+            "docs/KYAML_SPEC.adoc; standards YAML-POLICY)."
+      }
+    }
+  end
+
+  # The audit-mode harden-runner steps of the jobs that run on a protected
+  # trigger (`push` or `release`): `:explicit` for `egress-policy: audit`,
+  # `:default` for a step that sets no policy.
+  defp audit_hardeners(%Workflow{jobs: jobs, triggers: triggers}) do
+    protected = Enum.filter(triggers, &(&1 in ["push", "release"]))
+
+    for job <- jobs,
+        gate <- [job_event_gate(job)],
+        Enum.any?(protected, &(gate == nil or &1 in gate)),
+        step <- job.steps,
+        harden_runner_step?(step),
+        harden_runner_policy(step) == "audit" do
+      if Workflow.input(step, "egress-policy"), do: :explicit, else: :default
+    end
   end
 
   # ─── RE003: cache key interpolates attacker-controlled input ─────────
@@ -1711,12 +1768,20 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   @doc """
   Run every research-extension check on `repo_path` and return the
-  standard scan-result map.
+  scan-result map: `:findings`, `:total`, counts in `:by_severity`, and
+  recommendations in `:dispatch`. Options are currently ignored.
+
+  Raises `File.Error` if workflow directory listing or a scanned file read
+  fails. RE001 and RE002 convert KYAML errors into unreadable-workflow
+  findings when the file names secrets or harden-runner, respectively.
   """
   def scan(repo_path, _opts \\ []) do
+    # RE001 and RE002 read the same parsed workflows.
+    workflows = re001_workflows(repo_path)
+
     findings =
-      re001_missing_harden_runner(repo_path) ++
-        re002_harden_runner_audit_mode(repo_path) ++
+      re001_findings(repo_path, workflows) ++
+        re002_findings(workflows) ++
         re003_cache_key_poisoning(repo_path) ++
         re004_container_tag_pin(repo_path) ++
         re005_test_swallows_exit(repo_path) ++

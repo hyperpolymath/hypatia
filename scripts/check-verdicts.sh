@@ -47,7 +47,8 @@ export IDRIS2_PATH="$PWD/build/abi/ttc${IDRIS2_PATH:+:$IDRIS2_PATH}"
 
 # 2. No escape hatch in the modules the rejections are about.
 for module in src/Hypatia/ABI/Verdict.idr src/Hypatia/ABI/Retraction.idr \
-              src/Hypatia/ABI/RsrProfile.idr src/Hypatia/ABI/SecretAlerts.idr; do
+              src/Hypatia/ABI/RsrProfile.idr src/Hypatia/ABI/SecretAlerts.idr \
+              src/Hypatia/ABI/Egress.idr; do
   if grep -nE 'believe_me|assert_total|assert_smaller|idris_crash|postulate|sorry|admit|native_decide|Admitted|unsafeCoerce|Obj\.magic' \
        "$module"; then
     echo "ERROR: escape-hatch marker in $module" >&2
