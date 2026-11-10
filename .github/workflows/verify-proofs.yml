@@ -12,11 +12,16 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -37,11 +42,16 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -203,7 +213,9 @@ jobs:
       # from a confirming prover re-check. The typechecker is the falsifier:
       # tests/accept/ must be accepted, and every tests/reject/ module must be
       # refused at `invalid` with the diagnostic its `-- EXPECT:` line names.
-      - name: Verdict accept/reject fixtures (HYP-01)
+      # The same fixtures gate RsrProfile.idr, the model of the RSR
+      # capability-profile resolution (lib/rules/rsr_conformance.ex).
+      - name: Verdict + RSR-profile accept/reject fixtures (HYP-01)
         run: bash scripts/check-verdicts.sh
 
       - name: Summary
@@ -219,8 +231,11 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-  lake-build:
-    name: lake build
+  # Lean is no longer a proof lane here: the engineering proofs it held moved
+  # to Idris2 (PROOF-POLICY section 3; verification/proofs/idris2/). It stays
+  # for the HYP-01 positive control, which re-runs Lean on a fixture.
+  lean-hole-recheck:
+    name: Lean hole re-check (HYP-01 control)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -228,25 +243,20 @@ jobs:
 
     env:
       ELAN_VERSION: v4.0.0
-      # Pinned (not :stable) so the proofs are checked against the exact Lean
-      # they were verified with. Matches verification/proofs/lean4/lean-toolchain;
-      # bump both together. A moving :stable can break version-sensitive lemmas.
+      # Pinned (not :stable): tests/accept/LeanHoleRecheckSound.idr records
+      # the Lean version whose output it digests.
       LEAN_TOOLCHAIN: leanprover/lean4:v4.30.0
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Cache Lean toolchain and build
+      - name: Cache Lean toolchain
         id: cache-lean
         uses: actions/cache@v6.1.0
         with:
-          path: |
-            ~/.elan
-            verification/proofs/lean4/.lake
-          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-${{ hashFiles('verification/proofs/lean4/lakefile.lean', 'verification/proofs/lean4/*.lean') }}
-          restore-keys: |
-            lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-
+          path: ~/.elan
+          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-toolchain
 
       - name: Install elan + Lean 4
         if: steps.cache-lean.outputs.cache-hit != 'true'
@@ -258,33 +268,23 @@ jobs:
       - name: Put elan on PATH
         run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: lake build
-        working-directory: verification/proofs/lean4
-        run: |
-          set -euo pipefail
-          lean --version
-          lake --version
-          lake build
-
       # HYP-01 positive control: the SoundVerdict in
       # tests/accept/LeanHoleRecheckSound.idr records digests of a Lean run.
       # Re-run Lean on the fixture from the repository root (where the
       # control's paths are relative to) and require both digests to match.
       - name: Re-check the Lean proof-hole fixture against the HYP-01 control
-        run: bash scripts/recheck-lean-hole.sh
+        run: |
+          set -euo pipefail
+          lean --version
+          bash scripts/recheck-lean-hole.sh
 
       - name: Summary
         if: always()
         run: |
           {
-            echo "## Lean proof verification"
+            echo "## Lean (HYP-01 positive control)"
             echo ""
             echo "- Toolchain: \`${LEAN_TOOLCHAIN}\` via elan \`${ELAN_VERSION}\`"
-            echo "- Proof files:"
-            for f in verification/proofs/lean4/*.lean; do
-              [ "$(basename "$f")" = "lakefile.lean" ] && continue
-              echo "  - \`$(basename "$f")\`"
-            done
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Estate PROOF-POLICY / Mathesis Grade 3 gate for the one Agda artefact:
@@ -425,6 +425,21 @@ jobs:
 
       - name: PROOF-STATUS.adoc agrees with the tree
         run: bash scripts/check-proof-status.sh
+
+      # The machine ledger is canonical (README-EXPLAINME section 5): it must
+      # obey its rules and the tree, and the Proof Ledger table must be its
+      # rendering. The contracts plant each defect the check exists to catch.
+      - name: Proof ledger is valid and agrees with the tree
+        run: bash scripts/proof-ledger.sh check
+
+      - name: Proof Ledger table is the ledger's rendering
+        run: bash scripts/proof-ledger.sh render --check
+
+      - name: Every quoted census is the ledger's
+        run: bash scripts/proof-ledger.sh claims
+
+      - name: Proof ledger contracts (planted defects)
+        run: bash tests/proof-ledger-test.sh
 
   check-trusted-base:
     name: check-trusted-base

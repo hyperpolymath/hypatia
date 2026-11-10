@@ -16,276 +16,387 @@ neurosymbolic CI/CD platform.
   Convert an earlier proof where possible; otherwise re-prove the theorem
   in Agda, then transport the witness to Rocq/Coq and Lean. Re-prove the
   same statement only when transport is unavailable or unsupported. A
-  translation alone is not a proof.
+  translation alone is not a proof. No Mathlib dependency.
 * Every Agda check runs: agda --safe --without-K --cubical-compatible
   against a pinned toolchain. Capital K is required.
 * For each target recheck, record the statement/assumption correspondence,
   checker version, exact invocation, receipt and source/witness digest.
   Missing tools, unchecked transports and unsuccessful checks are not
-  promoted to PROVEN. An unsuccessful translation does not refute or
+  promoted to `+proven+`. An unsuccessful translation does not refute or
   delete the earlier theorem.
 * Canonical estate policy:
   https://github.com/metadatastician/standards/blob/main/3-practice/PROOF-POLICY.adoc[Proof and Verification Policy].
   This file is a proof inventory, not an independent alternative policy.
-* Proof *grades* follow hyperpolymath/mathesis,
-  `+estate-mathematical-architecture+` §§5–6: *Grade 3* is an Agda proof
-  formulated and type-checking under the strict profile; *Grade 2*
-  requires translation(s) into independent foundational system(s);
-  *Grade 1* additionally requires those translated witnesses to compile
-  in headless, isolated CI via verified checker APIs. A target grade is
-  not a status. This inventory records exact statuses (Open / Claimed /
-  `+AGDA-PENDING+` / `+AGDA-VERIFIED+` / Grade 3 …) and never flattens
-  them into a confidence percentage.
+* *Statuses* use the closed vocabulary of README-EXPLAINME §5
+  (`+proven+`, `+proven-with-postulates+`, `+argued+`, `+tested-only+`,
+  `+open+`; PROOF-POLICY §5 gives the upper-case labels). A row that rests
+  on axioms names them, including the ones a Lean kernel adds
+  (`+propext+`, `+Quot.sound+`).
+* *Proof Witness Grades* follow PROOF-POLICY §8 and are always written
+  with their prefix (`+PWG-3+`, `+PWG-2i+`, `+PWG-2ii+`, `+PWG-1+`). They
+  are recorded for theory rows only, derived from receipts, and published
+  as a census, never as a percentage.
 * A checked model proves its stated proposition only. In particular it
   does not prove runtime refinement of Elixir/BEAM code; such claims
-  need their own correspondence evidence and tests.
+  need their own correspondence evidence and tests, and the ledger gives
+  them their own rows.
 
-NOTE: This repo verifies Idris2, Lean and TLA+ artefacts in CI, and —
-since 2026-11-01 — carries one narrowly scoped Agda artefact
-(`+LogtalkMigration.agda+`, below) gated by the same workflow. It does
-not yet run an Agda + Rocq + Lean reconciliation pipeline. The
-pre-existing Lean files below retain their documented scope; they must
-not be represented as independently rechecking Agda proofs until
-checked Agda sources and correspondence evidence actually exist.
+NOTE: This repo verifies Idris2 and TLA+ artefacts in CI, and carries one
+narrowly scoped Agda artefact (`+LogtalkMigration.agda+`) gated by the same
+workflow. It does not yet run an Agda + Rocq + Lean reconciliation pipeline.
+The engineering proofs that were in Lean (rate limiting, Bayesian update, VCL
+parser, PageRank and ESN preconditions) moved to Idris2 on 2026-11-09
+(PROOF-POLICY §3). Lean still runs in CI, but only for the HYP-01 control
+fixture.
 
-=== Proof Inventory
+// BEGIN GENERATED: scripts/proof-ledger.sh render (do not edit by hand)
+[[proof-ledger]]
+=== Proof Ledger
 
-==== Existing Proofs (pre-2026-04-04)
+Rendered from `+verification/proof-ledger.jsonl+`, which is canonical: where this table and the
+ledger disagree, the ledger wins and this table is regenerated.
+Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
-NOTE: These tables deliberately carry no line-count column. Hand-maintained LOC
-figures drift silently, nothing consumes them, and sixteen of the twenty
-previously recorded here were wrong — some by more than double. Use `+wc -l+`
-on the paths below. (The four that were right were all tilde-approximations
-that happened to land within two lines; the column was still not worth keeping.)
+*Census:* 22 proven of 42; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
-[width="100%",cols="28%,14%,42%,16%",options="header",]
+[cols="3,1,2,2,2",options="header"]
 |===
-|File |Language |Properties Proven |Status
-|`+src/Hypatia/ABI/Types.idr+` |Idris2 |Confidence refined type
-(`+So (value >= 0.0 && value <= 1.0)+` auto-proof), core data types,
-and the wire-contract pin `+connectorCount : length allConnectors = 16+`
-|COMPLETE
+|Obligation |Status |Checker (version, flags) |Where |Trust boundary
 
-|`+src/Hypatia/ABI/RuleEngine.idr+` |Idris2 |Safety triangle ordering,
-route totality, dispatch correctness, Bayesian monotonicity, annealing
-caps, end-to-end composition |COMPLETE
+|Confidence is a refined value in [0,1]; the connector list is pinned at 16 entries
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Types.idr+`: `+connectorCount+`
+|Types only; the Elixir, Zig and Rust sides are pinned to ffi/connectors.json by tests, not by this proof
 
-|`+src/Hypatia/ABI/GraphQL.idr+` |Idris2 |Query/Mutation/Subscription
-type safety |COMPLETE
+|Safety-triangle ordering is a strict order, routing is total and respects the hierarchy, dispatch thresholds are correct
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/RuleEngine.idr+`: `+triangleIrreflexive+`, `+triangleTransitive+`, `+routeRespectsHierarchy+`, `+routeTotality+`, `+eliminateFirst+`, `+controlOnlyAsFallback+`
+|Over the Idris2 model; the Elixir router is not shown to follow it (row models-runtime-refinement)
 
-|`+src/Hypatia/ABI/GRPC.idr+` |Idris2 |gRPC service type definitions
-|COMPLETE
+|Every GraphQL query and mutation returns an ApiResponse
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/GraphQL.idr+`: `+queryReturnsApiResponse+`, `+mutationReturnsApiResponse+`
+|Operation types only; the served GraphQL schema is not checked against them
 
-|`+src/Hypatia/ABI/REST.idr+` |Idris2 |REST endpoint type definitions
-|COMPLETE
+|The gRPC service definitions are total and well typed
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/GRPC.idr+`: `+scannerService+`, `+dispatchService+`, `+streamService+`, `+healthService+`
+|Type definitions only; no property of a running service
 
-|`+src/Hypatia/ABI/FFI.idr+` |Idris2 |GADT constructors,
-`+ffiReturnsApiResponse+` proof |COMPLETE
+|The REST endpoint table is total and well typed
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/REST.idr+`: `+allEndpoints+`, `+totalEndpointCount+`
+|Type definitions only; the HTTP router is not checked against them
 
-|`+verify/src/PipelineState.idr+` |Idris2 |Pipeline state machine
-(ValidTransition GADT), terminal/active classification |COMPLETE
+|Every FFI call returns an ApiResponse
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/FFI.idr+`: `+ffiReturnsApiResponse+`
+|Over the GADT; the Zig exports are not checked against it
+
+|Pipeline states change only by valid transitions; terminal and active states are classified
+|proven
+|Idris2 0.7.0, idris2 --build verify/hypatia-verify.ipkg (--total)
+|`+verify/src/PipelineState.idr+`: `+transition+`, `+cancelRunning+`
+|Over the Idris2 state machine; the Elixir pipeline is not shown to follow it
+
+|Confidence stays in [0,1] under Bayesian success and failure updates, clamping and weighted averaging (P1)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ConfidenceBounds.idr+`: `+successPreservesBounds+`, `+failurePreservesBounds+`, `+clampUpperBound+`
+|Over natural-number fractions; Elixir floats are not modelled
+
+|Tiers form a strict total order and routing picks the highest available tier (P2)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/SafetyTriangle.idr+`: `+tierGTIrreflexive+`, `+tierGTAsymmetric+`, `+tierGTTransitive+`, `+tierTrichotomy+`, `+eliminateAlwaysChosen+`
+|Over the Idris2 model; the Elixir TriangleRouter is not shown to follow it
+
+|Confidence maps monotonically to dispatch strategy at the 95/85 boundaries; nascent recipes never auto-execute (P3)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/DispatchStrategy.idr+`: `+highConfidenceIsAuto+`, `+midConfidenceIsReview+`, `+lowConfidenceIsReport+`
+|Over integer percentages; the Elixir FleetDispatcher is not shown to follow it
+
+|Raw records with every mandatory field parse, records missing one are rejected, and projection to FindingFact keeps repo, file, category and severity (P4; statement superseded 2026-11-01)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/VerisimdbConnector.idr+`: `+cleanFindingCompleteness+`, `+cleanFindingSoundness+`, `+factPreservesData+`, `+parseSeverityTotal+`
+|Over the Idris2 records; lib/verisim_connector.ex is not shown to follow them
+
+|Quarantine triggers, release and routing blockage behave as specified (P5)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/Quarantine.idr+`: `+failuresTriggerHard+`, `+highFPTriggersSoft+`, `+releaseRestoresOk+`, `+hardQuarantineBlocksAuto+`
+|Over the Idris2 model; lib/safety/quarantine.ex is not called by any dispatch path (CLAUDE.md Known Gap 2)
+
+|Batch execution is all-or-nothing and rollback restores the original snapshot (P6)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/BatchRollback.idr+`: `+rollbackRestoresOriginal+`, `+reversibility+`, `+batchIsTransactional+`
+|Over the Idris2 model; lib/safety/batch_rollback.ex is not called by any dispatch path
+
+|Uniform-mean aggregation of n predictions stays in [0,1] and above n times the minimum (H9)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/NeuralConsensus.idr+`: `+sumPredsBounded+`, `+aggregateInBounds+`, `+minLteLeft+`
+|Over natural-number predictions; the Elixir coordinator's floats are not modelled
+
+|Only a confirming mechanical re-check makes a verdict sound; soundness is decidable (HYP-01)
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Verdict.idr+`: `+patternNotSound+`, `+observedNotSound+`, `+refutedNotSound+`, `+decSound+`, `+soundLevelHasWitness+`, `+soundVerdictLevel+`
+|Over the Idris2 types; lib/hypatia/verdict.ex mirrors them by hand
+
+|A Sound witness for Pattern support does not typecheck
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/reject/PatternIsNotSound.idr+`: `+invalid+`
+|One negative example, not a proof over all inputs. Bounds: one expected-rejection check per CI run
+
+|Observed 5 (the proposal threshold) is refused as sound
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/reject/ObservedIsNotSound.idr+`: `+invalid+`
+|One negative example, not a proof over all inputs. Bounds: one expected-rejection check per CI run
+
+|A re-check that refutes is refused as sound
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/reject/RefutedRecheckIsNotSound.idr+`: `+invalid+`
+|One negative example, not a proof over all inputs. Bounds: one expected-rejection check per CI run
+
+|A digest that is not 64 lower-case hex digits does not typecheck
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/reject/MalformedDigest.idr+`: `+invalid+`
+|One negative example, not a proof over all inputs. Bounds: one expected-rejection check per CI run
+
+|A SoundVerdict for the Lean proof-hole detector is accepted and derives sound, with digests re-derived from a fresh Lean run
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh; Lean 4.30.0, scripts/recheck-lean-hole.sh
+|`+tests/accept/LeanHoleRecheckSound.idr+`: `+soundControl+`, `+controlIsSound+`
+|One detector and one fixture. Bounds: one positive control and two negative controls per CI run
+
+|Verdict and SoundVerdict correspond to Epi and SoundWarrant in hyperpolymath/epistemic-types at 6a68de3 (Warrant.agda)
+|argued
+|-
+|`+src/Hypatia/ABI/Verdict.idr+`: `+SoundVerdict+`
+|A transcription; the pin and the cited names are checked by the sibling-citations CI job, the correspondence is not
+
+|Elixir rules are proved sound for the support they carry
+|open
+|-
+|`+src/Hypatia/ABI/Verdict.idr+`: `+Verdict+`
+|Rules carry only the support tag (HYP-01, PR B); no Elixir rule is proved sound
+
+|A quarantine retraction is a thinning: a token survives on the same support iff its support thins into what remains, and a finding survives through one of its tokens
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Retraction.idr+`: `+retractThin+`, `+survivesDependent+`, `+thinElem+`, `+retractedSupportDies+`, `+survivor+`, `+noTokensNoSurvival+`
+|Over the Idris2 types; the runtime mirror is a separate row
+
+|A token resting on the retracted rule is refused as surviving
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/reject/RetractedSupportSurvives.idr+`: `+invalid+`
+|One negative example. Bounds: one expected-rejection check per CI run
+
+|A finding corroborated by two rules survives the quarantine of one through the other
+|tested-only
+|Idris2 0.7.0, scripts/check-verdicts.sh
+|`+tests/accept/IndependentTokenSurvives.idr+`: `+findingSurvives+`, `+survivesByB+`, `+tokenADies+`
+|One positive example. Bounds: one positive control per CI run
+
+|Retraction, Dependent and survivesDependent correspond to Revision.agda in hyperpolymath/residual-evidence-types at 97244f5
+|argued
+|-
+|`+src/Hypatia/ABI/Retraction.idr+`: `+survivesDependent+`
+|A transcription; the pin and names are checked by the sibling-citations CI job, the correspondence is not
+
+|The Elixir mirror retracts findings resting only on a quarantined rule, bot or prover, keeps corroborated ones, and restores them on release
+|tested-only
+|ExUnit (mix test)
+|`+test/retraction_test.exs+`: `+retract_dependents+`
+|Example-based; lib/hypatia/verdict/retraction.ex is not proved. Bounds: ExUnit cases with an untouched-finding negative control; two mutants killed
+
+|Quarantine.retract_dependents/1 is called by a scan or dispatch path
+|open
+|-
+|`+lib/safety/quarantine.ex+`: `+retract_dependents+`
+|Not wired, like the rest of the safety systems (CLAUDE.md Known Gap 2)
+
+|Every dispatch-manifest step names the verdict it derives from, and a factless step refuses the whole manifest before anything is written
+|tested-only
+|ExUnit (mix test)
+|`+test/dispatch_manifest_test.exs+`: `+DispatchManifest+`
+|Hypatia's own derived workflow only. Bounds: ExUnit cases
+
+|The Signalbox derived-workflow criterion holds
+|open
+|-
+|`+test/dispatch_manifest_test.exs+`: `+DispatchManifest+`
+|There is no Signalbox repository to apply the criterion to
+
+|The rate-limit counter never exceeds its bound: tryAccept, prune and event sequences preserve the invariant, and an at-limit event is rejected (P7)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`
+|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+
+|The Beta posterior stays in (0,1), rises with successes, falls with failures, is the prior with no observations, and clamps to [floor, cap] (H7)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/BayesianUpdate.idr+`: `+posteriorLtOne+`, `+posteriorPos+`, `+moreSuccessesRaises+`, `+moreFailuresLowers+`, `+clampGeFloor+`, `+clampLeCap+`, `+bayesianUpdateSound+`
+|Over Nat pseudo-counts; Elixir floats are not modelled. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+
+|The VCL FROM-clause parser is total and deterministic, passes the remainder on, and rejects malformed input
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ParserTotality.idr+`: `+parseFromDeterministic+`, `+parseFromPassesRemainder+`, `+parseFromOrphanFrom+`, `+parseFromNoFromKeyword+`
+|FROM-clause subset over a token model; lib/vcl/ is not shown to follow it. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+
+|PageRank inputs are well formed: edge weights and in/out weight sums are non-negative
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/PageRankInvariants.idr+`: `+edgeWeightNonneg+`, `+outWeightSumNonneg+`, `+inWeightSumNonneg+`, `+pagerankPreconditionsSound+`
+|Preconditions only; convergence is row pagerank-convergence. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+
+|ESN spectral scaling is well defined: the floor-clamped denominator is positive and bounds both inputs
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ESNSpectralScaling.idr+`: `+denomPosWhenFloorPos+`, `+denomGeMaxAbs+`, `+denomGeFloor+`, `+esnScalingPreconditionsSound+`
+|Preconditions only; the echo-state property is row esn-echo-state. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+
+|Kin-gate atomicity: mutual exclusion by type and in the bot view, view coherent with locks, no orphan view, well-bracketed grants, and every request processed (H8)
+|tested-only
+|TLC 2.19 (rev 5a47802), -workers auto -config KinGate.cfg
+|`+verification/proofs/tlaplus/KinGate.tla+`: `+KinGateSafe+`, `+MutualExclusionByType+`, `+MutualExclusionBotView+`, `+ViewCoherentWithLocks+`, `+NoOrphanView+`, `+GrantsAreWellBracketed+`, `+EveryRequestProcessed+`
+|One bounded instance; the Elixir kin gate is not shown to follow the spec. Bounds: 3 bots x 2 repos, MaxRequests = 4: 444715 distinct states, depth 13, no error
+
+|The 18 transcribed alert types agree between security_learning.lgt and Hypatia.Rules.SecurityErrors on category, severity, auto-fixability and fix presence; prevention agrees except the two ledgered non-equalities
+|proven, PWG-3
+|Agda 2.8.0.2, builtins only, --safe --without-K --cubical-compatible
+|`+verification/proofs/agda/LogtalkMigration.agda+`: `+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`, `+fixPresenceAgrees+`, `+preventionAgreesToken+`, `+preventionAgreesPinned+`, `+preventionAgreesMissing+`, `+preventionAgreesHardCoded+`, `+preventionAgreesVulnerabilities+`, `+preventionAgreesSecurityPolicy+`, `+preventionBranchSource+`, `+preventionBranchTarget+`, `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
+|The finite table as transcribed; fix strings and Elixir runtime behaviour are outside the model. No Rocq or Lean leg yet
+
+|Hypatia.Rules.SecurityErrors at runtime follows the table the Agda model states
+|tested-only
+|ExUnit (mix test)
+|`+test/security_errors_test.exs+`: `+SecurityErrors+`
+|Example-based; the transcription into the Agda table is not itself checked. Bounds: ExUnit cases over the migrated alert types
+
+|Damped PageRank iteration converges to a unique stationary vector
+|open, ungraded
+|-
+|-
+|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), over constructive reals, then Rocq and Lean legs; no Mathlib
+
+|With leak rate 0 < a <= 1 and the reservoir scaled to infinity-norm at most 0.95, two state trajectories under the same input converge geometrically (echo-state property), and [-1,1]^n is invariant
+|open, ungraded
+|-
+|-
+|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), over constructive reals, then Rocq and Lean legs; no Mathlib. The runtime scales by the induced infinity-norm, not the spectral radius
+
+|The Elixir runtime follows the Idris2, Lean and TLA+ models above
+|open
+|-
+|-
+|No correspondence evidence beyond the rows that name a runtime test; a model row proves its model only (README-EXPLAINME section 5 rule 3)
+
+|VCL queries return what their semantics says beyond the FROM clause
+|open
+|-
+|`+lib/vcl/query.ex+`: `+fetch_scans+`
+|Only FROM-clause parsing is modelled (row parser-totality)
 |===
+// END GENERATED: proof ledger
 
-==== New Proofs (2026-04-04)
+==== RSR capability-profile resolution (2026-11-09)
 
-[width="100%",cols="28%,14%,42%,16%",options="header",]
-|===
-|File |Language |Properties Proven |Status
-|`+verification/proofs/idris2/ConfidenceBounds.idr+` |Idris2
-|[0,1] bounds preserved by construction, Bayesian update,
-success/failure monotonicity, clamping, weighted average |COMPLETE
-
-|`+verification/proofs/idris2/SafetyTriangle.idr+` |Idris2 |Strict
-total order (irreflexive, asymmetric, transitive), trichotomy, routing
-respects hierarchy, optimality (highest available), completeness (all
-tiers reachable) |COMPLETE
-
-|`+verification/proofs/idris2/DispatchStrategy.idr+` |Idris2
-|Confidence-to-strategy monotonicity, boundary proofs (high/mid/low),
-annealing clamp bounds, nascent-never-auto, veteran-unrestricted
-|COMPLETE
-
-|`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2
-|Completeness (mandatory fields), Soundness (missing fields rejected),
-Preservation of repo/file/category/severity under projection to the
-canonical JSON finding record (`+FindingFact+`). *Statement superseded
-2026-11-01:* the 2026-04-04 target was the retired Logtalk fact format
-(`+LogtalkFact+`); the equality proof term is unchanged, the target is
-now `+FindingFact+`, and the corresponding module is
-`+lib/verisim_connector.ex+`. Runtime refinement is not claimed.
-|COMPLETE (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
-
-|`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
-transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
-restoration, Routing blockage |COMPLETE
-
-|`+verification/proofs/idris2/BatchRollback.idr+` |Idris2
-|Transactionality (all-or-nothing), Reversibility (snapshot
-restoration), Fault tolerance (failure handling) |COMPLETE
-
-|`+verification/proofs/lean4/RateLimiting.lean+` |Lean 4 |Counter
-never exceeds configured bound, tryAccept preserves invariant, prune
-preserves invariant, inductive sequence processing, rejection guarantee,
-concrete configs (per-bot/global/burst) |COMPLETE
-
-|`+verification/proofs/lean4/BayesianUpdate.lean+` |Lean 4 |H7:
-posterior in (0,1), monotone in successes/failures, zero-observation
-identity, floor/cap clamp |COMPLETE
-
-|`+verification/proofs/lean4/ParserTotality.lean+` |Lean 4 |VCL
-`+FROM+`-clause parser totality, determinism, round-trip,
-malformed-input rejection |COMPLETE
-
-|`+verification/proofs/lean4/PageRankInvariants.lean+` |Lean 4
-|PageRank preconditions (edge-weight / out-degree non-negativity).
-*Convergence theorem in progress (Mathlib).* |PARTIAL
-
-|`+verification/proofs/lean4/ESNSpectralScaling.lean+` |Lean 4
-|ESN scaling preconditions (floor-clamped denominator positive).
-*Echo-state stability in progress (Mathlib).* |PARTIAL
-
-|`+verification/proofs/idris2/NeuralConsensus.idr+` |Idris2 |H9:
-uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below
-by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network
-specialization |COMPLETE
-
-|`+verification/proofs/tlaplus/KinGate.tla+` |TLA+ |H8: Kin gate
-atomicity. Acquire/Release/Expire transitions + MutualExclusionByType +
-MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView +
-GrantsAreWellBracketed + EveryRequestProcessed (liveness) |COMPLETE —
-TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4:
-1,778,860 distinct states, depth 13, no errors in 51s (Eclipse Temurin
-21 JRE, tla2tools 2.19)
-
-|[line-through]#`+verification/proofs/agda/OutcomeLog.agda+`#
-|[line-through]#Agda# |[line-through]#H6: outcome
-log monotonicity (strictly increasing timestamps)# |RETIRED 2026-04-22 —
-downgraded to a runtime assertion in
-`+lib/outcome_tracker.ex:assert_h6_monotone/2+`. Echidnabot audits the
-JSONL for violations. See commit history.
-|===
-
-==== Logtalk → Elixir migration correspondence (2026-11-01)
-
-Finite, implementation-independent table correspondence for the retired
-ECHIDNA `+security_learning.lgt+` alert semantics versus
-`+Hypatia.Rules.SecurityErrors+`. Per the estate verifier mapping this
-is Agda territory; per Mathesis this is now *Grade 3* on the
-strict-profile receipt recorded in the row below (checker version,
-library discipline, exact invocation, result, source digest, and
-verification commit). Fix *strings* and Elixir
-runtime behaviour are outside the model and are pinned by the migration
-ledger and ExUnit tests respectively.
-
-[width="100%",cols="28%,14%,42%,16%",options="header",]
-|===
-|File |Language |Properties stated |Status
-|`+verification/proofs/agda/LogtalkMigration.agda+` |Agda
-|Exhaustive agreement over the 18 transcribed alert types:
-`+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`,
-`+fixPresenceAgrees+`; prevention agreement on the six unchanged shared
-entries; the two ledgered non-equalities stated exactly
-(`+preventionBranchSource+`, `+preventionBranchTarget+`,
-`+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`); the
-former severity catch-all members explicit (`+catchAllSastLow+`,
-`+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
-(at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
-|Grade 3 — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
-release, builtins only/no stdlib; invocation `agda --safe --without-K
---cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
-run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. No Grade 2/1,
-reconciliation, or runtime-refinement claim.
-|===
-
-==== Verdict support (2026-10-14, HYP-01)
-
-A gate verdict names its support: a pattern match, an observation count, or
-a prover re-check. Only the last can be sound. The statuses here use the
-estate vocabulary (PROVEN / TESTED / ASSUMED / OPEN), and every row names
-the artefact that justifies it. `+scripts/check-verdicts.sh+` (CI: `+idris2
---check+` job) and `+scripts/recheck-lean-hole.sh+` (CI: `+lake build+` job)
-are the gates.
+An *engineering* property (estate PROOF-POLICY §1: Idris2), so it is not
+graded on the Proof Witness Grade ladder (§8.1) and uses the §5 tokens only.
+`+src/Hypatia/ABI/RsrProfile.idr+` models how
+`+lib/rules/rsr_conformance.ex+` resolves a repository's capability profile:
+`+declared_capabilities/1+`, `+deed_profile_capabilities/1+`,
+`+clause_capabilities/1+` and `+a2ml_capabilities/1+` feed the scorecard's
+`+profile_present+`; `+profile_present/0+` is the criterion 3.2.2 detector.
+The Elixir is not extracted from the model. The theorems are properties of
+the model; the correspondence is by review and by ExUnit cases, and is
+recorded separately below. `+scripts/check-verdicts.sh+` (CI: `idris2 --check` job) is the gate.
 
 [width="100%",cols="28%,14%,42%,16%",options="header",]
 |===
 |File |Language |Claim |Status
-|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |`+Sound+` has one
-constructor, indexed by `+Mechanical+`, demanding a re-check that
-`+Confirms+`: `+patternNotSound+`, `+observedNotSound+`,
-`+refutedNotSound+`; soundness is decidable (`+decSound+`); the derived
-level is "sound" only with a witness (`+soundLevelHasWitness+`,
-`+patternNeverSoundLevel+`, `+observedNeverSoundLevel+`) and a
-`+SoundVerdict+` always derives it (`+soundVerdictLevel+`); a `+Sha256+`
-literal of the wrong shape does not typecheck |PROVEN
+|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |Model theorems. Deed
+precedence: exactly one top-level clause with a capabilities list decides,
+for every a2ml state (`+deedPrecedence+`, `+a2mlIgnoredUnlessAbsent+`).
+Fail-closed: two or more clauses, or one without a list, declare nothing
+and fail 3.2.2, for every a2ml state (`+duplicateDeclaresNothing+`,
+`+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
+`+listlessFailsCriterion+`). Fallback: no clause, the a2ml reading
+(`+fallbackNoDeed+`, `+fallbackNoClause+`,
+`+fallbackCriterionNoClause+`). Consistency: 3.2.2 passes iff
+`+scorecardProfilePresent+` whenever the deed decides
+(`+deedDecidedAgrees+`, the bffd76a fix) or the a2ml is not present-but-
+declaring-nothing (`+a2mlDecidedAgrees+`); they disagree in exactly that
+case (`+disagreementIsExactly+`) |PROVEN — Verify Proofs run 42634000625, idris2 --check job 129217248108, at commit 34c7bc7cff0cf54b1b5707a497d9f8abf826e844 (Idris2 v0.7.0, ABI package build)
 
-|`+tests/reject/PatternIsNotSound.idr+` |Idris2 |Expected rejection: a
-`+Sound+` witness for a `+Pattern+` support is refused at `+invalid+`
-|TESTED
+|`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
+the profile-reader cases of test/rules/rsr_conformance_test.exs stated
+against the model and accepted by evaluation (`+deedEraDeclares+`,
+`+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
+`+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
+`+a2mlOnly+`, `+dupAgrees+`) |TESTED — accepted in the same job
 
-|`+tests/reject/ObservedIsNotSound.idr+` |Idris2 |Expected rejection:
-`+Observed+` 5 (the rules.a2ml proposal threshold) is refused as sound at
-`+invalid+` |TESTED
+|`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
+rejection: a duplicated clause counted as a present profile is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
-|`+tests/reject/RefutedRecheckIsNotSound.idr+` |Idris2 |Expected
-rejection: a re-check that `+Refutes+` is refused as sound at `+invalid+`
-|TESTED
+|`+tests/reject/DuplicatedClausePassesProfileCriterion.idr+` |Idris2
+|Expected rejection: a duplicated clause passing 3.2.2 is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
-|`+tests/reject/MalformedDigest.idr+` |Idris2 |Expected rejection: a
-digest that is not 64 lower-case hex digits is refused at `+invalid+`
-|TESTED
+|`+tests/reject/ListlessClauseFallsBack.idr+` |Idris2 |Expected
+rejection: a list-less clause falling back to the a2ml is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
-|`+tests/accept/LeanHoleRecheckSound.idr+` |Idris2 + Lean 4 |Positive
-control: `+soundControl+`, a `+SoundVerdict+` for the code_safety Lean
-proof-hole detector, is accepted and derives "sound" by evaluation
-(`+controlIsSound+`); its `+targetHash+` and `+artefactHash+` are
-re-derived from a fresh Lean 4.30.0 run of the fixture, with two negative
-controls (a hole-free module prints no diagnostic; another run yields
-another digest) |TESTED
+|`+tests/reject/A2mlOverridesDeed.idr+` |Idris2 |Expected rejection: the
+a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job
 
-|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |Correspondence of
-`+Verdict+` / `+SoundVerdict+` to Epi / SoundWarrant in
-hyperpolymath/epistemic-types @ 6a68de3 (Warrant.agda). The pin and the
-cited names are checked (`+sibling-citations+` CI job); the
-correspondence is a transcription, not a checked proof |ASSUMED
+|Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
+functions behave as the Elixir functions their header names. Argued by
+review; no kernel checked it, and the Elixir is not extracted from the
+model |ASSUMED
 
-|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |Elixir rules carry a proof of
-their support tag. They carry the tag only (HYP-01, PR B); no Elixir rule
-is proved sound |OPEN
+|Runtime behaviour, lib/rules/rsr_conformance.ex |Elixir |Deed era,
+deed beside a2ml, duplicated, list-less and nested clauses, and 3.2.2 on a
+duplicated or list-less clause: test/rules/rsr_conformance_test.exs
+(sampled cases) |TESTED
 
-|`+src/Hypatia/ABI/Retraction.idr+` |Idris2 |Quarantine as retraction:
-a retraction is a thinning (`+retractThin+`); a token whose support thins
-into the retracted context survives on the same support
-(`+survivesDependent+`); a support naming an assumption that no longer
-occurs does not (`+thinElem+`, `+retractedSupportDies+`); a finding
-survives exactly through one of its tokens (`+survivor+`,
-`+noTokensNoSurvival+`) |PROVEN
+|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |3.2.2 and the scorecard's
+profile_present can never disagree. False of the code as it stands: with
+no deed clause, 3.2.2 checks only that rsr-profile.a2ml exists, while the
+scorecard needs it to yield a capabilities list, so an a2ml that does not
+parse or carries no list passes 3.2.2 with no profile present
+(`+residualDivergence+`) |OPEN
+|===
 
-|`+tests/reject/RetractedSupportSurvives.idr+` |Idris2 |Expected
-rejection: a token resting on the very rule a quarantine retracts is
-refused as surviving, at `+invalid+` |TESTED
+==== secret-alerts line contract (HYP-01, 2026-11-09)
 
-|`+tests/accept/IndependentTokenSurvives.idr+` |Idris2 |Positive
-control: a finding corroborated by two rules survives the quarantine of
-one through the other (`+findingSurvives+`, `+survivesByB+`), and the
-token that rested on the quarantined rule does not (`+tokenADies+`)
-|TESTED
+An engineering property of a cross-language wire format (PROOF-POLICY §1:
+Idris2), so it carries the §5 tokens only and no PWG.
+`+scripts/check-verdicts.sh+` (CI: `idris2 --check` job) is the gate.
 
-|`+src/Hypatia/ABI/Retraction.idr+` |Idris2 |Correspondence of
-`+Retraction+`, `+Dependent+`, `+survivesDependent+` to Revision.agda in
-hyperpolymath/residual-evidence-types @ 97244f5. Pin and names checked
-(`+sibling-citations+` CI job); transcription, not a checked proof
-|ASSUMED
-
-|Runtime mirror, lib/hypatia/verdict/retraction.ex |Elixir |Quarantine
-retracts the findings that rested only on a quarantined rule, bot or
-prover, keeps corroborated findings on their surviving tokens, and
-restores them on release: test/retraction_test.exs, with the
-untouched-finding negative control and two mutants killed |TESTED
-
-|Runtime wiring |Elixir |`Quarantine.retract_dependents/1` is called by
-a scan or dispatch path. It is not, like the rest of the safety systems
-(CLAUDE.md Known Gap 2) |OPEN
-
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Claim |Status
 |`+src/Hypatia/ABI/SecretAlerts.idr+` |Idris2 |The `hypatia
 secret-alerts` line contract, a cross-language wire format read by the
 bash/jq secret-scanning sweep. The exit code is 0 exactly for an ok line and
@@ -319,13 +430,6 @@ error and exit 3, and every finding annotated with its HYP-01 verdict
 fields. Checked on sample data by test/cli_test.exs ("secret-alerts"), not
 proved; the Idris2 module is a model of the interface, not a refinement
 proof of the producer (PROOF-POLICY §2.1) |TESTED
-
-|Derived workflow steps, lib/dispatch_manifest.ex |Elixir |Every
-dispatch-manifest step names the verdict it derives from, and a factless
-step refuses the whole manifest before anything is written:
-test/dispatch_manifest_test.exs. This is hypatia's own derived workflow;
-the Signalbox criterion has no Signalbox repository to apply to |TESTED
-(Signalbox: OPEN)
 |===
 
 === Properties Proven
@@ -399,7 +503,7 @@ snapshot
 * *P6.3* Fault Tolerance: even partially failed batches are reversible
 to original state
 
-==== 7. Rate Limiting (`+RateLimiting.lean+`)
+==== 7. Rate Limiting (`+RateLimiting.idr+`)
 
 * *P7.1* Empty state satisfies invariant (base case)
 * *P7.2* `+tryAccept+` preserves invariant (inductive step)
@@ -410,12 +514,18 @@ list)
 rejected
 * *P7.6* Count bounded after any sequence of accepts
 
+Status for all of P7: `proven` (Idris2 0.7.0, `%default total`). Moved
+from Lean on 2026-11-09; the Lean proofs rested on the kernel axioms
+`propext` and `Quot.sound`, which Idris2 does not have.
+
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
-Status for all of P8: *Grade 3 — AGDA-VERIFIED* on the strict-profile
-receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
-41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
-model only.
+Status for all of P8: `proven`, *PWG-3* (AGDA-VERIFIED), on the
+strict-profile receipt: Agda 2.8.0.2, builtins only, Verify Proofs run
+41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331,
+source SHA-256 bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
+This grades the finite model only. PWG-3 is not a discharge: the Rocq and
+Lean legs are still owed (PROOF-POLICY §8.4).
 
 * *P8.1* Category correspondence: `+categoriesAgree+`
 * *P8.2* Severity correspondence, including the former catch-all:
@@ -432,6 +542,21 @@ model only.
   `+preventionBranchSource+`, `+preventionBranchTarget+`,
   `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
 
+==== 9. RSR capability-profile resolution (`+RsrProfile.idr+`)
+
+Engineering property; §5 tokens only, no PWG grade. Status: as in the
+inventory row above. These are properties of the model, not of the Elixir.
+
+* *P9.1* Deed precedence: `+deedPrecedence+`, `+a2mlIgnoredUnlessAbsent+`
+* *P9.2* Fail-closed: `+duplicateDeclaresNothing+`,
+  `+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
+  `+listlessFailsCriterion+`
+* *P9.3* Fallback: `+fallbackNoDeed+`, `+fallbackNoClause+`,
+  `+fallbackCriterionNoClause+`
+* *P9.4* Consistency of 3.2.2 with the scorecard: `+deedDecidedAgrees+`,
+  `+a2mlDecidedAgrees+`; the exact residual: `+disagreementIsExactly+`,
+  `+residualDivergence+`
+
 === Dangerous Pattern Audit
 
 [cols=",,",options="header",]
@@ -446,30 +571,7 @@ model only.
 |`+Obj.magic+` |0 |-
 |===
 
-=== Coverage Map
-
-[width="100%",cols="48%,27%,25%",options="header",]
-|===
-|Hypatia Subsystem |Proven By |Coverage
-|Confidence values |`+ConfidenceBounds.idr+`, `+RuleEngine.idr+` |Full
-
-|Safety triangle routing |`+SafetyTriangle.idr+`, `+RuleEngine.idr+`
-|Full
-
-|Dispatch strategy mapping |`+DispatchStrategy.idr+`, `+RuleEngine.idr+`
-|Full
-
-|Rate limiting |`+RateLimiting.lean+` |Full
-
-|Pipeline state machine |`+PipelineState.idr+` |Full
-
-|Bayesian confidence updating |`+ConfidenceBounds.idr+`,
-`+RuleEngine.idr+` |Full
-
-|Bot dispatch correctness |`+RuleEngine.idr+` |Full
-
-|Annealing stage caps |`+DispatchStrategy.idr+`, `+RuleEngine.idr+`
-|Full
+=== Coverage
 
 |API type safety |`+Types.idr+`, `+GraphQL.idr+`, `+REST.idr+`,
 `+GRPC.idr+`, `+FFI.idr+` |Full
@@ -487,6 +589,9 @@ AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)
+
+|RSR capability-profile resolution |`+RsrProfile.idr+` |Model only;
+correspondence to the Elixir ASSUMED
 
 |VCL parser totality |`+ParserTotality.lean+` |Full (FROM-clause subset)
 
