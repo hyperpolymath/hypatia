@@ -201,4 +201,29 @@ defmodule Hypatia.Neural.GraphOfTrustQualificationTest do
     assert Enum.all?(extra_recipes, fn recipe -> expanded.trust_scores[recipe["id"]] == 0.5 end)
     assert GraphOfTrust.trust_score(expanded, "unknown-entity") == 0.5
   end
+
+  test "recording the same evidence k times leaves every trust score unchanged" do
+    # build_edges/1 emits one edge per verified success, so the same evidence
+    # recorded again arrives as parallel edges. The ranking used to divide a
+    # source's trust by the weight of all its out-edges but credit only the
+    # first edge to each target, so trust leaked, and the leak grew with k:
+    # tripling this log moved recipe-a-only-fixture from 0.38 to 0.59. Trust
+    # is now ranked over the set of edges, as the Jaccard cross-repo edges
+    # already are, so re-recording evidence changes nothing.
+    rows = [
+      verified("repo-a-fixture", "recipe-a-only-fixture"),
+      verified("repo-b-fixture", "recipe-a-only-fixture"),
+      verified("repo-b-fixture", "recipe-b-only-fixture"),
+      verified("repo-c-fixture", "recipe-b-only-fixture")
+    ]
+
+    once = graph(rows).trust_scores
+    thrice = graph(rows ++ rows ++ rows).trust_scores
+
+    assert Map.keys(once) == Map.keys(thrice)
+
+    for {id, score} <- once do
+      assert_in_delta thrice[id], score, 1.0e-9, "#{id}: once=#{score} thrice=#{thrice[id]}"
+    end
+  end
 end

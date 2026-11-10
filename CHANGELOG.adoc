@@ -12,6 +12,23 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== The oracle and CI toolchain move to OTP 28.5.0.8 (2026-11-09)
+
+`rsr-oracle.yml` now defaults to OTP `28.5.0.8`, and the `elixir-compile`
+jobs in `ci.yml` use it as well. An OTP version matrix (#1032) found the
+following:
+
+* Commit `be98f74` crashes with a segfault on every run when it is compiled
+  and run on OTP 28.1, 28.2 or 28.3. The crash is in `sweep_off_heap`
+  under `beam_jit_bs_init_bits`.
+* The same tree is clean on OTP 27.3, 28.0 and 28.5.0.8.
+
+The likely cause is the compiler bug that OTP 28.4 fixed (OTP-19951,
+erlang/otp#10588). This is inferred, not proven.
+
+The Mix cache key now carries the OTP version. A `_build` compiled under one
+OTP release is therefore never restored under another.
+
 ==== Proof-ledger statuses are derived from CI receipts (2026-11-09)
 
 * Every ledger row names its `lane`: the CI job whose receipt decides it

@@ -38,7 +38,7 @@ paid for that on 2026-10-25:
   fix was written, because the ref in use was `main`.
 
 The fix (this repository's `elixir-compile` job) now compiles the tree on every
-PR using the exact toolchain the gate uses — Elixir `1.19.4` / OTP `28.3` — so
+PR using the exact toolchain the gate uses — Elixir `1.19.4` / OTP `28.5.0.8` — so
 the same defect cannot reach `main` again. The pin is what keeps a *consumer*
 safe when something else slips through anyway.
 
@@ -120,7 +120,7 @@ product; the tier gate is a policy each repository adopts when it is ready. A
 == Local use
 
 The oracle is a mix task; there is nothing to install beyond Elixir 1.19.4 /
-OTP 28.3:
+OTP 28.5.0.8:
 
 [source,bash]
 ----

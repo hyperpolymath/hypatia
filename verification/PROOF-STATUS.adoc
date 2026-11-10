@@ -320,6 +320,77 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |===
 // END GENERATED: proof ledger
 
+==== RSR capability-profile resolution (2026-11-09)
+
+An *engineering* property (estate PROOF-POLICY §1: Idris2), so it is not
+graded on the Proof Witness Grade ladder (§8.1) and uses the §5 tokens only.
+`+src/Hypatia/ABI/RsrProfile.idr+` models how
+`+lib/rules/rsr_conformance.ex+` resolves a repository's capability profile:
+`+declared_capabilities/1+`, `+deed_profile_capabilities/1+`,
+`+clause_capabilities/1+` and `+a2ml_capabilities/1+` feed the scorecard's
+`+profile_present+`; `+profile_present/0+` is the criterion 3.2.2 detector.
+The Elixir is not extracted from the model. The theorems are properties of
+the model; the correspondence is by review and by ExUnit cases, and is
+recorded separately below. `+scripts/check-verdicts.sh+` (CI: `idris2 --check` job) is the gate.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Claim |Status
+|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |Model theorems. Deed
+precedence: exactly one top-level clause with a capabilities list decides,
+for every a2ml state (`+deedPrecedence+`, `+a2mlIgnoredUnlessAbsent+`).
+Fail-closed: two or more clauses, or one without a list, declare nothing
+and fail 3.2.2, for every a2ml state (`+duplicateDeclaresNothing+`,
+`+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
+`+listlessFailsCriterion+`). Fallback: no clause, the a2ml reading
+(`+fallbackNoDeed+`, `+fallbackNoClause+`,
+`+fallbackCriterionNoClause+`). Consistency: 3.2.2 passes iff
+`+scorecardProfilePresent+` whenever the deed decides
+(`+deedDecidedAgrees+`, the bffd76a fix) or the a2ml is not present-but-
+declaring-nothing (`+a2mlDecidedAgrees+`); they disagree in exactly that
+case (`+disagreementIsExactly+`) |PROVEN — Verify Proofs run 42634000625, idris2 --check job 129217248108, at commit 34c7bc7cff0cf54b1b5707a497d9f8abf826e844 (Idris2 v0.7.0, ABI package build)
+
+|`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
+the profile-reader cases of test/rules/rsr_conformance_test.exs stated
+against the model and accepted by evaluation (`+deedEraDeclares+`,
+`+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
+`+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
+`+a2mlOnly+`, `+dupAgrees+`) |TESTED — accepted in the same job
+
+|`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
+rejection: a duplicated clause counted as a present profile is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
+
+|`+tests/reject/DuplicatedClausePassesProfileCriterion.idr+` |Idris2
+|Expected rejection: a duplicated clause passing 3.2.2 is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
+
+|`+tests/reject/ListlessClauseFallsBack.idr+` |Idris2 |Expected
+rejection: a list-less clause falling back to the a2ml is refused at
+`+invalid+` |TESTED — refused at `invalid` in the same job
+
+|`+tests/reject/A2mlOverridesDeed.idr+` |Idris2 |Expected rejection: the
+a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job
+
+|Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
+functions behave as the Elixir functions their header names. Argued by
+review; no kernel checked it, and the Elixir is not extracted from the
+model |ASSUMED
+
+|Runtime behaviour, lib/rules/rsr_conformance.ex |Elixir |Deed era,
+deed beside a2ml, duplicated, list-less and nested clauses, and 3.2.2 on a
+duplicated or list-less clause: test/rules/rsr_conformance_test.exs
+(sampled cases) |TESTED
+
+|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |3.2.2 and the scorecard's
+profile_present can never disagree. False of the code as it stands: with
+no deed clause, 3.2.2 checks only that rsr-profile.a2ml exists, while the
+scorecard needs it to yield a capabilities list, so an a2ml that does not
+parse or carries no list passes 3.2.2 with no profile present
+(`+residualDivergence+`) |OPEN
+|===
+
 === Properties Proven
 
 ==== 1. Confidence Bounds (`+ConfidenceBounds.idr+`)
@@ -430,6 +501,21 @@ Lean legs are still owed (PROOF-POLICY §8.4).
   `+preventionBranchSource+`, `+preventionBranchTarget+`,
   `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
 
+==== 9. RSR capability-profile resolution (`+RsrProfile.idr+`)
+
+Engineering property; §5 tokens only, no PWG grade. Status: as in the
+inventory row above. These are properties of the model, not of the Elixir.
+
+* *P9.1* Deed precedence: `+deedPrecedence+`, `+a2mlIgnoredUnlessAbsent+`
+* *P9.2* Fail-closed: `+duplicateDeclaresNothing+`,
+  `+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
+  `+listlessFailsCriterion+`
+* *P9.3* Fallback: `+fallbackNoDeed+`, `+fallbackNoClause+`,
+  `+fallbackCriterionNoClause+`
+* *P9.4* Consistency of 3.2.2 with the scorecard: `+deedDecidedAgrees+`,
+  `+a2mlDecidedAgrees+`; the exact residual: `+disagreementIsExactly+`,
+  `+residualDivergence+`
+
 === Dangerous Pattern Audit
 
 [cols=",,",options="header",]
@@ -446,10 +532,34 @@ Lean legs are still owed (PROOF-POLICY §8.4).
 
 === Coverage
 
-Coverage is the Proof Ledger above. A row covers its own model; whether the
-Elixir runtime follows a model is a separate row (`+models-runtime-refinement+`,
-and the rows that name a runtime test). The earlier hand-written coverage map
-marked models "Full" without that evidence and has been retired.
+|API type safety |`+Types.idr+`, `+GraphQL.idr+`, `+REST.idr+`,
+`+GRPC.idr+`, `+FFI.idr+` |Full
+
+|Quarantine logic |`+Quarantine.idr+` |Full
+
+|Batch rollback |`+BatchRollback.idr+` |Full
+
+|VeriSimDB connector |`+VerisimdbConnector.idr+` |Full (model; statement
+superseded 2026-11-01)
+
+|Logtalk → Elixir alert-table correspondence
+|`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
+AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
+
+|Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
+min-lower-bound)
+
+|RSR capability-profile resolution |`+RsrProfile.idr+` |Model only;
+correspondence to the Elixir ASSUMED
+
+|VCL parser totality |`+ParserTotality.lean+` |Full (FROM-clause subset)
+
+|VCL query correctness |- |Partial
+
+|Neural network convergence |`+PageRankInvariants.lean+`,
+`+ESNSpectralScaling.lean+` |Preconditions proven; full
+convergence/stability in progress (Lean + Mathlib)
+|===
 
 === File Locations
 

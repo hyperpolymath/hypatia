@@ -105,7 +105,7 @@ on:
         description: Erlang/OTP version for the oracle.
         type: string
         required: false
-        default: '28.3'
+        default: '28.5.0.8'
     outputs:
       tier:
         description: Tier reported by the oracle (none|bronze|silver|gold|rhodium).
