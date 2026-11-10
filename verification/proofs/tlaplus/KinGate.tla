@@ -20,6 +20,20 @@
 \*   - grantHistory: an append-only log of (bot, repo) grants used to
 \*     state the non-trivial "no interleaved re-grant without release"
 \*     safety property NoReGrantWithoutRelease.
+\*
+\* PROOF-POLICY section 4 exception record
+\* (metadatastician/standards 3-practice/PROOF-POLICY.adoc @ 9bdf864cc7f2):
+\*   Obligation: H8, kin-gate mutual exclusion under any interleaving of
+\*               Acquire / Release / Expire.
+\*   Tool:       TLA+ with the TLC model checker.
+\*   Why not the mapped prover (Idris2): the property is about every
+\*               interleaving of a concurrent protocol; exhaustive model
+\*               checking states and checks that directly, where an Idris2
+\*               proof would take far longer. PROOF-POLICY section 4 names
+\*               this file as its worked example.
+\*   Status:     tested-only, bounded by KinGate.cfg (3 bots x 2 repos,
+\*               MaxRequests = 4). Ledger row kin-gate in
+\*               verification/proof-ledger.jsonl.
 
 EXTENDS Naturals, FiniteSets, Sequences, TLC
 

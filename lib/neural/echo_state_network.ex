@@ -21,7 +21,6 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     is 0.95. That makes the leaky-tanh update a contraction in the sup norm
     (modulus `1 - leak + leak * 0.95`), which gives the echo state property and
     fading memory, and it bounds the spectral radius by the same value
-  - Teacher forcing during training for faster convergence
   - Washout period discards initial transients
 
   This enables:

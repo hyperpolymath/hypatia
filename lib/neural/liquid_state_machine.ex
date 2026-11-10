@@ -189,7 +189,7 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   defp update_reservoir(%__MODULE__{reservoir_weights: w, input_weights: iw, state: state}, input) do
     size = length(state)
 
-    # Leaky integrate-and-fire update
+    # Leaky tanh update
     for i <- 0..(size - 1) do
       # Recurrent input
       recurrent =

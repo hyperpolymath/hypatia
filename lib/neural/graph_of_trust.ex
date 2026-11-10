@@ -244,8 +244,9 @@ defmodule Hypatia.Neural.GraphOfTrust do
     # to its neighbours sum to at most the source's score). Dividing by
     # out-degree (count) only achieves this when all edges have equal
     # weight; with mixed weights we divide by the total weight instead
-    # so the per-source contribution is conserved. See PROOFS-GAP.md
-    # for why this premise matters for PageRank convergence.
+    # so the per-source contribution is conserved. See
+    # docs/proofs/HANDOVER-neural-convergence.adoc (M3) for why this
+    # premise matters for PageRank convergence.
     out_weight_sum =
       Map.new(adjacency, fn {src, targets} ->
         total = Enum.reduce(targets, 0.0, fn {_t, w}, acc -> acc + max(w, 0.0) end)
@@ -340,7 +341,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
     # half of the signal is a post-processing anti-trust subtraction
     # from the converged scores; that change is out of scope for this
     # fix, which is purely about making the math correct. See
-    # PROOFS-GAP.md — Section "Neural / PageRank".
+    # docs/proofs/gap-analysis.adoc (PR 2, graph_of_trust normalisation).
     Enum.flat_map(outcomes, fn outcome ->
       case Map.get(outcome, "outcome") do
         "success" ->
