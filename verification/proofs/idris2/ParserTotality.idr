@@ -49,9 +49,12 @@ data ParseResult a = Ok a (List Token) | Err ParseError
 -- Section 2: the parser
 ------------------------------------------------------------------------
 
-||| Parse a FROM clause. `%default total` makes the checker refuse this
-||| definition unless it covers every input and terminates: the
-||| definition checking is the totality proof.
+||| Parse FROM STORE or FROM FEDERATION with a bare or quoted value, or
+||| FROM HEXAD with a bare value. Return the source and unconsumed tokens.
+||| Empty input returns Err EmptyInput; any other unmatched input returns
+||| Err ExpectedFromClause. `%default total` makes the checker refuse this
+||| definition unless it covers every input and terminates, so checking the
+||| definition is the totality proof.
 public export
 parseFrom : List Token -> ParseResult Source
 parseFrom (KwFrom :: KwStore :: Ident id :: rest)        = Ok (Store id) rest
