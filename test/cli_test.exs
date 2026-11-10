@@ -52,18 +52,41 @@ defmodule Hypatia.CLITest do
         detail: %{alert_number: 1}
       }
 
-      sweep = fn _, _ -> {:ok, %{findings: [finding], total: 1, by_severity: %{critical: 1}}} end
+      stale = %{
+        finding
+        | rule: "SSA002",
+          severity: :high,
+          reason: "stale alert",
+          action: :report,
+          detail: %{alert_number: 2}
+      }
+
+      sweep = fn _, _ ->
+        {:ok, %{findings: [finding, stale], total: 2, by_severity: %{critical: 1, high: 1}}}
+      end
 
       assert {line, 0} = Hypatia.CLI.secret_alerts_output("acme", "demo", sweep)
-      assert {:ok, %{"findings" => [decoded]}} = Jason.decode(line)
+      assert {:ok, %{"findings" => [first, second]}} = Jason.decode(line)
 
-      assert %{
-               "rule" => "SSA001",
-               "detail" => %{"alert_number" => 1},
-               "support" => %{"kind" => "pattern"},
-               "level" => "epi",
-               "evidence" => [%{"rule" => "secret_scanning_alerts/SSA001"}]
-             } = decoded
+      # Every finding is annotated, not only the first, and the rule's own
+      # fields (severity, reason, action) survive the annotation.
+      for {decoded, rule, n, severity, reason, action} <- [
+            {first, "SSA001", 1, "critical", "open alert", "escalate"},
+            {second, "SSA002", 2, "high", "stale alert", "report"}
+          ] do
+        assert %{
+                 "rule" => ^rule,
+                 "detail" => %{"alert_number" => ^n},
+                 "severity" => ^severity,
+                 "reason" => ^reason,
+                 "action" => ^action,
+                 "support" => %{"kind" => "pattern"},
+                 "level" => "epi",
+                 "evidence" => [%{"rule" => evidence_rule}]
+               } = decoded
+
+        assert evidence_rule == "secret_scanning_alerts/" <> rule
+      end
     end
 
     test "a failed fetch is reported as an error with exit 3, never as clean" do
