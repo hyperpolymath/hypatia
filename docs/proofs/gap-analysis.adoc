@@ -6,10 +6,26 @@ returned, and every prover runs in CI. The current state is the proof ledger
 (`+verification/proof-ledger.jsonl+`); the convergence plan is
 `+docs/proofs/HANDOVER-neural-convergence.adoc+`.
 
+The TL;DR and the inventory below describe 2026-04-22 and are superseded.
+Today `+.github/workflows/verify-proofs.yml+` gates three proof lanes, each
+recording a receipt that `+scripts/proof-ledger.sh derive+` checks against the
+ledger:
+
+* *Idris2:* `+idris2 --check+` on every file in
+  `+verification/proofs/idris2/+`, and builds of `+src/abi/hypatia-abi.ipkg+`
+  and `+verify/hypatia-verify.ipkg+`.
+* *Agda:* `+verification/proofs/agda/LogtalkMigration.agda+` under
+  `+--safe --without-K --cubical-compatible+`.
+* *TLA+:* TLC on `+verification/proofs/tlaplus/KinGate.tla+`, a bounded model
+  check (`+tested-only+`, not a proof).
+
+There is no Lean proof directory any more. The Lean job left in the workflow
+is the HYP-01 hole re-check control, not a proof lane.
+
 *Date:* 2026-04-22 *Scope:* VCL query correctness + neural ensemble
 convergence *Status:* Inventory + prioritised plan. No code changes yet.
 
-=== TL;DR
+=== TL;DR (2026-04-22, superseded)
 
 Hypatia has 14 proof-adjacent files across three active provers (Lean 4,
 Idris 2, TLA+) and zero remaining Agda (retired 2026-04 via H6). Only
@@ -35,7 +51,7 @@ scoped to exclude the lazy window.
 
 Everything else in this document is forward-looking.
 
-=== Current proof inventory
+=== Proof inventory (2026-04-22, superseded)
 
 ==== Lean 4 — `+verification/proofs/lean4/+`
 
