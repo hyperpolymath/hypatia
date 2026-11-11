@@ -144,7 +144,9 @@ defmodule Hypatia.Rules.RootHygiene do
       action: :rename
     },
     %{pattern: "Makefile", reason: "Use Justfile", severity: :medium, action: :replace},
-    # JS runtime order is Bun > pnpm > npm; Deno is banned (2026-09-22).
+    # JS runtime preference order: bun, then deno, then pnpm; npm only as a last
+    # resort when bun, deno and pnpm are all impossible (a stated preference
+    # order, not extra toolchains to maintain).
     # Source: standards docs/JS-RUNTIME-POLICY.adoc "Hard Rules". Bun
     # lockfiles (bun.lock / bun.lockb) are permitted and expected, so they
     # are deliberately absent here: this list used to mark bun.lockb (and
