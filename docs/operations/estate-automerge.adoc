@@ -265,7 +265,8 @@ The manifest is evidence, not authority. For every row the actuator:
   and skips the repository, with the reason logged, when:
   it has no required checks (`--auto` would merge at once, unchecked); a
   required check has never reported on the default branch (the merge would
-  wait forever); the default branch head is red; an active ruleset has a
+  wait forever); the PR target branch or the default branch is red (check runs, commit
+  statuses and check suites, so a `startup_failure` with no run is seen); an active ruleset has a
   bypass actor (conservative: the sweep cannot tell whether the token is one);
   or any of these lookups fails (`check_unavailable:*`).
 . Queues the merge with `--match-head-commit <sha>`, so GitHub itself refuses

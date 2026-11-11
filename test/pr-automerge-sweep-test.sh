@@ -16,6 +16,7 @@ cat > "$BIN/gh" <<'STUB'
 # gh api PATH [--jq EXPR] [--paginate] | gh pr merge|comment|close ...
 if [ "$1" = "pr" ]; then printf '%s\n' "$*" >> "$FIX/pr.log"; exit 0; fi
 [ "$1" = "api" ] || exit 1
+echo "$*" >> "$FIX/calls.log"
 shift; path=""; expr=""
 while [ $# -gt 0 ]; do
   case "$1" in --jq) expr="$2"; shift 2 ;; --paginate) shift ;; *) path="$1"; shift ;; esac
@@ -36,7 +37,9 @@ put() { printf '%s\n' "$2" > "$FIX/$1.json"; }
 . "$ROOT/scripts/sweeps/lib/merge-ready.sh"
 R=o__r   # fixture prefix for repo o/r
 ready_fixtures() {
-  rm -f "$FIX"/*.err
+  rm -f "$FIX"/*.err "$FIX"/*release*
+  put repos__o__r '{"default_branch":"main"}'
+  put "repos__o__r__commits__main__check-suites" '{"check_suites":[{"id":1,"conclusion":"success"}]}'
   put "repos__o__r__branches__main__protection__required_status_checks" '{"contexts":["ci"],"checks":[]}'
   put "repos__o__r__rules__branches__main" '[]'
   put "repos__o__r__commits__main__check-runs" '{"check_runs":[{"name":"ci","conclusion":"success"}]}'
@@ -45,7 +48,7 @@ ready_fixtures() {
 }
 expect() { # EXPECTED_REASON_OR_EMPTY LABEL
   local got rc=0
-  got=$(merge_ready o/r main) || rc=$?
+  got=$(merge_ready o/r "${BR:-main}") || rc=$?
   if [ -z "$1" ]; then [ "$rc" -eq 0 ] || fail "$2: expected ready, got '$got'"
   else [ "$rc" -eq 1 ] && [ "$got" = "$1" ] || fail "$2: expected '$1', got rc=$rc '$got'"; fi
 }
@@ -67,7 +70,24 @@ put repos__o__r__rulesets__5 '{"id":5,"bypass_actors":[{"actor_id":1}]}';       
 ready_fixtures
 put repos__o__r__rulesets '[{"id":5,"enforcement":"disabled"}]';                  expect "" "inactive ruleset ignored"
 ready_fixtures
-echo "HTTP 500" > "$FIX/repos__o__r__commits__main__status.err";                  expect "check_unavailable:default_branch_checks" "API error fails closed"
+put repos__o__r__commits__main__check-suites '{"check_suites":[{"id":1,"conclusion":"success"},{"id":2,"conclusion":"startup_failure"}]}'
+                                                                                  expect "default_branch_red" "startup_failure suite with no check run"
+ready_fixtures
+put repos__o__r__rulesets '[{"id":5,"enforcement":"active"}]'
+put repos__o__r__rulesets__5 '{"id":5}';                                          expect "check_unavailable:rulesets" "bypass_actors omitted fails closed"
+ready_fixtures
+for f in "$FIX"/repos__o__r__*main*; do g="${f//__main__/__release__}"; cp "$f" "${g/__main.json/__release.json}"; done
+put repos__o__r__commits__main__check-runs '{"check_runs":[{"name":"ci","conclusion":"failure"}]}'
+BR=release expect "default_branch_red" "PR targets release, default branch is red"
+ready_fixtures
+for f in "$FIX"/repos__o__r__*main*; do g="${f//__main__/__release__}"; cp "$f" "${g/__main.json/__release.json}"; done
+put repos__o__r__commits__release__check-runs '{"check_runs":[{"name":"ci","conclusion":"failure"}]}'
+BR=release expect "target_branch_red" "PR target branch is red";                  ready_fixtures
+for want in "rulesets?per_page=100 --paginate" "rules/branches/main?per_page=100 --paginate" "status?per_page=100 --paginate"; do
+  grep -qF -- "$want" "$FIX/calls.log" || fail "lists must be paginated: missing '$want'"
+done
+ready_fixtures
+echo "HTTP 500" > "$FIX/repos__o__r__commits__main__status.err";                  expect "check_unavailable:branch_checks" "API error fails closed"
 
 # ── 2. end to end: plan, then execute against the live PR ───────────────────
 SHA1=$(printf 'a%.0s' {1..40}); SHA2=$(printf 'b%.0s' {1..40})
@@ -81,7 +101,7 @@ pr() { # NUMBER LOGIN SHA
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
   put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1")]"
-  put repos__hyperpolymath__r '{"archived":false}'
+  put repos__hyperpolymath__r '{"archived":false,"default_branch":"main"}'
   put repos__hyperpolymath__r__pulls__7 "$(pr 7 'dependabot[bot]' "$1")"
   put repos__hyperpolymath__r__pulls__8 "$(pr 8 alice "$SHA1")"
   put search__issues '{"total_count":2}'
