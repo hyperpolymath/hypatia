@@ -75,6 +75,9 @@ jobs:
       #   alert-state      → AUTO_DISMISSED | DISMISSED | FIXED | OPEN
       #   ghsa-id          → GHSA-... if this is a security PR
       # --- Policy -------------------------------------------------------------
+      # OFF BY DEFAULT: nothing below merges unless the repository variable
+      # DEPENDABOT_SECURITY_AUTOMERGE is "true" (owner ruling 2026-11-11; the
+      # policy file's NA-002 says security bumps are never auto-merged).
       # AUTO-APPROVE + AUTO-MERGE when:
       #   1. This is a SECURITY update (ghsa-id present), AND
       #   2. Update is patch or minor, AND
@@ -89,6 +92,10 @@ jobs:
           GHSA_ID: ${{ steps.meta.outputs.ghsa-id }}
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          # Owner ruling 2026-11-11: security bumps are NEVER auto-merged by
+          # default (policy NA-002). Only a repository admin can set this
+          # variable; until it is exactly "true" every PR here is `skip`.
+          SECURITY_AUTOMERGE: ${{ vars.DEPENDABOT_SECURITY_AUTOMERGE }}
         run: |
           set -euo pipefail
 
@@ -108,7 +115,7 @@ jobs:
             is_high_or_critical=true
           fi
 
-          if $is_security && $is_patch_or_minor && ! $is_high_or_critical; then
+          if [ "${SECURITY_AUTOMERGE:-}" = "true" ] && $is_security && $is_patch_or_minor && ! $is_high_or_critical; then
             echo "action=automerge" >> "$GITHUB_OUTPUT"
           else
             echo "action=skip" >> "$GITHUB_OUTPUT"

@@ -160,6 +160,25 @@ resolve_version() {
 
 major_of() { printf '%s' "${1:-}" | sed -E 's/^v?([0-9]+).*/\1/' ; }
 
+# shellcheck source=lib/merge-ready.sh
+. "$SELF_DIR/lib/merge-ready.sh"
+
+# The PR record shape both the enumeration and the actuator's live re-derivation
+# feed to decide_pr. One definition, so the two cannot drift.
+PR_SHAPE='{org:$org, repo:.base.repo.name, number:.number, title:.title,
+          repo_archived:$arch,
+          author:.user.login, draft:.draft, mergeable:.mergeable, mergeable_state:.mergeable_state,
+          created:.created_at, head_sha:.head.sha, head_ref:.head.ref, base_ref:.base.ref,
+          body:(.body // ""), changed_files:.changed_files, labels:[.labels[].name]}'
+
+# live_pr_record FULL NUM: the PR as it is NOW, in the enumeration's shape.
+live_pr_record() {
+  local full="$1" num="$2" arch
+  arch=$(gh api "repos/${full}" --jq '.archived' 2>/dev/null) || return 1
+  gh api "repos/${full}/pulls/${num}" 2>/dev/null \
+    | jq -c --arg org "${full%%/*}" --argjson arch "${arch:-false}" "$PR_SHAPE"
+}
+
 # ─── Enumerate open PRs ──────────────────────────────────────────────────
 PRS="$OUT_DIR/open-prs.jsonl"
 : > "$PRS"
@@ -176,11 +195,7 @@ for org in "${ORGS[@]}"; do
     # real jq stage instead. (Silently swallowing this is how a sweep reports
     # "0 open PRs" against an estate with 35 of them.)
     gh api "repos/${org}/${name}/pulls?state=open&per_page=100" 2>/dev/null \
-      | jq -c --arg org "$org" --argjson arch "${archived:-false}" '.[] | {org:$org, repo:.base.repo.name, number:.number, title:.title,
-          repo_archived:$arch,
-          author:.user.login, draft:.draft, mergeable:.mergeable, mergeable_state:.mergeable_state,
-          created:.created_at, head_sha:.head.sha, head_ref:.head.ref, base_ref:.base.ref,
-          body:(.body // ""), changed_files:.changed_files, labels:[.labels[].name]}' 2>/dev/null >> "$PRS" || true
+      | jq -c --arg org "$org" --argjson arch "${archived:-false}" ".[] | ${PR_SHAPE}" 2>/dev/null >> "$PRS" || true
   done
 done
 
@@ -194,9 +209,12 @@ if [ "$total" -eq 0 ]; then
 fi
 
 # ─── Classify ────────────────────────────────────────────────────────────
-auto=0; excise=0; close_poison=0; flagged=0
-
-while IFS= read -r pr; do
+# decide_pr PR_JSON: one PR record in, one decision JSON object out (stdout).
+# No counters and no file writes, so the actuator can re-run it on the live PR.
+decide_pr() {
+  local pr="$1"
+  local -a deltas=()
+  local org repo num title author draft mstate head_sha created base_ref repo_archived body
   org=$(jq -r '.org' <<<"$pr")
   repo=$(jq -r '.repo' <<<"$pr")
   num=$(jq -r '.number' <<<"$pr")
@@ -240,7 +258,6 @@ while IFS= read -r pr; do
   # file-level analysis
   files_total=$(jq -c . <<<"$patches" | wc -l)
   poison_hits=0; nonpin_change=0; lock_only=1; meta_only=1; licence_touch=0; pin_files=0
-  declare -a deltas=()
 
   while IFS= read -r fobj; do
     [ -n "$fobj" ] || continue
@@ -366,6 +383,9 @@ while IFS= read -r pr; do
     blocked_by="draft"
   elif [ "$mstate" = "dirty" ] || [ "$mstate" = "CONFLICTING" ]; then
     blocked_by="merge_conflict"
+  elif [ "$files_total" -eq 0 ]; then
+    # No visible diff (unreadable file list, or an empty PR) proves nothing.
+    blocked_by="no_changed_files_visible"
   elif [ "$poison_hits" -gt 0 ] && [ "$files_total" -gt 0 ]; then
     change_class="bump"
     if [ "$major_delta" -eq 1 ]; then
@@ -432,13 +452,6 @@ while IFS= read -r pr; do
     fi
   fi
 
-  case "$disposition" in
-    auto_merge)        auto=$((auto + 1)) ;;
-    excise_poison_then_merge) excise=$((excise + 1)) ;;
-    close_poison_only|close_poison_and_majors) close_poison=$((close_poison + 1)) ;;
-    *)                 flagged=$((flagged + 1)) ;;
-  esac
-
   vetoes='[]'
   if [ "$poison_hits" -gt 0 ]; then
     vetoes=$(jq -cn --arg r "$blocked_by" '[{bot:"Patch-Bridge", reason:$r}]')
@@ -469,8 +482,23 @@ while IFS= read -r pr; do
       disposition:$disposition, blocked_by:$blocked, age_days:$age,
       pin_delta:$delta, denylisted_hits:$poison, files_changed:$files,
       meta_guard_exemption:$mex,
-      timestamp:(now | todate)}' >> "$DECISIONS"
+      timestamp:(now | todate)}'
+}
 
+auto=0; excise=0; close_poison=0; flagged=0
+while IFS= read -r pr; do
+  d=$(decide_pr "$pr") || d=""
+  if [ -z "$d" ]; then
+    log "  could not decide $(jq -r '"\(.org)/\(.repo)#\(.number)"' <<<"$pr"); left out of the manifest"
+    continue
+  fi
+  printf '%s\n' "$d" >> "$DECISIONS"
+  case "$(jq -r '.disposition' <<<"$d")" in
+    auto_merge)        auto=$((auto + 1)) ;;
+    excise_poison_then_merge) excise=$((excise + 1)) ;;
+    close_poison_only|close_poison_and_majors) close_poison=$((close_poison + 1)) ;;
+    *)                 flagged=$((flagged + 1)) ;;
+  esac
 done < "$PRS"
 
 log ""
@@ -507,9 +535,23 @@ while IFS= read -r d; do
   want_sha=$(jq -r '.pr.head_sha' <<<"$d"); disp=$(jq -r '.disposition' <<<"$d")
   blocked=$(jq -r '.blocked_by' <<<"$d")
 
-  live_sha=$(gh api "repos/${repo}/pulls/${num}" --jq '.head.sha' 2>/dev/null || echo "")
+  # Re-derive the WHOLE decision (every PA/NA rule above) from the PR as it is
+  # now. Unreadable or undecidable fails closed.
+  live=$(live_pr_record "$repo" "$num") || live=""
+  live_d=""
+  [ -z "$live" ] || live_d=$(decide_pr "$live") || live_d=""
+  live_sha=$(jq -r '.pr.head_sha // empty' <<<"$live_d" 2>/dev/null || true)
+  live_disp=$(jq -r '.disposition // empty' <<<"$live_d" 2>/dev/null || true)
+  if [ -z "$live_sha" ] || [ -z "$live_disp" ]; then
+    log "  skip ${repo}#${num}: live PR could not be re-derived (fail closed)"
+    skipped=$((skipped + 1)); continue
+  fi
   if [ "$live_sha" != "$want_sha" ]; then
     log "  skip ${repo}#${num}: head moved (${want_sha:0:8} → ${live_sha:0:8}) — decision is stale"
+    skipped=$((skipped + 1)); continue
+  fi
+  if [ "$live_disp" != "$disp" ]; then
+    log "  REFUSE ${repo}#${num}: re-derived disposition '${live_disp}' differs from manifest '${disp}'"
     skipped=$((skipped + 1)); continue
   fi
 
@@ -524,7 +566,14 @@ while IFS= read -r d; do
         log "  REFUSE ${repo}#${num}: live diff carries a denylisted pin — the manifest is wrong"
         skipped=$((skipped + 1)); continue
       fi
-      gh pr merge "$num" --repo "$repo" --squash --auto --delete-branch >/dev/null 2>&1 \
+      if ! why=$(merge_ready "$repo" "$(jq -r '.pr.base' <<<"$live_d")"); then
+        log "  skip ${repo}#${num}: ${why}"
+        skipped=$((skipped + 1)); continue
+      fi
+      # --match-head-commit: GitHub itself refuses if the head moved after the
+      # re-derivation above, so the merge is bound to the SHA that was checked.
+      gh pr merge "$num" --repo "$repo" --squash --auto --delete-branch \
+        --match-head-commit "$want_sha" >/dev/null 2>&1 \
         && { log "  merged   ${repo}#${num} (auto, branch deleted)"; applied=$((applied + 1)); } \
         || { log "  could not queue ${repo}#${num}"; skipped=$((skipped + 1)); }
       ;;

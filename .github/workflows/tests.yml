@@ -71,6 +71,11 @@ jobs:
             bash -n "scripts/sweeps/${s}.sh"
             echo "ok: ${s}.sh"
           done
+          bash -n scripts/sweeps/lib/merge-ready.sh
+          echo "ok: lib/merge-ready.sh"
+
+      - name: Sweep behaviour test (stub gh, offline)
+        run: bash test/pr-automerge-sweep-test.sh
 
       - name: Policy is valid JSON and names its producer
         run: |

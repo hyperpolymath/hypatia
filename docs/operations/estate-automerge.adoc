@@ -254,6 +254,31 @@ not invent its own.
 . `./scripts/sweeps/estate-stats.sh …` after the run; the artifact is the
    record of what changed.
 
+== Execute-time gates (`--execute`)
+
+The manifest is evidence, not authority. For every row the actuator:
+
+. Re-runs the whole decision (`decide_pr`, every PA and NA rule above) on the
+  PR as it is now. If the live PR cannot be read or decided, or its head SHA
+  or disposition differs from the manifest, it skips the row (fail closed).
+. For `auto_merge` rows, runs `merge_ready` (`scripts/sweeps/lib/merge-ready.sh`)
+  and skips the repository, with the reason logged, when:
+  it has no required checks (`--auto` would merge at once, unchecked); a
+  required check has never reported on the default branch (the merge would
+  wait forever); the PR target branch or the default branch is red (check runs, commit
+  statuses and check suites, so a `startup_failure` with no run is seen); an active ruleset has a
+  bypass actor (conservative: the sweep cannot tell whether the token is one);
+  or any of these lookups fails (`check_unavailable:*`).
+. Queues the merge with `--match-head-commit <sha>`, so GitHub itself refuses
+  if the head moves after the re-derivation.
+
+Expect most repositories to be skipped at first. That is correct behaviour.
+
+`.github/workflows/dependabot-automerge.yml` merges nothing by default. Its
+security-update path runs only when the repository variable
+`DEPENDABOT_SECURITY_AUTOMERGE` is `true` (owner ruling 2026-11-11, policy
+`NA-002`).
+
 == Diagnosing startup_failure: two causes, one costume
 
 `startup_failure` with zero jobs is the most misleading signature in this
@@ -417,6 +442,11 @@ their absence is visible rather than discovered:
 * Report an unmeasured metric as zero.
 
 == Tests
+
+`test/pr-automerge-sweep-test.sh` runs the sweep offline against a stub `gh`
+(real jq expressions, fixture JSON): each `merge_ready` gate, and the
+plan-then-execute path for a moved head, an unreadable diff and a repository
+with no required checks.
 
 `test/rules/pr_automerge_test.exs` and `test/rules/pin_integrity_test.exs` fix
 the behaviour of both rule modules, including the cases that matter most:
