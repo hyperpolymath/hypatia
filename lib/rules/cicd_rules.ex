@@ -319,7 +319,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :nodejs_detected,
       glob: "package-lock.json",
       reason:
-        "npm lockfile banned -- use Bun (`bun install`, bun.lock; JS runtime order Bun > pnpm > npm, Deno banned 2026-09-22, standards docs/JS-RUNTIME-POLICY.adoc)",
+        "npm lockfile not permitted here -- use Bun (`bun install`, bun.lock). JS runtime preference order: bun, then deno, then pnpm; npm only as a last resort when bun, deno and pnpm are all impossible (standards docs/JS-RUNTIME-POLICY.adoc)",
       path_allow_prefixes: [
         # (1a) VSCode extension host-required (/vscode/ as path segment)
         "/vscode/",
@@ -477,7 +477,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :npx_in_workflow,
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
       reason:
-        "npx / `npm run` banned in CI -- use `bunx` or `bun run` instead (npm banned 2026-05-25; Deno banned 2026-09-22, standards LANGUAGE-POLICY §1.3)",
+        "npx / `npm run` in CI -- use `bunx` or `bun run` instead. JS runtime preference order: bun, then deno, then pnpm; npm only as a last resort when bun, deno and pnpm are all impossible (standards LANGUAGE-POLICY §1.3)",
       applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
       # The ban's own enforcers (echidna scripts/ban-npm.sh) name npx inside a
       # quoted grep pattern or an echo message; that is text, not execution.
