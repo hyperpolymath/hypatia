@@ -319,6 +319,56 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert {:error, {:line, _, {:sha_key_commit_mismatch, _}}} = ActionsLock.parse(sha_key)
   end
 
+  # standards#1458: the runner refuses a leaf whose ref repeats its own SHA.
+  @self_sha_leaf """
+  version: 'v0.0.2'
+  workflows:
+      '.github/workflows/ci.yml':
+          - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  dependencies:
+      'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa':
+          ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          owner_id: 44036562
+          repo_id: 197814629
+  """
+
+  test "rejects a leaf whose ref repeats its own SHA (invalid lockfile pin)" do
+    assert {:error,
+            {:self_sha_leaf_ref, ["actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}} =
+             ActionsLock.parse(@self_sha_leaf)
+
+    # The same record with a symbolic ref is the repaired form and parses.
+    assert {:ok, _} =
+             @self_sha_leaf
+             |> String.replace("ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'", "ref: 'v7.0.1'")
+             |> ActionsLock.parse()
+  end
+
+  test "a reusable-workflow edge may record its SHA as its ref" do
+    edge = """
+    version: 'v0.0.2'
+    workflows:
+        '.github/workflows/gov.yml':
+            - 'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc'
+    dependencies:
+        'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa':
+            ref: 'v7.0.1'
+            commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            owner_id: 44036562
+            repo_id: 197814629
+        'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc':
+            ref: 'cccccccccccccccccccccccccccccccccccccccc'
+            commit: 'sha1-cccccccccccccccccccccccccccccccccccccccc'
+            owner_id: 297579217
+            repo_id: 1116521501
+            uses:
+                - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    """
+
+    assert {:ok, _} = ActionsLock.parse(edge)
+  end
+
   test "requires each positive repository identity exactly once" do
     for field <- [:owner_id, :repo_id] do
       missing = Regex.replace(~r/^\s*#{field}:.*\n/m, @valid_lock, "")
