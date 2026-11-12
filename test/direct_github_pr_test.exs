@@ -312,13 +312,15 @@ defmodule Hypatia.DirectGitHubPRTest do
       {output, exit_code} = System.cmd("bash", [script, tmp_dir], stderr_to_stdout: true)
 
       assert exit_code == 0
-      assert String.contains?(output, "Added permissions: read-all")
+      assert String.contains?(output, "Added permissions: contents: read")
 
-      # Verify the file was modified
+      # Verify the file was modified: least privilege, never read-all
+      # (scorecard_compliance flags read-all HIGH).
       wf_content = File.read!(Path.join([tmp_dir, ".github", "workflows", "ci.yml"]))
-      assert String.contains?(wf_content, "permissions: read-all")
+      assert String.contains?(wf_content, "permissions:\n  contents: read\n")
+      refute String.contains?(wf_content, "read-all")
       # permissions should appear before jobs:
-      perms_pos = :binary.match(wf_content, "permissions: read-all") |> elem(0)
+      perms_pos = :binary.match(wf_content, "permissions:") |> elem(0)
       jobs_pos = :binary.match(wf_content, "jobs:") |> elem(0)
       assert perms_pos < jobs_pos
 
