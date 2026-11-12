@@ -220,7 +220,7 @@ check_workflow_security() {
         # Check for missing permissions
         if ! has_permissions_declaration "$wf"; then
             add_warning "Missing permissions declaration in $wf"
-            log_warn "Add 'permissions: read-all' at workflow level"
+            log_warn "Give each job the scopes it needs, then add a top-level 'permissions:' block with 'contents: read' (never read-all)"
         fi
 
         # Check for missing SPDX header

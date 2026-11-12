@@ -1,19 +1,19 @@
 {
   "id": "recipe-fix-workflow-permissions",
   "name": "Set workflow token permissions to least privilege",
-  "description": "Add permissions: read-all to workflows (OpenSSF Scorecard SC-018)",
+  "description": "Add a least-privilege top-level permissions block (contents: read) to workflows, never read-all (OpenSSF Scorecard SC-018)",
   "triangle_tier": "eliminate",
   "pattern_ids": [
     "SC-018-token-permissions"
   ],
   "target_categories": ["TokenPermissions"],
   "languages": ["yaml"],
-  "confidence": 0.95,
+  "confidence": 0.90,
   "auto_fixable": true,
   "fix_script": "fix-workflow-permissions.sh",
   "action": "insert",
   "match": "Workflow missing permissions: declaration",
-  "replacement": "permissions: read-all at workflow level",
+  "replacement": "permissions: contents: read at workflow level; jobs declare any further scopes",
   "proven_module": null,
   "formally_proven": false,
   "successful_fixes": 0,

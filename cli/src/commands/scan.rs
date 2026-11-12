@@ -457,7 +457,7 @@ fn scan_github_workflows(
                     file_path: Some(relative_path.to_path_buf()),
                     line_number: None,
                     snippet: None,
-                    suggestion: Some("Add 'permissions: read-all' at workflow level".to_string()),
+                    suggestion: Some("Give each job the scopes it needs, then add a top-level 'permissions:' block with 'contents: read' (never read-all)".to_string()),
                     auto_fixable: true,
                     docs_url: Some(
                         "https://docs.github.com/en/actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token".to_string()

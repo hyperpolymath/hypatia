@@ -2,11 +2,12 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# fix-token-permissions.sh — Add `permissions: read-all` to GitHub Actions workflows
+# fix-token-permissions.sh: add a least-privilege `permissions:` block (contents: read)
 #
 # Checks every .github/workflows/*.yml file for a top-level `permissions:` block.
-# If missing, inserts `permissions: read-all` between the `on:` trigger block and
-# the `jobs:` block. This enforces the principle of least privilege for GITHUB_TOKEN.
+# If missing, inserts `permissions:` with `contents: read` between the `on:` trigger
+# block and the `jobs:` block. Never read-all: scorecard_compliance flags it HIGH.
+# Jobs that need more scope declare it in their own job-level block.
 #
 # Idempotent: skips files that already declare top-level permissions.
 #
@@ -36,7 +37,7 @@ has_toplevel_permissions() {
 }
 
 # insert_permissions_before_jobs <file>
-# Inserts `permissions: read-all` on its own line immediately before `jobs:`.
+# Inserts the least-privilege permissions block immediately before `jobs:`.
 # Falls back to appending after `on:` block if `jobs:` is missing.
 insert_permissions_before_jobs() {
   local file="$1"
@@ -52,7 +53,8 @@ insert_permissions_before_jobs() {
     if [[ "$line" =~ ^jobs: ]] && [[ "$inserted" == false ]]; then
       # Insert permissions block before jobs:
       echo ""
-      echo "permissions: read-all"
+      echo "permissions:"
+      echo "  contents: read"
       echo ""
       echo "$line"
       inserted=true
@@ -86,7 +88,8 @@ insert_permissions_before_jobs() {
           past_on=true
           if [[ "$inserted" == false ]]; then
             echo ""
-            echo "permissions: read-all"
+            echo "permissions:"
+            echo "  contents: read"
             echo ""
             inserted=true
           fi
@@ -125,9 +128,9 @@ for wf in "${WORKFLOWS_DIR}"/*.yml "${WORKFLOWS_DIR}"/*.yaml; do
     continue
   fi
 
-  # Insert permissions: read-all
+  # Insert the least-privilege permissions block
   if insert_permissions_before_jobs "$wf"; then
-    echo "[fix-token-perms] Added permissions: read-all to ${wf_basename}"
+    echo "[fix-token-perms] Added permissions: contents: read to ${wf_basename}"
     FIXES=$((FIXES + 1))
   else
     echo "[fix-token-perms] WARNING: Could not find insertion point in ${wf_basename}" >&2

@@ -77,6 +77,9 @@ jobs:
       - name: Sweep behaviour test (stub gh, offline)
         run: bash test/pr-automerge-sweep-test.sh
 
+      - name: Permission fixer test (offline)
+        run: bash test/fix-workflow-permissions-test.sh
+
       - name: Policy is valid JSON and names its producer
         run: |
           set -euo pipefail

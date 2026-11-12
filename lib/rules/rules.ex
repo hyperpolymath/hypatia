@@ -611,7 +611,8 @@ defmodule Hypatia.Rules do
           %{
             rule: "missing_permissions",
             severity: :high,
-            description: "Workflow missing permissions declaration -- add permissions: read-all"
+            description:
+              "Workflow missing permissions declaration -- scope each job, then add a top-level permissions block with contents: read"
           }
           | findings
         ]

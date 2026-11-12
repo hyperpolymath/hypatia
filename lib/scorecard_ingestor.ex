@@ -215,7 +215,8 @@ defmodule Hypatia.ScorecardIngestor do
       auto_fixable: true,
       category: "TokenPermissions",
       description: "Workflow tokens not following least privilege",
-      remediation: "Set top-level permissions: read-all, declare writes per job."
+      remediation:
+        "Set top-level permissions to contents: read (never read-all); declare other scopes per job."
     },
     "Vulnerabilities" => %{
       id: "SC-019",
@@ -309,7 +310,7 @@ defmodule Hypatia.ScorecardIngestor do
   This is faster than running the full scorecard CLI -- it checks for the
   most common/fixable issues by looking at the repo's file structure:
   - SECURITY.md present?
-  - Workflow permissions set to read-all?
+  - Workflow permissions declared at least privilege (contents: read)?
   - Dependencies pinned by hash?
   - Dependabot/Renovate configured?
   - LICENSE file present?

@@ -271,7 +271,7 @@ fn generate_mock_ruleset(category: &str, name: &str, version: &str) -> Ruleset {
                 severity: "medium".to_string(),
                 effect: RuleEffect::Both,
                 pattern: Some(r"^permissions:\s*".to_string()),
-                fix_template: Some("permissions: read-all".to_string()),
+                fix_template: Some("permissions:\n  contents: read".to_string()),
                 conditions: None,
             },
         ],
