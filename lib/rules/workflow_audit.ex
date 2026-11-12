@@ -541,7 +541,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
             %{
               type: :missing_permissions,
               file: filename,
-              detail: "No permissions declaration -- add a top-level permissions block with contents: read",
+              detail:
+                "No permissions declaration -- first give each job the scopes it needs at job level (e.g. pull-requests: read), then add a top-level permissions block with contents: read",
               severity: :medium,
               action: :add_permissions
             }
