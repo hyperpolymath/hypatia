@@ -119,6 +119,9 @@ mod tests {
             .find(|i| i.id == "missing-workflow-permissions")
             .expect("missing permissions is still reported");
         assert!(!issue.auto_fixable);
+        for id in ["token-permissions-id", "missing-workflow-permissions"] {
+            assert!(!fixer.catalog.auto_fixable().iter().any(|p| p.id == id));
+        }
 
         fixer.fix_repo(dir.path(), false).unwrap();
         assert!(!std::fs::read_to_string(&wf)
