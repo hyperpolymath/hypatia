@@ -17,7 +17,7 @@
     (must "no new TypeScript files")
     (must "no new Python files")
     (must "no new Go files")
-    (must "no npm/bun/yarn/pnpm dependencies — Deno only")
+    (must "JS runtime order: Bun, then Deno, then pnpm; npm only as a last resort; no yarn")
 
     ; Dangerous patterns
     (must "no believe_me (Idris2)")

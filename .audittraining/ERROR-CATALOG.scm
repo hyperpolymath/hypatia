@@ -188,8 +188,8 @@
 
     (npm-in-workflow-blocker-violation
      workflow-security high #t
-     "Workflow uses npm/pnpm despite npm-bun-blocker policy"
-     "Replace npm install/npx with Deno or pinned binary; remove pnpm/action-setup")
+     "Workflow uses npm where the JS runtime order allows Bun, Deno or pnpm"
+     "Replace npm install/npx with bun install/bunx; if Bun is impossible use Deno, then pnpm; npm only as a last resort")
 
     (spec-repo-full-ci-id
      workflow-security medium #t
