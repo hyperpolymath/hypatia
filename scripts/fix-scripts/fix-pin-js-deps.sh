@@ -63,6 +63,9 @@ elif [[ -f "${REPO}/package.json" ]]; then
   done
   if [[ -n "$pinned" ]]; then
     echo "[fix-pin-js-deps] Dependencies pinned by ${pinned}"
+    if [[ "$pinned" == "yarn.lock" ]]; then
+      echo "[fix-pin-js-deps] WARN: yarn is not in the JS runtime order: migrate to Bun ('bun install', commit bun.lock) and remove yarn.lock" >&2
+    fi
   else
     echo "[fix-pin-js-deps] WARN: No lock file found for package.json: deps are unpinned (fix: run 'bun install' and commit bun.lock)" >&2
   fi

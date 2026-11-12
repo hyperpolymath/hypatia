@@ -20,6 +20,11 @@ for lock in bun.lock bun.lockb pnpm-lock.yaml; do
   grep -qi "migrate to Deno" <<<"$out" && fail "$lock repo told to migrate to Deno"
 done
 
+d="$WORK/yarn"; mkdir -p "$d"; echo '{}' > "$d/package.json"; : > "$d/yarn.lock"
+out=$(bash "$SCRIPT" "$d" 2>&1)
+grep -q "yarn is not in the JS runtime order" <<<"$out" || fail "yarn.lock-pinned repo not told to migrate"
+grep -q "unpinned" <<<"$out" && fail "yarn.lock-pinned repo reported as unpinned"
+
 d="$WORK/none"; mkdir -p "$d"; echo '{}' > "$d/package.json"
 out=$(bash "$SCRIPT" "$d" 2>&1)   # capture first: grep -q closing the pipe early could SIGPIPE the script
 grep -q "unpinned" <<<"$out" || fail "unpinned package.json repo not reported"
