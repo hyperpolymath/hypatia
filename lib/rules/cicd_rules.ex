@@ -16,11 +16,16 @@ defmodule Hypatia.Rules.CicdRules do
     %{file: "SECURITY.md", condition: :public_repo},
     %{file: ".github/dependabot.yml", condition: :has_dependencies},
     %{file: ".github/workflows/scorecard.yml", condition: :public_repo},
-    # `permissions: read-all` is a content requirement (every workflow file
+    # Top-level `permissions:` is a content requirement (every workflow file
     # must declare top-level `permissions:`), not a filename. It is checked
     # by Hypatia.Rules.WorkflowAudit.check_permissions/1, NOT by file-path
     # existence — the entry below is treated specially in `has_file?/2`.
-    %{file: "permissions: read-all", condition: :all_workflows, kind: :content}
+    # Least privilege (contents: read), never read-all.
+    %{
+      file: "permissions: (top-level, least privilege)",
+      condition: :all_workflows,
+      kind: :content
+    }
   ]
 
   def repo_must_have_rules, do: @repo_must_have

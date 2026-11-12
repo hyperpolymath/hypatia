@@ -24,7 +24,7 @@ defmodule Hypatia.CLI do
 
   ## Options
 
-      --rules <list>    Comma-separated rule modules to run (default: all)
+      --rules <list>    Comma-separated rule modules to run (default: all under Available)
                         Available: root_hygiene,honest_completion,workflow_audit,
                                    workflow_hardening,
                                    cicd_rules,research_extensions,
@@ -32,6 +32,9 @@ defmodule Hypatia.CLI do
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
                                    structural_drift,implementation_inside_canon,content_patterns
+                        Opt-in only (never in the default set):
+                                   supply_chain,dogfooding,audit_prevention,
+                                   branch_protection (needs GITHUB_TOKEN)
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -66,6 +69,9 @@ defmodule Hypatia.CLI do
     :implementation_inside_canon,
     :content_patterns
   ]
+
+  # Run only when named in `--rules`; never part of the default set.
+  @opt_in_rule_modules [:supply_chain, :dogfooding, :audit_prevention, :branch_protection]
 
   @severity_order %{
     "critical" => 1,
@@ -1027,7 +1033,9 @@ defmodule Hypatia.CLI do
                   reason: f.reason,
                   action: to_string(f.action)
                 }
-                |> Map.merge(Map.take(f, [:line, :category, :recipe_id, :fix_script, :target, :advisory]))
+                |> Map.merge(
+                  Map.take(f, [:line, :category, :recipe_id, :fix_script, :target, :advisory])
+                )
               end)
 
             results ++ normalized
@@ -1092,6 +1100,8 @@ defmodule Hypatia.CLI do
         results
       end
 
+    results = results ++ opt_in_findings(repo_path, rules)
+
     # ─── Uniform suppression pass ──────────────────────────────────────
     #
     # Several rule paths above (structural_drift, code_scanning_alerts,
@@ -1117,6 +1127,93 @@ defmodule Hypatia.CLI do
     # no rule module can emit a finding without `support`, `evidence` and a
     # derived `level` (schema/findings.ncl; Hypatia.Verdict).
     |> Enum.map(&Hypatia.Verdict.annotate/1)
+  end
+
+  # ─── Opt-in rule modules ─────────────────────────────────────────────
+  #
+  # These 4 families had detectors and tests but no scan caller. They run
+  # only when named in `--rules` (see @opt_in_rule_modules) until canary
+  # scans have cleared their false positives; the estate gate's
+  # `block-on-high` would otherwise turn every new finding into a red CI.
+  defp opt_in_findings(repo_path, rules) do
+    Enum.flat_map(@opt_in_rule_modules, fn mod ->
+      if mod in rules, do: run_opt_in(mod, repo_path), else: []
+    end)
+  end
+
+  # SC and BP findings share the WorkflowHardening shape. SupplyChain runs
+  # its local checks only; BranchProtection reads owner/repo from the
+  # `origin` remote and returns nothing without GITHUB_TOKEN.
+  defp run_opt_in(mod, repo_path) when mod in [:supply_chain, :branch_protection] do
+    scanner =
+      if mod == :supply_chain,
+        do: Hypatia.Rules.SupplyChain,
+        else: Hypatia.Rules.BranchProtection
+
+    %{findings: findings} = scanner.scan(repo_path)
+
+    Enum.map(findings, fn f ->
+      %{
+        rule_module: to_string(mod),
+        severity: to_string(f.severity),
+        type: f.rule,
+        file: Map.get(f, :file, "."),
+        line: Map.get(f, :line),
+        reason: f.reason,
+        action: to_string(f.action)
+      }
+    end)
+  end
+
+  defp run_opt_in(:dogfooding, repo_path) do
+    repo_path
+    |> Hypatia.Rules.Dogfooding.check()
+    |> Enum.map(fn f ->
+      %{
+        rule_module: "dogfooding",
+        severity: to_string(f.severity),
+        type: f.rule,
+        # Repo-relative, so ScannerSuppression's path exemptions apply.
+        file: if(f.file, do: Path.relative_to(f.file, repo_path), else: "."),
+        line: Map.get(f, :line),
+        reason: f.description,
+        action: "flag"
+      }
+    end)
+  end
+
+  # AuditPrevention takes evidence, not a path. Supplied: every file path,
+  # plus the contents of workflows, Cargo.toml and Rust/JS sources (AP001,
+  # AP002 and AP007 look for limits or allowlists in source). Evidence it
+  # needs from elsewhere (language count, repo tags, review counts,
+  # Scorecard score) is not supplied, so AP004, AP006, AP009, AP010 and
+  # AP013 stay silent rather than guess.
+  defp run_opt_in(:audit_prevention, repo_path) do
+    files = Enum.map(list_all_files(repo_path), &Path.relative_to(&1, repo_path))
+
+    contents =
+      for path <- files,
+          String.starts_with?(path, ".github/workflows/") or path == "Cargo.toml" or
+            Path.extname(path) in [".rs", ".js", ".mjs", ".cjs"],
+          full = Path.join(repo_path, path),
+          {:ok, %File.Stat{size: size}} <- [File.stat(full)],
+          size <= @max_secret_scan_bytes,
+          {:ok, body} <- [File.read(full)],
+          into: %{},
+          do: {path, body}
+
+    %{files: files, contents: contents}
+    |> Hypatia.Rules.AuditPrevention.check_all()
+    |> Enum.map(fn f ->
+      %{
+        rule_module: "audit_prevention",
+        severity: to_string(f.severity),
+        type: f.rule,
+        file: ".",
+        reason: f.description,
+        action: to_string(f.action)
+      }
+    end)
   end
 
   # ─── Code safety scanning ────────────────────────────────────────────
@@ -1217,7 +1314,9 @@ defmodule Hypatia.CLI do
           {:ok, content} ->
             Hypatia.Rules.StructuredFormat.scan_content(content)
             |> Enum.map(&Map.put(&1, :file, file))
-          _ -> []
+
+          _ ->
+            []
         end
       end)
 
@@ -1455,14 +1554,15 @@ defmodule Hypatia.CLI do
 
   # ─── Helpers ──────────────────────────────────────────────────────────
 
-  defp parse_rules(nil), do: @all_rule_modules
+  @doc false
+  def parse_rules(nil), do: @all_rule_modules
 
-  defp parse_rules(rules_str) do
+  def parse_rules(rules_str) do
     rules_str
     |> String.split(",", trim: true)
     |> Enum.map(&String.trim/1)
     |> Enum.map(&String.to_existing_atom/1)
-    |> Enum.filter(&(&1 in @all_rule_modules))
+    |> Enum.filter(&(&1 in @all_rule_modules or &1 in @opt_in_rule_modules))
     |> case do
       [] -> @all_rule_modules
       rules -> rules

@@ -631,7 +631,7 @@ scan_repo_structure() {
             if ! grep -q '^permissions:' "$wf"; then
                 emit_finding "high" "workflow_security" "missing_permissions" \
                     "$wf" 0 "Workflow missing top-level permissions declaration" "CWE-269" \
-                    "Add 'permissions: read-all' at workflow level" "true"
+                    "Give each job the scopes it needs, then add a top-level 'permissions:' block with 'contents: read' (never read-all)" "true"
             fi
         done
     fi

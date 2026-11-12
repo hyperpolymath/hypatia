@@ -96,3 +96,36 @@ pub struct FixResult {
     pub applied: bool,
     pub message: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The permissions rewrite is review tier: fix_repo must not apply it.
+    #[test]
+    fn fix_repo_leaves_missing_permissions_for_review() {
+        let dir = tempfile::tempdir().unwrap();
+        let wf_dir = dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&wf_dir).unwrap();
+        let wf = wf_dir.join("ci.yml");
+        let body = "# SPDX-License-Identifier: MPL-2.0\nname: ci\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n";
+        std::fs::write(&wf, body).unwrap();
+
+        let fixer = CicdFixer::new();
+        let scan = fixer.scan_repo(dir.path()).unwrap();
+        let issue = scan
+            .issues
+            .iter()
+            .find(|i| i.id == "missing-workflow-permissions")
+            .expect("missing permissions is still reported");
+        assert!(!issue.auto_fixable);
+        for id in ["token-permissions-id", "missing-workflow-permissions"] {
+            assert!(!fixer.catalog.auto_fixable().iter().any(|p| p.id == id));
+        }
+
+        fixer.fix_repo(dir.path(), false).unwrap();
+        assert!(!std::fs::read_to_string(&wf)
+            .unwrap()
+            .contains("permissions:"));
+    }
+}

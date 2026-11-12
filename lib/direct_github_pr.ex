@@ -492,10 +492,13 @@ defmodule Hypatia.DirectGitHubPR do
 
   defp fix_description("SC-018") do
     """
-    Added `permissions: read-all` to workflow files that lacked a top-level
-    `permissions` declaration. This follows the principle of least privilege:
-    the GITHUB_TOKEN starts with read-only access, and individual jobs can
-    escalate only the specific permissions they need.
+    Added a top-level `permissions:` block with `contents: read` to workflow
+    files that lacked one. This follows the principle of least privilege: the
+    GITHUB_TOKEN starts with read access to the repository contents only, and
+    each job declares any further scope it needs. Scorecard accepts either
+    `read-all` or `contents: read`; Hypatia's policy is the stricter of the two.
+    Check that no job relied on another read scope (for example
+    `pull-requests: read`) before merging.
     """
   end
 

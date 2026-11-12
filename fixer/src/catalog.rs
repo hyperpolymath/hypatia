@@ -54,9 +54,9 @@ impl ErrorCatalog {
                 id: "token-permissions-id".to_string(),
                 error_type: ErrorType::WorkflowSecurity,
                 severity: Severity::High,
-                auto_fixable: true,
+                auto_fixable: false,
                 description: "Workflow missing explicit permissions declaration".to_string(),
-                fix_pattern: "Add `permissions: read-all` at workflow level".to_string(),
+                fix_pattern: "Add a top-level `permissions:` block with `contents: read`; declare other scopes per job (never read-all)".to_string(),
             },
         );
 
@@ -114,9 +114,9 @@ impl ErrorCatalog {
                 id: "missing-workflow-permissions".to_string(),
                 error_type: ErrorType::WorkflowSecurity,
                 severity: Severity::High,
-                auto_fixable: true,
+                auto_fixable: false,
                 description: "Workflow does not contain permissions".to_string(),
-                fix_pattern: "Add 'permissions: read-all' at workflow level".to_string(),
+                fix_pattern: "Add a top-level 'permissions:' block with 'contents: read'; declare other scopes per job (never read-all)".to_string(),
             },
         );
 

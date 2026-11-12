@@ -611,7 +611,8 @@ defmodule Hypatia.Rules do
           %{
             rule: "missing_permissions",
             severity: :high,
-            description: "Workflow missing permissions declaration -- add permissions: read-all"
+            description:
+              "Workflow missing permissions declaration -- scope each job, then add a top-level permissions block with contents: read"
           }
           | findings
         ]
@@ -735,7 +736,7 @@ defmodule Hypatia.Rules do
 
     parts =
       if owner && repo do
-        [BranchProtection.scan(owner, repo) | parts]
+        [BranchProtection.scan(repo_path, owner_repo: {owner, repo}) | parts]
       else
         parts
       end

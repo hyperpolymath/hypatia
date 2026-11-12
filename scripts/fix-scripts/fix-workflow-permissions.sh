@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
-# fix-workflow-permissions.sh — Add permissions: read-all to GitHub Actions workflows
-# Recipe: recipe-fix-workflow-permissions (confidence: 0.95, auto_fixable: true)
+# fix-workflow-permissions.sh: add a least-privilege top-level permissions block
+# (contents: read) to GitHub Actions workflows that declare none. Never read-all:
+# scorecard_compliance flags read-all HIGH. Jobs that need more declare it.
+# Recipe: recipe-fix-workflow-permissions (confidence: 0.90, review tier: a contents-only
+# block can drop a read scope a job relied on, so a human reviews the PR)
 #
 # Usage: fix-workflow-permissions.sh <repo-path>
 
@@ -21,12 +24,12 @@ for wf in "${WORKFLOWS_DIR}"/*.yml "${WORKFLOWS_DIR}"/*.yaml; do
     continue
   fi
 
-  # Insert permissions: read-all after the 'on:' block
+  # Insert a least-privilege block (contents: read)
   # Strategy: find the 'on:' line, then insert before the next top-level key
   # Simpler: insert right before the first 'jobs:' line
   if grep -q '^jobs:' "$wf"; then
-    sed -i '/^jobs:/i\permissions: read-all\n' "$wf"
-    echo "[fix-workflow-permissions] Added permissions: read-all to $(basename "$wf")"
+    sed -i '/^jobs:/i\permissions:\n  contents: read\n' "$wf"
+    echo "[fix-workflow-permissions] Added permissions: contents: read to $(basename "$wf")"
     FIXES=$((FIXES + 1))
   fi
 done
