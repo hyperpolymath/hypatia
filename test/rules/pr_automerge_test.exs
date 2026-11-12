@@ -9,6 +9,13 @@ defmodule Hypatia.Rules.PrAutomergeTest do
   @poison "1c5b675653bb5c22dbe9b12b556ec555138e09fd"
   @good "b96794f015dfd88f77b49b1c93e0fa7110f94c63"
 
+  # The lockfile lists come from the committed policy, so this test cannot
+  # drift from it (the earlier inline copy did).
+  @committed_policy "../../.machine_readable/merge-orchestration/pr-automerge-policy.json"
+                    |> Path.expand(__DIR__)
+                    |> File.read!()
+                    |> Jason.decode!()
+
   @policy %{
     "pin_denylist" => [
       %{
@@ -21,8 +28,8 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       }
     ],
     "dependency_bots" => ["dependabot[bot]", "renovate[bot]"],
-    # Mirrors the real policy: go.sum and package-lock.json are not lockfiles here.
-    "lockfile_names" => ["Cargo.lock", "mix.lock"]
+    "lockfile_names" => @committed_policy["lockfile_names"],
+    "never_metadata_names" => @committed_policy["never_metadata_names"]
   }
 
   # PR records arrive from Jason as string-keyed maps, which is the shape the
@@ -382,10 +389,10 @@ defmodule Hypatia.Rules.PrAutomergeTest do
     end
 
     test "a dependency checksum file under docs/ is not documentation" do
-      policy = Map.put(@policy, "never_metadata_names", ["go.sum", "package-lock.json"])
+      policy = @policy
       patch = "@@ -1,1 +1,1 @@\n-h1:old\n+h1:new\n"
 
-      for name <- ["docs/go.sum", "docs/package-lock.json"] do
+      for name <- ["docs/go.sum", "docs/package-lock.json", "docs/yarn.lock", "docs/poetry.lock"] do
         decision = PA.classify(pr([file(name, patch)]), policy)
         assert decision.disposition == :flag, "#{name} must be flagged"
       end
@@ -393,6 +400,16 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       # Ordinary documentation keeps its metadata classification.
       readme = PA.classify(pr([file("docs/guide.md", patch)]), policy)
       assert readme.disposition == :auto_merge
+    end
+
+    test "a dependency manifest is flagged even under docs/, and requirements*.txt is a manifest" do
+      patch = "@@ -1,1 +1,1 @@\n-a==1.0\n+a==1.1\n"
+
+      for name <- ["docs/package.json", "docs/go.mod", "requirements.txt", "docs/requirements-dev.txt"] do
+        decision = PA.classify(pr([file(name, patch)]), @policy)
+        assert decision.disposition == :flag, "#{name} must be flagged"
+        assert decision.blocked_by == "dependency_manifest_not_lockfile", "#{name}: #{decision.blocked_by}"
+      end
     end
 
     test "a dependency manifest without a lockfile is flagged" do

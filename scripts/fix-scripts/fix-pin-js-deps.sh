@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
-# fix-pin-js-deps.sh — Ensure Deno lockfile is enabled for reproducible JS builds
+# fix-pin-js-deps.sh: ensure JS dependencies are pinned by a committed lockfile
 # Recipe: recipe-pin-dependencies (confidence: 0.85, auto_fixable: true)
 #
-# Deno uses deno.lock for reproducible dependency pinning. This script ensures
-# the lockfile field is configured in deno.json and the lock file is not gitignored.
-# NOTE: npm/Bun/yarn are banned (hyperpolymath policy); Deno is the JS runtime.
+# For a Deno repo it turns on deno.lock (deno.json "lock": true) and makes sure
+# deno.lock is not gitignored. For a package.json repo it only reports whether a
+# lockfile pins the dependencies; it edits nothing there.
+# JS runtime order (estate policy): Bun, then Deno, then pnpm; npm only as a
+# last resort. bun.lock, bun.lockb and pnpm-lock.yaml all count as pinned.
 #
 # Usage: fix-pin-js-deps.sh <repo-path>
 
@@ -54,11 +56,20 @@ if [[ -n "$DENO_CONFIG" ]]; then
   fi
 
 elif [[ -f "${REPO}/package.json" ]]; then
-  echo "[fix-pin-js-deps] WARN: Found package.json — npm/Node.js detected" >&2
-  echo "[fix-pin-js-deps] NOTE: npm/Bun are banned per hyperpolymath policy; migrate to Deno" >&2
-  if [[ ! -f "${REPO}/package-lock.json" ]] && [[ ! -f "${REPO}/yarn.lock" ]]; then
-    echo "[fix-pin-js-deps] WARN: No lock file found for package.json — deps are unpinned (fix: migrate to Deno)" >&2
+  echo "[fix-pin-js-deps] Found package.json (no Deno config)"
+  pinned=""
+  for lock in bun.lock bun.lockb pnpm-lock.yaml package-lock.json yarn.lock; do
+    [[ -f "${REPO}/${lock}" ]] && { pinned="$lock"; break; }
+  done
+  if [[ -n "$pinned" ]]; then
+    echo "[fix-pin-js-deps] Dependencies pinned by ${pinned}"
+    if [[ "$pinned" == "yarn.lock" ]]; then
+      echo "[fix-pin-js-deps] WARN: yarn is not in the JS runtime order: migrate to Bun ('bun install', commit bun.lock) and remove yarn.lock" >&2
+    fi
+  else
+    echo "[fix-pin-js-deps] WARN: No lock file found for package.json: deps are unpinned (fix: run 'bun install' and commit bun.lock)" >&2
   fi
+  echo "[fix-pin-js-deps] NOTE: JS runtime order is Bun, then Deno, then pnpm; npm only as a last resort" >&2
 else
   echo "[fix-pin-js-deps] No Deno or npm config found"
   exit 0

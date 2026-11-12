@@ -77,8 +77,8 @@ jobs:
       - name: Sweep behaviour test (stub gh, offline)
         run: bash test/pr-automerge-sweep-test.sh
 
-      - name: Permission fixer test (offline)
-        run: bash test/fix-workflow-permissions-test.sh
+      - name: JS pin fix-script test (offline)
+        run: bash test/fix-pin-js-deps-test.sh
 
       - name: Policy is valid JSON and names its producer
         run: |

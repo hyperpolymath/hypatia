@@ -1303,7 +1303,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :npm_in_workflow,
       severity: :high,
       auto_fixable: true,
-      description: "npm install/pnpm despite npm-bun-blocker.yml"
+      description: "npm install/npx in a workflow where the JS runtime order allows Bun, Deno or pnpm"
     },
     %{
       id: :spec_repo_full_ci,

@@ -100,7 +100,7 @@ pr() { # NUMBER LOGIN SHA
 }
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
-  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1")]"
+  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1"),$(pr 13 'dependabot[bot]' "$SHA1"),$(pr 14 'dependabot[bot]' "$SHA1"),$(pr 15 'dependabot[bot]' "$SHA1"),$(pr 16 'dependabot[bot]' "$SHA1"),$(pr 17 'dependabot[bot]' "$SHA1")]"
   put repos__hyperpolymath__r '{"archived":false,"default_branch":"main"}'
   put repos__hyperpolymath__r__pulls__7 "$(pr 7 'dependabot[bot]' "$1")"
   put repos__hyperpolymath__r__pulls__8 "$(pr 8 alice "$SHA1")"
@@ -111,6 +111,16 @@ estate() { # head sha of PR 7
   put repos__hyperpolymath__r__pulls__11__files '[{"filename":"docs/go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
   put repos__hyperpolymath__r__pulls__12 "$(pr 12 'dependabot[bot]' "$SHA1")"
   put repos__hyperpolymath__r__pulls__12__files '[{"filename":"docs/guide.md","patch":"@@ -1 +1 @@\n-old\n+new"}]'
+  put repos__hyperpolymath__r__pulls__13 "$(pr 13 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__13__files '[{"filename":"yarn.lock","patch":"@@ -1 +1 @@\n-a@1:\n+a@2:"}]'
+  put repos__hyperpolymath__r__pulls__14 "$(pr 14 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__14__files '[{"filename":"docs/yarn.lock","patch":"@@ -1 +1 @@\n-a@1:\n+a@2:"}]'
+  put repos__hyperpolymath__r__pulls__15 "$(pr 15 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__15__files '[{"filename":"poetry.lock","patch":"@@ -1 +1 @@\n-version = \"1\"\n+version = \"2\""}]'
+  put repos__hyperpolymath__r__pulls__16 "$(pr 16 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__16__files '[{"filename":"docs/package.json","patch":"@@ -1 +1 @@\n-\"a\": \"1\"\n+\"a\": \"2\""}]'
+  put repos__hyperpolymath__r__pulls__17 "$(pr 17 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__17__files '[{"filename":"requirements.txt","patch":"@@ -1 +1 @@\n-a==1.0\n+a==1.1"}]'
   put repos__hyperpolymath__r__pulls__9__files '[{"filename":"go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
   put search__issues '{"total_count":2}'
   for n in 7 8; do put "repos__hyperpolymath__r__pulls__${n}__files" '[{"filename":"Cargo.lock","patch":"@@ -1 +1 @@\n-version = \"1.0.199\"\n+version = \"1.0.200\""}]'; done
@@ -128,6 +138,12 @@ estate "$SHA1"; run
 [ "$(disp 10)" = "flag/not_unambiguously_classifiable" ] || fail "package-lock.json is not a lockfile here: PR 10 must be flagged, got $(disp 10)"
 [ "$(disp 11)" = "flag/not_unambiguously_classifiable" ] || fail "docs/go.sum is not documentation: PR 11 must be flagged, got $(disp 11)"
 [ "$(disp 12)" = "auto_merge/awaiting_required_checks" ] || fail "docs/guide.md stays documentation: PR 12 must be auto_merge, got $(disp 12)"
+for n in 13 14 15; do
+  [ "$(disp $n)" = "flag/not_unambiguously_classifiable" ] || fail "yarn.lock and poetry.lock are not auto-merged: PR $n must be flagged, got $(disp $n)"
+done
+for n in 16 17; do
+  [ "$(disp $n)" = "flag/dependency_manifest_not_lockfile" ] || fail "a dependency manifest is never documentation: PR $n must be flagged, got $(disp $n)"
+done
 cp "$WORK/out/pr-decisions.jsonl" "$WORK/plan.jsonl"
 
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
