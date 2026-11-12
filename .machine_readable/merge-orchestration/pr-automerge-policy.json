@@ -741,7 +741,6 @@
     "Cargo.lock",
     "mix.lock",
     "pnpm-lock.yaml",
-    "yarn.lock",
     "bun.lock",
     "bun.lockb",
     "flake.lock",
@@ -750,7 +749,7 @@
     "Gemfile.lock",
     "composer.lock"
   ],
-  "never_metadata_names": ["go.sum", "package-lock.json"],
+  "never_metadata_names": ["go.sum", "package-lock.json", "yarn.lock"],
   "dependency_bots": [
     "dependabot[bot]",
     "renovate[bot]",
