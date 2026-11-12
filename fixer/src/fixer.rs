@@ -225,7 +225,10 @@ mod tests {
         let fixer = WorkflowFixer::new();
         let wf = "name: ci\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n";
         let out = fixer.fix_missing_permissions(wf).expect("a block is added");
-        assert!(out.contains("\npermissions:\n  contents: read\n"), "got: {out}");
+        assert!(
+            out.contains("\npermissions:\n  contents: read\n"),
+            "got: {out}"
+        );
         assert!(!out.contains("read-all"), "got: {out}");
     }
 
