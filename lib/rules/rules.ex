@@ -736,7 +736,7 @@ defmodule Hypatia.Rules do
 
     parts =
       if owner && repo do
-        [BranchProtection.scan(owner, repo) | parts]
+        [BranchProtection.scan(repo_path, owner_repo: {owner, repo}) | parts]
       else
         parts
       end
