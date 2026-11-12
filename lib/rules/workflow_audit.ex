@@ -507,7 +507,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       findings = []
 
-      # Check for write-all (should be read-all + specific)
+      # Check for write-all (should be granular: contents: read + per-job scopes)
       findings =
         if String.contains?(content, "permissions: write-all") do
           [
@@ -515,7 +515,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
               type: :broad_permissions,
               file: filename,
               detail:
-                "permissions: write-all should be permissions: read-all with specific overrides",
+                "permissions: write-all should be granular (top-level contents: read; per-job scopes as needed), never read-all",
               severity: :high,
               action: :narrow_permissions
             }
@@ -541,7 +541,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
             %{
               type: :missing_permissions,
               file: filename,
-              detail: "No permissions declaration -- add permissions: read-all",
+              detail: "No permissions declaration -- add a top-level permissions block with contents: read",
               severity: :medium,
               action: :add_permissions
             }

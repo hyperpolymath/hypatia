@@ -17,7 +17,8 @@ impl WorkflowFixer {
     pub fn new() -> Self {
         Self {
             spdx_header: "# SPDX-License-Identifier: MPL-2.0\n".to_string(),
-            permissions_block: "\npermissions: read-all\n".to_string(),
+            // Least privilege, never read-all (scorecard_compliance flags it HIGH).
+            permissions_block: "\npermissions:\n  contents: read\n".to_string(),
         }
     }
 
@@ -89,7 +90,7 @@ impl WorkflowFixer {
         Some(format!("{}{}", self.spdx_header, content))
     }
 
-    /// Add permissions: read-all after on: block
+    /// Add a least-privilege permissions block (contents: read) after the on: block
     fn fix_missing_permissions(&self, content: &str) -> Option<String> {
         if content.contains("permissions:") {
             return None;
@@ -212,5 +213,26 @@ impl WorkflowFixer {
 impl Default for WorkflowFixer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_permissions_gets_least_privilege_never_read_all() {
+        let fixer = WorkflowFixer::new();
+        let wf = "name: ci\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n";
+        let out = fixer.fix_missing_permissions(wf).expect("a block is added");
+        assert!(out.contains("\npermissions:\n  contents: read\n"), "got: {out}");
+        assert!(!out.contains("read-all"), "got: {out}");
+    }
+
+    #[test]
+    fn existing_permissions_are_left_alone() {
+        let fixer = WorkflowFixer::new();
+        let wf = "on: push\npermissions:\n  contents: write\njobs: {}\n";
+        assert!(fixer.fix_missing_permissions(wf).is_none());
     }
 }
