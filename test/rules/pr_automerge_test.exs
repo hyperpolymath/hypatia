@@ -21,7 +21,8 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       }
     ],
     "dependency_bots" => ["dependabot[bot]", "renovate[bot]"],
-    "lockfile_names" => ["Cargo.lock", "mix.lock", "package-lock.json"]
+    # Mirrors the real policy: go.sum and package-lock.json are not lockfiles here.
+    "lockfile_names" => ["Cargo.lock", "mix.lock"]
   }
 
   # PR records arrive from Jason as string-keyed maps, which is the shape the
