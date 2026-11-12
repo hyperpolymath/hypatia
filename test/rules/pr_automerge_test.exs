@@ -380,6 +380,20 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.licence_touch
     end
 
+    test "a dependency checksum file under docs/ is not documentation" do
+      policy = Map.put(@policy, "never_metadata_names", ["go.sum", "package-lock.json"])
+      patch = "@@ -1,1 +1,1 @@\n-h1:old\n+h1:new\n"
+
+      for name <- ["docs/go.sum", "docs/package-lock.json"] do
+        decision = PA.classify(pr([file(name, patch)]), policy)
+        assert decision.disposition == :flag, "#{name} must be flagged"
+      end
+
+      # Ordinary documentation keeps its metadata classification.
+      readme = PA.classify(pr([file("docs/guide.md", patch)]), policy)
+      assert readme.disposition == :auto_merge
+    end
+
     test "a dependency manifest without a lockfile is flagged" do
       patch = """
       @@ -3,1 +3,1 @@

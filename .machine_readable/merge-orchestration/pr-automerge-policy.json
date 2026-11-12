@@ -750,6 +750,7 @@
     "Gemfile.lock",
     "composer.lock"
   ],
+  "never_metadata_names": ["go.sum", "package-lock.json"],
   "dependency_bots": [
     "dependabot[bot]",
     "renovate[bot]",

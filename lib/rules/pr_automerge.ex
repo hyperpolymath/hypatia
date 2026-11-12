@@ -100,7 +100,7 @@ defmodule Hypatia.Rules.PrAutomerge do
       unresolved: Enum.count(deltas, &(&1.status == :unresolved)),
       conflicts: Enum.count(deltas, &(&1.status == :conflict)),
       lock_only: files != [] and Enum.all?(files, &lockfile?(filename_of(&1), policy)),
-      meta_only: files != [] and Enum.all?(files, &metadata_path?(filename_of(&1))),
+      meta_only: files != [] and Enum.all?(files, &metadata_path?(filename_of(&1), policy)),
       pin_only: files != [] and Enum.all?(files, &pin_lines_only?/1),
       manifest_file: Enum.any?(files, &dependency_manifest?(filename_of(&1))),
       licence_touch: Enum.any?(files, &licence_path?(filename_of(&1)))
@@ -848,7 +848,14 @@ defmodule Hypatia.Rules.PrAutomerge do
     Path.basename(filename) in Map.get(policy, "lockfile_names", [])
   end
 
-  defp metadata_path?(filename) do
+  # A dependency file named in `never_metadata_names` is never documentation,
+  # even under docs/ (otherwise `docs/go.sum` would take the metadata path).
+  defp metadata_path?(filename, policy) do
+    Path.basename(filename) not in Map.get(policy, "never_metadata_names", []) and
+      metadata_shape?(filename)
+  end
+
+  defp metadata_shape?(filename) do
     Regex.match?(~r/\.(md|adoc|rst|txt)$/, filename) or
       String.starts_with?(filename, ["docs/", "doc/", "LICENSES/", ".github/ISSUE_TEMPLATE/"]) or
       Regex.match?(~r/(^|\/)(LICENSE|NOTICE|CODEOWNERS|\.gitattributes|\.editorconfig)/, filename)
