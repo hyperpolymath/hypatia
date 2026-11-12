@@ -476,11 +476,13 @@ defmodule Hypatia.Rules.PrAutomerge do
       scan.pin_only ->
         accept(base, :auto_merge, "awaiting_required_checks", "P2")
 
-      scan.meta_only ->
-        accept(base, :auto_merge, "awaiting_required_checks", "P3")
-
+      # A dependency manifest is never documentation, even under docs/:
+      # checked before meta_only, the same order as the shell sweep.
       scan.manifest_file ->
         reject(base, :flag, "dependency_manifest_not_lockfile", "P2")
+
+      scan.meta_only ->
+        accept(base, :auto_merge, "awaiting_required_checks", "P3")
 
       true ->
         reject(base, :flag, "not_unambiguously_classifiable", "P2")
@@ -871,7 +873,7 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   defp dependency_manifest?(filename) do
     Regex.match?(
-      ~r/(^|\/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|Gemfile|composer\.json)$/,
+      ~r/(^|\/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|Gemfile|composer\.json|requirements[^\/]*\.txt)$/,
       filename
     )
   end

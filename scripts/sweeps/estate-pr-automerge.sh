@@ -424,7 +424,7 @@ decide_pr() {
     route="rhodibot"; pool="P2"
   elif [ "$pin_files" -eq 0 ] && [ "$lock_only" -eq 0 ] &&
        jq -r '.filename' <<<"$patches" 2>/dev/null \
-         | grep -qE '(^|/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|composer\.json|Gemfile)$'; then
+         | grep -qE '(^|/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|composer\.json|Gemfile|requirements[^/]*\.txt)$'; then
     change_class="bump"; disposition="flag"; safety="flag"
     blocked_by="dependency_manifest_not_lockfile"
     route="rhodibot"; pool="P2"
