@@ -3,7 +3,8 @@
 # fix-workflow-permissions.sh: add a least-privilege top-level permissions block
 # (contents: read) to GitHub Actions workflows that declare none. Never read-all:
 # scorecard_compliance flags read-all HIGH. Jobs that need more declare it.
-# Recipe: recipe-fix-workflow-permissions (confidence: 0.95, auto_fixable: true)
+# Recipe: recipe-fix-workflow-permissions (confidence: 0.90, review tier: a contents-only
+# block can drop a read scope a job relied on, so a human reviews the PR)
 #
 # Usage: fix-workflow-permissions.sh <repo-path>
 

@@ -495,8 +495,10 @@ defmodule Hypatia.DirectGitHubPR do
     Added a top-level `permissions:` block with `contents: read` to workflow
     files that lacked one. This follows the principle of least privilege: the
     GITHUB_TOKEN starts with read access to the repository contents only, and
-    each job declares any further scope it needs (never `read-all`, which
-    Scorecard and Hypatia flag as too broad).
+    each job declares any further scope it needs. Scorecard accepts either
+    `read-all` or `contents: read`; Hypatia's policy is the stricter of the two.
+    Check that no job relied on another read scope (for example
+    `pull-requests: read`) before merging.
     """
   end
 

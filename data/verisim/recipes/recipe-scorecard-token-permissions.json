@@ -8,7 +8,7 @@
   ],
   "target_categories": ["TokenPermissions"],
   "languages": ["yaml"],
-  "confidence": 0.95,
+  "confidence": 0.90,
   "auto_fixable": true,
   "fix_script": "fix-workflow-permissions.sh",
   "action": "insert",

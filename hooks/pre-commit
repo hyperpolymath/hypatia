@@ -112,7 +112,7 @@ for wf in $WORKFLOW_FILES; do
         # Check for missing permissions
         if ! grep -q 'permissions:' "$wf"; then
             echo -e "${YELLOW}WARNING: Missing permissions declaration in $wf${NC}"
-            echo "Add 'permissions: read-all' at workflow level"
+            echo "Give each job the scopes it needs, then add a top-level 'permissions:' block with 'contents: read' (never read-all)"
         fi
     fi
 done
