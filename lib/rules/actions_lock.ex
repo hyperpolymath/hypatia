@@ -559,7 +559,8 @@ defmodule Hypatia.Rules.ActionsLock do
   defp finish({:ok, %{section: :dependencies} = state}) do
     with {:ok, finalized} <- finalize_dependency(state),
          :ok <- validate_workflow_dependencies(finalized),
-         :ok <- validate_transitive_dependencies(finalized) do
+         :ok <- validate_transitive_dependencies(finalized),
+         :ok <- validate_leaf_refs(finalized) do
       {:ok,
        %__MODULE__{
          version: finalized.version,
@@ -581,6 +582,28 @@ defmodule Hypatia.Rules.ActionsLock do
     case missing do
       [] -> :ok
       entries -> {:error, {:transitive_dependencies_missing, Enum.sort(entries)}}
+    end
+  end
+
+  # A LEAF record whose `ref:` repeats the commit SHA in its own key is refused
+  # by the Actions runner at `Set up job` ("invalid lockfile pin"), in this
+  # repository and in every repository that calls a reusable workflow pinned to
+  # a commit whose lock carries one. Measured 2026-11-11: 31 of 40 sampled
+  # estate callers failed every reusable-calling job this way (standards#1458).
+  # A record with nested `uses:` is a reusable-workflow edge, which legitimately
+  # records the requested SHA as its ref, so it is exempt.
+  defp validate_leaf_refs(state) do
+    bad =
+      for {key, dependency} <- state.dependencies,
+          MapSet.size(dependency.uses) == 0,
+          [_path, key_ref] = String.split(key, "@", parts: 2),
+          Regex.match?(@sha_ref, key_ref),
+          String.downcase(dependency.ref) == String.downcase(key_ref),
+          do: key
+
+    case bad do
+      [] -> :ok
+      keys -> {:error, {:self_sha_leaf_ref, Enum.sort(keys)}}
     end
   end
 
