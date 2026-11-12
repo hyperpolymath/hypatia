@@ -745,11 +745,10 @@
     "bun.lockb",
     "flake.lock",
     "Manifest.toml",
-    "poetry.lock",
     "Gemfile.lock",
     "composer.lock"
   ],
-  "never_metadata_names": ["go.sum", "package-lock.json", "yarn.lock"],
+  "never_metadata_names": ["go.sum", "package-lock.json", "yarn.lock", "poetry.lock"],
   "dependency_bots": [
     "dependabot[bot]",
     "renovate[bot]",
