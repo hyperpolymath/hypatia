@@ -645,7 +645,7 @@
       ]
     },
     "bump_lockfile_only": {
-      "description": "Dependency bump whose diff is confined to lockfiles (Cargo.lock, mix.lock, package-lock.json, go.sum, flake.lock).",
+      "description": "Dependency bump whose diff is confined to lockfiles (Cargo.lock, mix.lock, flake.lock).",
       "route": "Patch-Bridge",
       "method": "squash",
       "pool": "P2",
@@ -740,18 +740,17 @@
   "lockfile_names": [
     "Cargo.lock",
     "mix.lock",
-    "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",
     "bun.lock",
     "bun.lockb",
-    "go.sum",
     "flake.lock",
     "Manifest.toml",
     "poetry.lock",
     "Gemfile.lock",
     "composer.lock"
   ],
+  "never_metadata_names": ["go.sum", "package-lock.json"],
   "dependency_bots": [
     "dependabot[bot]",
     "renovate[bot]",

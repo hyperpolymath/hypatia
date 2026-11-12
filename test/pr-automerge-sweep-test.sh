@@ -100,10 +100,18 @@ pr() { # NUMBER LOGIN SHA
 }
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
-  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1")]"
+  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1")]"
   put repos__hyperpolymath__r '{"archived":false,"default_branch":"main"}'
   put repos__hyperpolymath__r__pulls__7 "$(pr 7 'dependabot[bot]' "$1")"
   put repos__hyperpolymath__r__pulls__8 "$(pr 8 alice "$SHA1")"
+  put repos__hyperpolymath__r__pulls__9 "$(pr 9 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__10 "$(pr 10 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__10__files '[{"filename":"package-lock.json","patch":"@@ -1 +1 @@\n-\"v\": \"1\"\n+\"v\": \"2\""}]'
+  put repos__hyperpolymath__r__pulls__11 "$(pr 11 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__11__files '[{"filename":"docs/go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
+  put repos__hyperpolymath__r__pulls__12 "$(pr 12 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__12__files '[{"filename":"docs/guide.md","patch":"@@ -1 +1 @@\n-old\n+new"}]'
+  put repos__hyperpolymath__r__pulls__9__files '[{"filename":"go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
   put search__issues '{"total_count":2}'
   for n in 7 8; do put "repos__hyperpolymath__r__pulls__${n}__files" '[{"filename":"Cargo.lock","patch":"@@ -1 +1 @@\n-version = \"1.0.199\"\n+version = \"1.0.200\""}]'; done
   # the merge_ready fixtures, for hyperpolymath/r
@@ -116,6 +124,10 @@ disp() { jq -r --argjson n "$1" 'select(.pr.number == $n) | .disposition + "/" +
 estate "$SHA1"; run
 [ "$(disp 7)" = "auto_merge/awaiting_required_checks" ] || fail "PR 7 should be auto_merge, got $(disp 7)"
 [ "$(disp 8)" = "flag/not_a_dependency_bot" ] || fail "PR 8 should be flagged, got $(disp 8)"
+[ "$(disp 9)" = "flag/not_unambiguously_classifiable" ] || fail "go.sum is not a lockfile: PR 9 must be flagged, got $(disp 9)"
+[ "$(disp 10)" = "flag/not_unambiguously_classifiable" ] || fail "package-lock.json is not a lockfile here: PR 10 must be flagged, got $(disp 10)"
+[ "$(disp 11)" = "flag/not_unambiguously_classifiable" ] || fail "docs/go.sum is not documentation: PR 11 must be flagged, got $(disp 11)"
+[ "$(disp 12)" = "auto_merge/awaiting_required_checks" ] || fail "docs/guide.md stays documentation: PR 12 must be auto_merge, got $(disp 12)"
 cp "$WORK/out/pr-decisions.jsonl" "$WORK/plan.jsonl"
 
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
@@ -124,11 +136,11 @@ grep -q "pr merge 7 --repo hyperpolymath/r --squash --auto --delete-branch --mat
 grep -q "pr merge 8" "$FIX/pr.log" && fail "human PR must never merge"
 
 rm -f "$FIX/pr.log"; estate "$SHA2"; run --execute --from "$WORK/plan.jsonl"
-[ ! -f "$FIX/pr.log" ] || fail "head moved after the plan: nothing may merge"
+! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "head moved after the plan: PR 7 may not merge"
 
 estate "$SHA1"; rm "$FIX/repos__hyperpolymath__r__pulls__7__files.json"
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
-[ ! -f "$FIX/pr.log" ] || fail "unreadable live diff: nothing may merge"
+! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unreadable live diff: PR 7 may not merge"
 
 estate "$SHA1"; rm "$FIX/repos__hyperpolymath__r__branches__main__protection__required_status_checks.json"
 put repos__hyperpolymath__r__rules__branches__main '[]'

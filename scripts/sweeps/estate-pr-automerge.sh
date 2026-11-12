@@ -98,6 +98,9 @@ mapfile -t DENY_SHAS   < <(jq -r '.pin_denylist[] | .blocked_shas[]?' "$POLICY")
 mapfile -t DENY_VERS   < <(jq -r '.pin_denylist[] | .blocked_versions[]?' "$POLICY")
 mapfile -t DEP_BOTS    < <(jq -r '.dependency_bots[]' "$POLICY")
 mapfile -t LOCKFILES   < <(jq -r '.lockfile_names[]' "$POLICY")
+# Dependency files that are never documentation, even under docs/. Same key the
+# Elixir engine reads (PrAutomerge.metadata_path?/2).
+mapfile -t NEVER_META  < <(jq -r '.never_metadata_names[]?' "$POLICY")
 
 REF_ALT=$(
   { printf '%s\n' "${DENY_SHAS[@]}"
@@ -119,6 +122,11 @@ is_lockfile() {
 }
 
 is_metadata_path() {
+  local base n
+  base="$(basename "$1")"
+  for n in "${NEVER_META[@]:-}"; do
+    [ -n "$n" ] && [ "$base" = "$n" ] && return 1
+  done
   case "$1" in
     *.md|*.adoc|*.rst|*.txt|CODEOWNERS|.gitattributes|.editorconfig) return 0 ;;
     docs/*|doc/*|.github/ISSUE_TEMPLATE/*) return 0 ;;
