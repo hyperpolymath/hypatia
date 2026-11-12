@@ -185,7 +185,7 @@ impl Scanner {
                     file_path: path.display().to_string(),
                     line_number: None,
                     description: "Workflow missing explicit permissions declaration".to_string(),
-                    fix_suggestion: "Add 'permissions: read-all' after 'on:' block".to_string(),
+                    fix_suggestion: "Give each job the scopes it needs, then add a top-level 'permissions:' block with 'contents: read' after 'on:' (never read-all)".to_string(),
                     auto_fixable: true,
                     category: IssueCategory::MissingPermissions,
                 });

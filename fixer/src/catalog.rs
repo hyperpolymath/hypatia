@@ -56,7 +56,7 @@ impl ErrorCatalog {
                 severity: Severity::High,
                 auto_fixable: true,
                 description: "Workflow missing explicit permissions declaration".to_string(),
-                fix_pattern: "Add `permissions: read-all` at workflow level".to_string(),
+                fix_pattern: "Add a top-level `permissions:` block with `contents: read`; declare other scopes per job (never read-all)".to_string(),
             },
         );
 
@@ -116,7 +116,7 @@ impl ErrorCatalog {
                 severity: Severity::High,
                 auto_fixable: true,
                 description: "Workflow does not contain permissions".to_string(),
-                fix_pattern: "Add 'permissions: read-all' at workflow level".to_string(),
+                fix_pattern: "Add a top-level 'permissions:' block with 'contents: read'; declare other scopes per job (never read-all)".to_string(),
             },
         );
 

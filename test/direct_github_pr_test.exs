@@ -32,7 +32,8 @@ defmodule Hypatia.DirectGitHubPRTest do
     "description" => "3 workflow(s) missing permissions declaration in test-repo",
     "pa_rule" => "SC018",
     "scorecard_check" => "Token-Permissions",
-    "remediation" => "Set top-level permissions: read-all, declare writes per job.",
+    "remediation" =>
+      "Set top-level permissions to contents: read (never read-all); declare other scopes per job.",
     "auto_fixable" => true,
     "confidence" => 0.95,
     "repos_affected_list" => ["test-repo"],

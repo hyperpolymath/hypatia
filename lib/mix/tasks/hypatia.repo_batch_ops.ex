@@ -98,7 +98,8 @@ defmodule Mix.Tasks.Hypatia.RepoBatchOps do
     },
     "fix-permissions" => %{
       name: "Fix Workflow Permissions",
-      description: "Add 'permissions: read-all' to all workflows",
+      description:
+        "Add a least-privilege permissions block (contents: read) to workflows lacking one",
       category: "workflows"
     },
     "pin-actions" => %{
