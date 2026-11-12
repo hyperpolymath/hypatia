@@ -21,7 +21,8 @@ for lock in bun.lock bun.lockb pnpm-lock.yaml; do
 done
 
 d="$WORK/none"; mkdir -p "$d"; echo '{}' > "$d/package.json"
-bash "$SCRIPT" "$d" 2>&1 | grep -q "unpinned" || fail "unpinned package.json repo not reported"
+out=$(bash "$SCRIPT" "$d" 2>&1)   # capture first: grep -q closing the pipe early could SIGPIPE the script
+grep -q "unpinned" <<<"$out" || fail "unpinned package.json repo not reported"
 
 d="$WORK/deno"; mkdir -p "$d"; echo '{"tasks":{}}' > "$d/deno.json"
 bash "$SCRIPT" "$d" >/dev/null 2>&1
