@@ -102,6 +102,11 @@ defmodule Hypatia.ScannerSuppression do
     # the generator's own tests are its detector.
     "content_patterns" => %{
       :any => @training_corpus_paths
+    },
+    # dogfooding (opt-in) flags stale names such as the old AGPL-3.0 licence.
+    # Fix scripts and fixtures quote those names on purpose: same policy.
+    "dogfooding" => %{
+      :any => @training_corpus_paths
     }
   }
 
