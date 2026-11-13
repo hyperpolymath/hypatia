@@ -632,15 +632,34 @@ defmodule Hypatia.Rules.SecurityErrors do
         if Regex.match?(regex, content), do: [label], else: []
       end)
 
-    # "Token assignment" is a form-only fallback. When a specific credential
-    # matcher (GitHub PAT, npm token, ...) already named the value, the
-    # generic hit would report the same secret twice.
-    if labels != ["Token assignment"] and "Token assignment" in labels and
-         Enum.any?(labels, &(&1 not in @form_only_labels)) do
+    # "Token assignment" is a form-only fallback. Drop it only when EVERY
+    # value it matched is itself a credential a specific matcher (GitHub PAT,
+    # npm token, ...) names -- the same secret reported twice. Comparing
+    # values, not labels, matters when `content` is a whole file: a PAT on one
+    # line must not hide a distinct literal token on another.
+    if "Token assignment" in labels and token_assignments_all_specific?(content) do
       List.delete(labels, "Token assignment")
     else
       labels
     end
+  end
+
+  @token_assignment_re (Enum.find_value(@secret_patterns, fn
+                          {re, "Token assignment"} -> re
+                          _ -> nil
+                        end))
+
+  @specific_patterns (for {re, label} <- @secret_patterns,
+                          label not in @form_only_labels,
+                          do: re)
+
+  defp token_assignments_all_specific?(content) do
+    @token_assignment_re
+    |> Regex.scan(content)
+    |> Enum.map(&List.first/1)
+    |> Enum.all?(fn assignment ->
+      Enum.any?(@specific_patterns, &Regex.match?(&1, assignment))
+    end)
   end
 
   # ---------------------------------------------------------------------------
