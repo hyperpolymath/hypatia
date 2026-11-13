@@ -11,11 +11,12 @@ list was fetched live; the other rows are from knowledge and need verifying agai
 Not yet ingested: the full CodeQL, Sonar and Semgrep rule lists, and per-rule lists for 20 linters
 (`unassessed`).
 
-Numbers over the 94 assessed rows: 24% detected, 22% partial, 39% have a recipe or autofix.
-Gap reasons: 45 symbolic, 12 need a person, 11 are owned by the tool itself, 1 is neural (Codex review quality).
+Numbers: see `matrix.json` (regenerate counts from it; they change as rules land).
 
 == Route (ADR 0003, cicd-squabbler#154)
 Each row has a `route`: `first-line` (squabbler autofix, via Tsunami-breaker), `referral`
 (Hypatia answers with a Bustfile, via Extended Hypatia) or `owner-only`. The value is a
 heuristic from fix status and gap reason, not a ruling: owner-only = needs a person;
 referral = fix needs escalation or judgement; first-line = otherwise. `unrouted` = not yet assessed.
+
+Rows marked from hypatia#1064/#1065 are drafts reported by the reconciliation thread and not yet verified by this thread.
