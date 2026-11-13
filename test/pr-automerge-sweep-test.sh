@@ -164,4 +164,14 @@ rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
 [ ! -f "$FIX/pr.log" ] || fail "no required checks: --auto would merge unchecked"
 grep -q "no_required_checks" "$WORK/log" || fail "skip reason must be logged"
 
+# Licence-path parity with PrAutomerge.licence_path?/1 (same cases in
+# test/rules/pr_automerge_test.exs): contains-match, any case.
+eval "$(sed -n '/^is_licence_path() {/,/^}/p' "$ROOT/scripts/sweeps/estate-pr-automerge.sh")"
+for p in LICENSE LICENSES/MPL-2.0.txt docs/LICENSES/x.txt THIRD_PARTY_LICENSES License.md NOTICE REUSE.toml; do
+  is_licence_path "$p" || fail "licence path not vetoed: $p"
+done
+for p in Cargo.toml README.md; do
+  ! is_licence_path "$p" || fail "not a licence path: $p"
+done
+
 echo "ok: pr-automerge sweep"

@@ -405,10 +405,17 @@ defmodule Hypatia.Rules.PrAutomergeTest do
     test "a dependency manifest is flagged even under docs/, and requirements*.txt is a manifest" do
       patch = "@@ -1,1 +1,1 @@\n-a==1.0\n+a==1.1\n"
 
-      for name <- ["docs/package.json", "docs/go.mod", "requirements.txt", "docs/requirements-dev.txt"] do
+      for name <- [
+            "docs/package.json",
+            "docs/go.mod",
+            "requirements.txt",
+            "docs/requirements-dev.txt"
+          ] do
         decision = PA.classify(pr([file(name, patch)]), @policy)
         assert decision.disposition == :flag, "#{name} must be flagged"
-        assert decision.blocked_by == "dependency_manifest_not_lockfile", "#{name}: #{decision.blocked_by}"
+
+        assert decision.blocked_by == "dependency_manifest_not_lockfile",
+               "#{name}: #{decision.blocked_by}"
       end
     end
 
@@ -961,6 +968,22 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert manifest["safety"] == "flag"
       assert manifest["clamped_by"] == "veto"
       assert [%{"reason" => "touches_licence_requires_owner_review"} | _] = manifest["vetoes"]
+    end
+  end
+
+  describe "licence_path?/1 matches the shell sweep's is_licence_path" do
+    # Same cases as the parity block in test/pr-automerge-sweep-test.sh.
+    for path <- ~w(LICENSE LICENSES/MPL-2.0.txt docs/LICENSES/x.txt THIRD_PARTY_LICENSES
+                   License.md NOTICE REUSE.toml) do
+      test "vetoes #{path}" do
+        assert PA.licence_path?(unquote(path))
+      end
+    end
+
+    for path <- ~w(Cargo.toml README.md) do
+      test "does not veto #{path}" do
+        refute PA.licence_path?(unquote(path))
+      end
     end
   end
 end

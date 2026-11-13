@@ -138,14 +138,16 @@ is_metadata_path() {
 # the decision contract routes them to a null authority (owner review).
 # Auto-merging a licence edit would let the robot make a claim about what
 # the project is.
+# Same set as PrAutomerge.licence_path?/1, compared in upper case so that
+# License.md and third_party_licenses.txt are caught too.
 is_licence_path() {
   local base
-  base="$(basename "$1")"
+  base="$(basename "$1" | tr '[:lower:]' '[:upper:]')"
   case "$base" in
-    *LICENSE*|*LICENCE*|*COPYING*|*NOTICE*|*SPDX*) return 0 ;;
+    *LICENSE*|*LICENCE*|*COPYING*|*NOTICE*|*SPDX*|REUSE.TOML) return 0 ;;
   esac
   case "$1" in
-    LICENSES/*) return 0 ;;
+    LICENSES/*|*/LICENSES/*) return 0 ;;
   esac
   return 1
 }
