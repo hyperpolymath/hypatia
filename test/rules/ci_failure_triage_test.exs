@@ -528,6 +528,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => step})
     end
 
+    test "a download step with continue-on-error: true does not fire" do
+      tolerated =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n",
+          "      - continue-on-error: true\n        uses: actions/download-artifact@v8.0.2\n"
+        )
+
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => tolerated}) == []
+    end
+
     test "a download step guarded by !cancelled() does not fire" do
       guarded =
         String.replace(

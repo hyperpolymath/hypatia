@@ -4215,6 +4215,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
+  # A step with a literal `continue-on-error: true` cannot turn the job red,
+  # so its missing artifact is tolerated. An expression is not literal.
+  defp tolerated_failure?(%{node: node}) when not is_nil(node) do
+    case Hypatia.Kyaml.get(node, "continue-on-error") do
+      nil -> false
+      value -> Map.get(Hypatia.Kyaml.deref(value), :value) in [true, "true"]
+    end
+  end
+
+  defp tolerated_failure?(_), do: false
+
   defp current_run_download?(run_id) when run_id in [nil, ""], do: true
 
   defp current_run_download?(run_id) when is_binary(run_id),
@@ -4235,6 +4246,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         is_binary(step.uses) and
           String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
           not excludes_cancellation?(step.if || "") and
+          not tolerated_failure?(step) and
           current_run_download?(Hypatia.Workflow.input(step, "run-id"))
       end)
   end
