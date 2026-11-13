@@ -12,6 +12,31 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== The oracle and CI toolchain move back to OTP 27.3.4.19 (2026-11-13)
+
+`rsr-oracle.yml` now defaults to OTP `27.3.4.19`, and the two `ci.yml`
+jobs pinned to the dogfood gate use it as well. The Mix cache keys carry
+the new version.
+
+This corrects the entry of 2026-11-09 below. That entry said OTP 28.5.0.8
+was clean, and it was clean on the trees the #1032 matrix scored. Later
+trees crash it:
+
+* `mix hypatia.rsr_score` exits 139 on OTP 28.1 to 28.5.0.8 when it scores
+  rsr-template-repo at `af8665c` or `a55669e`. The crash is in
+  `sweep_off_heap`, reached from the JIT's `bs_init_bits`, as in #1032.
+  OTP 27.3 scores the same trees cleanly (rsr-template-repo#333, fixed
+  there by #335).
+* `hypatia-cli.sh scan` crashes the same way on OTP 28.5.0.8 on some trees:
+  10 of 10 runs on one tree, 0 of 10 on another. OTP 27.3.4.19 scans both
+  cleanly (rsr-template-repo#339, fixed there by #340).
+
+So the OTP 28.4 compiler fix (OTP-19951) did not remove the cause. The
+cause inside OTP is not known. It is not yet reported to erlang/otp.
+
+A consumer that passes its own `otp-version` keeps it. A consumer that
+pins a 28.x release must move to 27.3.4.19 itself.
+
 ==== README claims match the tree, and a gate keeps them there (2026-11-09)
 
 * Corrected counts in the README:
