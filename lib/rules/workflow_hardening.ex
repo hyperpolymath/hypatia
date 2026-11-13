@@ -569,7 +569,13 @@ defmodule Hypatia.Rules.WorkflowHardening do
         [invalid_actions_lock_finding(reason)]
 
       {:ok, content} ->
-        case Hypatia.Rules.ActionsLock.parse(content) do
+        callers =
+          repo_path
+          |> workflow_files()
+          |> Enum.map(&File.read!/1)
+          |> Hypatia.Rules.ActionsLock.reusable_callers()
+
+        case Hypatia.Rules.ActionsLock.parse(content, reusable_callers: callers) do
           {:ok, lock} -> wh004_scan_repo(repo_path, lock)
           {:error, reason} -> [invalid_actions_lock_finding(reason)]
         end
