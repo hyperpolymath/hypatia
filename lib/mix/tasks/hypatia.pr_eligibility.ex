@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
 
       {
         "eligible": true | false,
-        "reason": "AM010" | null,
+        "reason": "AM010" | "licence_requires_owner" | null,
         "phantom_contexts": [...],
         "required_contexts": [...]
       }
@@ -160,7 +160,8 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
       "--paginate",
       "repos/#{owner}/#{repo}/pulls/#{pr_number}/files",
       "--jq",
-      ".[].filename"
+      # A rename's old path counts too: renaming LICENSE away is licence work.
+      ".[] | .filename, (.previous_filename // empty)"
     ]
 
     case System.cmd("gh", args, stderr_to_stdout: true) do

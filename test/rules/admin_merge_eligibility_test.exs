@@ -243,6 +243,25 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       end
     end
 
+    test "AM010 vetoes the full PrAutomerge licence set" do
+      base = %{
+        required_contexts: ["CodeQL"],
+        phantom_contexts: ["CodeQL"],
+        rollup: []
+      }
+
+      for path <- [
+            "LICENSE_HEADER",
+            "THIRD_PARTY_LICENSES",
+            "SPDX.json",
+            "vendor/x/LICENSES/MIT.txt"
+          ] do
+        assert AM.am010_phantom_only_blocker?(Map.put(base, :files, [path])) ==
+                 :licence_requires_owner,
+               path
+      end
+    end
+
     test "AM010 is fail-closed when the changed files are unknown" do
       base = %{
         required_contexts: ["CodeQL"],

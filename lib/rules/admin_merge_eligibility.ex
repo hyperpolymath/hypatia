@@ -197,8 +197,8 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   blocker is a phantom context would otherwise come back eligible here.
 
   `pr_state` therefore carries `:files`, the PR's changed paths. Any licence
-  path (LICENSE*, LICENCE*, COPYING*, NOTICE*, LICENSES/, *.spdx, REUSE.toml)
-  returns `:licence_requires_owner`. The key is required and the check is
+  path (the `PrAutomerge.licence_path?/1` set, plus REUSE.toml) returns
+  `:licence_requires_owner`. A rename counts on both its old and new path. The key is required and the check is
   fail-closed: anything but a list (the key missing, or `:error` from a
   failed query) is `:files_unknown`, never eligible, because a caller that
   cannot say which files changed cannot show the PR is not a licence PR.
@@ -216,12 +216,24 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
     end
   end
 
-  # Mirrors PrAutomerge.licence_path?/1 and the estate-pr-automerge.sh
-  # touches_licence rule, so all three refuse the same set.
-  @licence_file ~r{(^|/)(LICEN[CS]E|COPYING|NOTICE)([.-][^/]*)?$|(^|/)LICENSES/|\.spdx$|(^|/)REUSE\.toml$}i
+  def am010_phantom_only_blocker?(_), do: :files_unknown
 
+  # The veto set is PrAutomerge.licence_path?/1 (any basename starting
+  # LICENSE/LICENCE/COPYING/NOTICE, any name containing SPDX, LICENSES/),
+  # delegated rather than copied so the two cannot drift, plus any basename
+  # CONTAINING LICENSE/LICENCE (THIRD_PARTY_LICENSES, which the PrAutomerge
+  # prefix test misses), REUSE.toml, and a LICENSES/ directory anywhere in
+  # the tree. Wider is safe for a veto.
   @doc false
-  def licence_path?(path) when is_binary(path), do: Regex.match?(@licence_file, path)
+  def licence_path?(path) when is_binary(path) do
+    base = path |> Path.basename() |> String.upcase()
+
+    Hypatia.Rules.PrAutomerge.licence_path?(path) or
+      String.contains?(base, ["LICENSE", "LICENCE"]) or
+      base == "REUSE.TOML" or
+      String.contains?(path, "/LICENSES/")
+  end
+
   def licence_path?(%{"path" => path}), do: licence_path?(path)
   def licence_path?(%{path: path}), do: licence_path?(path)
   def licence_path?(_), do: false
@@ -272,8 +284,6 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
         :not_phantom_only
     end
   end
-
-  def am010_phantom_only_blocker?(_), do: :files_unknown
 
   # ─── Stall detection (DBA001) ─────────────────────────────────────────
 
