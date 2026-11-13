@@ -99,8 +99,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "github_state_unreadable",
       layer: :platform,
       patterns: [
-        ~r/could not read branch rulesets/,
-        ~r/could not read the workflow catalogue/,
+        # The gates' own wording, not the bare phrase: an app test that
+        # logs "could not read branch rulesets" is the code under test.
+        ~r/could not read branch rulesets for \S+ \(API error, rate limit, or missing permission\)/,
+        ~r/could not read the workflow catalogue \S+ enablement is UNKNOWN/,
         ~r/could not be read at [0-9a-f]{7,40}\S* \(offline with no cache entry, or the API refused\)/
       ],
       action: :rerun,

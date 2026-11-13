@@ -160,6 +160,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("api_rate_limit") in Enum.map(m, & &1.rule)
     end
 
+    test "an app test that names a GitHub read is not the gate refusing" do
+      log =
+        "  1) test rulesets\n     ** (RuntimeError) could not read branch rulesets\n" <>
+          "  2) test catalogue\n     Assertion failed: could not read the workflow catalogue\n" <>
+          "5 tests, 2 failures\n"
+
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.layer == :code
+      refute T.id("github_state_unreadable") in Enum.map(m, & &1.rule)
+    end
+
     test "an unresolved service name under test is not an external host" do
       log =
         "curl: (6) Could not resolve host: backend\n  1) test api\n5 tests, 1 failure\n"
