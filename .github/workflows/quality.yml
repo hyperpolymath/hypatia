@@ -281,6 +281,22 @@ jobs:
           bash tests/readme-claims-test.sh
           bash scripts/check-readme-claims.sh
 
+      # The standards A5 rule registry is generated from lib/rules/*.ex. The
+      # test fails when the committed hypatia_rules_praxis.deed is stale, when
+      # an id repeats or holds `*`, and when deed_lint.js rejects the file.
+      # The linter is fetched with plain git at a pinned standards commit.
+      - name: Rule registry (hypatia_rules_praxis.deed) matches the code and lints
+        env:
+          STANDARDS_SHA: bfdb0664754d39b7d18fa84846cd1af5b4e1ca46
+        run: |
+          set -euo pipefail
+          lint="$RUNNER_TEMP/standards"
+          git init -q "$lint"
+          git -C "$lint" fetch -q --depth 1 https://github.com/metadatastician/standards.git "$STANDARDS_SHA"
+          test "$(git -C "$lint" rev-parse FETCH_HEAD)" = "$STANDARDS_SHA"
+          git -C "$lint" show FETCH_HEAD:1-formats/deed/tools/deed_lint.js > "$lint/deed_lint.js"
+          DEED_LINT="$lint/deed_lint.js" bash tests/rules-praxis-test.sh
+
   # ============================================================================
   # Deploy to GitHub Pages
   # ============================================================================
