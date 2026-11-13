@@ -20,3 +20,6 @@ heuristic from fix status and gap reason, not a ruling: owner-only = needs a per
 referral = fix needs escalation or judgement; first-line = otherwise. `unrouted` = not yet assessed.
 
 Rows marked from hypatia#1064/#1065 are drafts reported by the reconciliation thread and not yet verified by this thread.
+
+== Owner ruling needed
+Two rules disagree: the dictask canon-lockstep gate demands `rsr-profile.a2ml`, while the estate no-new-A2ML policy forbids it (row `standards/rsr-profile.a2ml vs no-new-A2ML`).
