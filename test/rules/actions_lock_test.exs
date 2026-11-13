@@ -336,13 +336,13 @@ defmodule Hypatia.Rules.ActionsLockTest do
   test "rejects a leaf whose ref repeats its own SHA (invalid lockfile pin)" do
     assert {:error,
             {:self_sha_leaf_ref, ["actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}} =
-             ActionsLock.parse(@self_sha_leaf)
+             ActionsLock.parse(@self_sha_leaf, reusable_callers: MapSet.new())
 
     # The same record with a symbolic ref is the repaired form and parses.
     assert {:ok, _} =
              @self_sha_leaf
              |> String.replace("ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'", "ref: 'v7.0.1'")
-             |> ActionsLock.parse()
+             |> ActionsLock.parse(reusable_callers: MapSet.new())
   end
 
   test "a reusable-workflow edge may record its SHA as its ref" do
@@ -366,7 +366,75 @@ defmodule Hypatia.Rules.ActionsLockTest do
                 - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     """
 
-    assert {:ok, _} = ActionsLock.parse(edge)
+    callers =
+      MapSet.new(["metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc"])
+
+    assert {:ok, _} = ActionsLock.parse(edge, reusable_callers: callers)
+  end
+
+  @sha_c "cccccccccccccccccccccccccccccccccccccccc"
+  @self_sha_with_uses """
+  version: 'v0.0.2'
+  workflows:
+      '.github/workflows/gov.yml':
+          - 'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc'
+  dependencies:
+      'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa':
+          ref: 'v7.0.1'
+          commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          owner_id: 44036562
+          repo_id: 197814629
+      'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc':
+          ref: 'cccccccccccccccccccccccccccccccccccccccc'
+          commit: 'sha1-cccccccccccccccccccccccccccccccccccccccc'
+          owner_id: 297579217
+          repo_id: 1116521501
+          uses:
+              - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  """
+
+  test "a composite action pinned by bare SHA with nested uses is flagged" do
+    # Step-level use only: no workflow calls it as a reusable workflow.
+    callers =
+      ActionsLock.reusable_callers([
+        "jobs:\n  a:\n    steps:\n      - uses: metadatastician/standards@#{@sha_c}\n"
+      ])
+
+    assert callers == MapSet.new()
+
+    assert {:error, {:self_sha_leaf_ref, ["metadatastician/standards@" <> @sha_c]}} ==
+             ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+
+    # An empty set is not "unknown": it flags too.
+    assert {:error, {:self_sha_leaf_ref, _}} =
+             ActionsLock.parse(@self_sha_with_uses, reusable_callers: MapSet.new())
+  end
+
+  test "a job-level reusable workflow edge with ref == SHA is not flagged" do
+    workflow = """
+    jobs:
+      gov:
+        uses: Metadatastician/Standards/.github/workflows/gov.yml@#{@sha_c}
+    """
+
+    callers = ActionsLock.reusable_callers([{"gov.yml", workflow}])
+    assert callers == MapSet.new(["metadatastician/standards@" <> @sha_c])
+
+    assert {:ok, _} = ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+  end
+
+  test "reusable_callers ignores local, step-level and non-workflow uses" do
+    workflow = """
+    jobs:
+      a:
+        uses: ./.github/workflows/local.yml
+      b:
+        steps:
+          - uses: actions/checkout@#{@sha_c}
+          - uses: owner/repo/subdir@#{@sha_c}
+    """
+
+    assert ActionsLock.reusable_callers([workflow]) == MapSet.new()
   end
 
   test "requires each positive repository identity exactly once" do

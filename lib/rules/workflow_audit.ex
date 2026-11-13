@@ -296,7 +296,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   hints from the `@known_good_shas` table.
   """
   def check_unpinned_actions(workflow_contents, opts \\ []) do
-    case parse_actions_lock(Keyword.get(opts, :actions_lock)) do
+    case parse_actions_lock(Keyword.get(opts, :actions_lock), workflow_contents) do
       {:invalid, finding} ->
         # A present-but-invalid lock is one indivisible integrity failure. Do
         # not also recommend inline SHA pins: `gh actions-lock` deliberately
@@ -433,10 +433,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Hypatia.Rules.ActionsLock.normalise_ref(slug)
   end
 
-  defp parse_actions_lock(nil), do: {:usable, nil}
+  defp parse_actions_lock(nil, _workflow_contents), do: {:usable, nil}
 
-  defp parse_actions_lock(content) do
-    case Hypatia.Rules.ActionsLock.parse(content) do
+  defp parse_actions_lock(content, workflow_contents) do
+    callers = Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)
+
+    case Hypatia.Rules.ActionsLock.parse(content, reusable_callers: callers) do
       {:ok, lock} ->
         {:usable, lock}
 

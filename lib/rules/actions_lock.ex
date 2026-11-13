@@ -63,9 +63,21 @@ defmodule Hypatia.Rules.ActionsLock do
   Returns `{:error, reason}` for missing, unsupported, malformed, incomplete,
   duplicate, or contradictory input. One bad dependency invalidates the whole
   lock so callers cannot silently accept the remaining entries.
+
+  Options:
+
+    * `:reusable_callers` - a `MapSet` of `owner/repo@ref` keys (lowercased)
+      that the repository's workflows call as job-level reusable workflows;
+      build it with `reusable_callers/1`. When given, a dependency keyed by
+      a full commit SHA whose `ref` repeats that SHA is refused unless its
+      key is in the set (`{:self_sha_leaf_ref, keys}`). When omitted (the
+      caller has no workflow files), that one check is not run: the lock
+      parser alone cannot tell a reusable call from an action.
   """
-  @spec parse(term()) :: {:ok, t()} | {:error, term()}
-  def parse(content) when is_binary(content) and byte_size(content) > 0 do
+  @spec parse(term(), keyword()) :: {:ok, t()} | {:error, term()}
+  def parse(content, opts \\ [])
+
+  def parse(content, opts) when is_binary(content) and byte_size(content) > 0 do
     initial = %{
       section: :preamble,
       version: nil,
@@ -86,10 +98,34 @@ defmodule Hypatia.Rules.ActionsLock do
         {:error, _reason} = error -> {:halt, error}
       end
     end)
-    |> finish()
+    |> finish(opts)
   end
 
-  def parse(_), do: {:error, :missing_or_nonbinary_lock}
+  def parse(_, _opts), do: {:error, :missing_or_nonbinary_lock}
+
+  @reusable_call ~r/^\s*(?:-\s*)?uses:\s*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/\.github\/workflows\/[A-Za-z0-9_.\/-]+\.ya?ml@([^\s"'#]+)/m
+
+  @doc """
+  The `owner/repo@ref` keys (lowercased) of every reusable workflow called at
+  job level in the given workflow contents (a list of binaries or of
+  `{filename, content}` pairs).
+
+  Only a `uses:` naming `owner/repo/.github/workflows/<file>.y(a)ml@ref`
+  counts: a step-level action never has that shape. This mirrors
+  `check-lock-sync.sh` in metadatastician/standards.
+  """
+  @spec reusable_callers([binary() | {term(), binary()}] | %{term() => binary()}) ::
+          MapSet.t(String.t())
+  def reusable_callers(workflow_contents) do
+    workflow_contents
+    |> Enum.map(fn
+      {_name, content} -> content
+      content -> content
+    end)
+    |> Enum.filter(&is_binary/1)
+    |> Enum.flat_map(&Regex.scan(@reusable_call, &1, capture: :all_but_first))
+    |> MapSet.new(fn [repo, ref] -> String.downcase(repo) <> "@" <> ref end)
+  end
 
   @doc """
   Whether `slug` is validly locked for `workflow_path`.
@@ -554,13 +590,13 @@ defmodule Hypatia.Rules.ActionsLock do
     end
   end
 
-  defp finish({:error, _reason} = error), do: error
+  defp finish({:error, _reason} = error, _opts), do: error
 
-  defp finish({:ok, %{section: :dependencies} = state}) do
+  defp finish({:ok, %{section: :dependencies} = state}, opts) do
     with {:ok, finalized} <- finalize_dependency(state),
          :ok <- validate_workflow_dependencies(finalized),
          :ok <- validate_transitive_dependencies(finalized),
-         :ok <- validate_leaf_refs(finalized) do
+         :ok <- validate_leaf_refs(finalized, Keyword.get(opts, :reusable_callers)) do
       {:ok,
        %__MODULE__{
          version: finalized.version,
@@ -570,7 +606,7 @@ defmodule Hypatia.Rules.ActionsLock do
     end
   end
 
-  defp finish({:ok, _state}), do: {:error, :incomplete_lockfile}
+  defp finish({:ok, _state}, _opts), do: {:error, :incomplete_lockfile}
 
   defp validate_transitive_dependencies(state) do
     missing =
@@ -585,20 +621,28 @@ defmodule Hypatia.Rules.ActionsLock do
     end
   end
 
-  # A LEAF record whose `ref:` repeats the commit SHA in its own key is refused
-  # by the Actions runner at `Set up job` ("invalid lockfile pin"), in this
+  # A record keyed by a commit SHA whose `ref:` repeats that SHA is refused by
+  # the Actions runner at `Set up job` ("invalid lockfile pin"), in this
   # repository and in every repository that calls a reusable workflow pinned to
   # a commit whose lock carries one. Measured 2026-11-11: 31 of 40 sampled
   # estate callers failed every reusable-calling job this way (standards#1458).
-  # A record with nested `uses:` is a reusable-workflow edge, which legitimately
-  # records the requested SHA as its ref, so it is exempt.
-  defp validate_leaf_refs(state) do
+  # The one exemption belongs to a key actually called as a job-level reusable
+  # workflow (`uses: owner/repo/.github/workflows/<file>.yml@ref`), which
+  # legitimately records the requested SHA as its ref. A nested `uses:` list
+  # is not proof: a composite action pinned by bare SHA has one too, and must
+  # be flagged (canonical rule: check-lock-sync.sh in metadatastician/standards).
+  # The lock cannot tell the two apart, so the caller derives the set of
+  # reusable-call keys from the workflow files (`reusable_callers/1`). With no
+  # set (nil) the caller has no workflows and the check is not run.
+  defp validate_leaf_refs(_state, nil), do: :ok
+
+  defp validate_leaf_refs(state, %MapSet{} = callers) do
     bad =
       for {key, dependency} <- state.dependencies,
-          MapSet.size(dependency.uses) == 0,
           [_path, key_ref] = String.split(key, "@", parts: 2),
           Regex.match?(@sha_ref, key_ref),
           String.downcase(dependency.ref) == String.downcase(key_ref),
+          not MapSet.member?(callers, String.downcase(key)),
           do: key
 
     case bad do
