@@ -17,11 +17,18 @@ cat > "$BIN/gh" <<'STUB'
 if [ "$1" = "pr" ]; then printf '%s\n' "$*" >> "$FIX/pr.log"; exit 0; fi
 [ "$1" = "api" ] || exit 1
 echo "$*" >> "$FIX/calls.log"
-shift; path=""; expr=""
+shift; path=""; expr=""; gqlnum=""
 while [ $# -gt 0 ]; do
-  case "$1" in --jq) expr="$2"; shift 2 ;; --paginate) shift ;; *) path="$1"; shift ;; esac
+  case "$1" in
+    --jq) expr="$2"; shift 2 ;; --paginate) shift ;;
+    -F) case "$2" in number=*) gqlnum="${2#number=}" ;; esac; shift 2 ;;
+    -f) shift 2 ;;
+    *) path="$1"; shift ;;
+  esac
 done
 name="${path%%\?*}"; name="${name//\//__}"
+# GraphQL: one fixture per PR number (graphql__pr_<n>.json).
+[ "$path" = "graphql" ] && name="graphql__pr_${gqlnum}"
 if [ -f "$FIX/$name.err" ]; then cat "$FIX/$name.err" >&2; exit 1; fi
 [ -f "$FIX/$name.json" ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
 if [ -n "$expr" ]; then jq -r "$expr" "$FIX/$name.json"; else cat "$FIX/$name.json"; fi
@@ -98,6 +105,9 @@ pr() { # NUMBER LOGIN SHA
      head:{sha:$sha,ref:"dependabot/cargo/serde"},changed_files:1,labels:[],
      body:"Bumps [serde](https://github.com/serde-rs/serde) from 1.0.199 to 1.0.200."}'
 }
+threads() { # PR NODES HAS_NEXT_PAGE
+  put "graphql__pr_$1" "{\"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"pageInfo\":{\"hasNextPage\":$3},\"nodes\":$2}}}}}"
+}
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
   put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1"),$(pr 13 'dependabot[bot]' "$SHA1"),$(pr 14 'dependabot[bot]' "$SHA1"),$(pr 15 'dependabot[bot]' "$SHA1"),$(pr 16 'dependabot[bot]' "$SHA1"),$(pr 17 'dependabot[bot]' "$SHA1")]"
@@ -124,6 +134,8 @@ estate() { # head sha of PR 7
   put repos__hyperpolymath__r__pulls__9__files '[{"filename":"go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
   put search__issues '{"total_count":2}'
   for n in 7 8; do put "repos__hyperpolymath__r__pulls__${n}__files" '[{"filename":"Cargo.lock","patch":"@@ -1 +1 @@\n-version = \"1.0.199\"\n+version = \"1.0.200\""}]'; done
+  # R6: every PR's review threads resolved unless a case says otherwise
+  for n in 7 8 9 10 11 12 13 14 15 16 17; do threads "$n" '[{"isResolved":true}]' false; done
   # the merge_ready fixtures, for hyperpolymath/r
   for f in "$FIX"/repos__o__r__*; do cp "$f" "${f/repos__o__r__/repos__hyperpolymath__r__}"; done
 }
@@ -163,5 +175,30 @@ put repos__hyperpolymath__r__rules__branches__main '[]'
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
 [ ! -f "$FIX/pr.log" ] || fail "no required checks: --auto would merge unchecked"
 grep -q "no_required_checks" "$WORK/log" || fail "skip reason must be logged"
+
+# R6: an open review thread, an unreadable answer, or an unread second
+# page each stop the merge, with the reason logged.
+estate "$SHA1"; threads 7 '[{"isResolved":true},{"isResolved":false}]' false
+rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
+! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unresolved review thread: PR 7 may not merge"
+grep -q "unresolved_review_threads:1" "$WORK/log" || fail "unresolved thread count must be logged"
+
+estate "$SHA1"; echo "gh: HTTP 502" > "$FIX/graphql__pr_7.err"
+rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"; rm -f "$FIX/graphql__pr_7.err"
+! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unreadable review threads: PR 7 may not merge"
+grep -q "check_unavailable:review_threads" "$WORK/log" || fail "unreadable threads must be logged"
+
+estate "$SHA1"; threads 7 '[{"isResolved":true}]' true
+rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
+! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unread second page of threads: PR 7 may not merge"
+
+# Back to all resolved: PR 7 merges again (the gate is not a blanket block).
+estate "$SHA1"; rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
+grep -q "pr merge 7 " "$FIX/pr.log" || fail "resolved threads: PR 7 should merge"
+
+# R3: a PR not authored by a dependency bot (e.g. the template upgrade wave)
+# is never auto-merged, whatever its content.
+[ "$(disp 8)" = "flag/not_a_dependency_bot" ] || fail "R3: a human or wave PR must be flagged, got $(disp 8)"
+grep -q "pr merge 8" "$FIX/pr.log" && fail "R3: a non-bot PR must never merge"
 
 echo "ok: pr-automerge sweep"
