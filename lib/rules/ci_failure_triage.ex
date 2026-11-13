@@ -466,6 +466,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "sonar_not_authorized",
       layer: :config,
       patterns: [~r/Not authorized or organization not found/],
+      # An app may log the phrase; only a Sonar scanner run ties it to Sonar.
+      context: [~r/sonar-scanner|SonarQube|SonarCloud/i],
       action: :owner,
       retries: 0,
       fix: nil,
@@ -604,6 +606,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :code,
       patterns: [
         ~r/\b\d+ tests?, [1-9]\d* failures?/,
+        # A doctest-only ExUnit suite summarises as "N doctests, M failures".
+        ~r/\b\d+ doctests?, (?:\d+ tests?, )?[1-9]\d* failures?/,
         ~r/test result: FAILED/,
         ~r/(^|\s)FAILED\s+\S+::/
       ],
@@ -817,7 +821,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # whose `default:` is the pin.
   # Every line between the key and `default:` must be indented deeper than
   # the key, so the match cannot cross into a sibling input's block.
-  @scanner_input ~r/^([ \t]*)["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?[ \t]*:[ \t]*\n(?:\1[ \t]+(?!default:)[^\n]*\n){0,6}?\1[ \t]+default:[ \t]*["']?([0-9a-f]{40})/im
+  @scanner_input ~r/^([ \t]*)["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?[ \t]*:[ \t]*\n(?:\1[ \t]+(?!["']?default["']?[ \t]*:)[^\n]*\n){0,6}?\1[ \t]+["']?default["']?[ \t]*:[ \t]*["']?([0-9a-f]{40})/im
+
+  # Drop YAML comments (a `#` at line start or after whitespace) so a kept
+  # "old pin" comment is not read as a second pin. A 40-hex SHA has no `#`.
+  defp strip_yaml_comments(content),
+    do: Regex.replace(~r/(^|[ \t])#[^\n]*/m, content, "\\1")
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -832,6 +841,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   def check_scanner_pin_drift(contents) when is_map(contents) do
     sites =
       for {label, content} <- contents,
+          content = strip_yaml_comments(content),
           re <- [@scanner_pin, @scanner_input, @scanner_pin_flow, @scanner_input_flow],
           match <- Regex.scan(re, content),
           [key, sha] = Enum.take(match, -2) do

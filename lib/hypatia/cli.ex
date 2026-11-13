@@ -762,9 +762,14 @@ defmodule Hypatia.CLI do
             # A stale actions.lock ref is reported by workflow_audit as
             # `actions_lock_stale` when that family also runs; WH004 keeps it
             # only for standalone hardening scans, so drop the duplicate here.
+            # workflow_audit's unpinned-action check is built on WH004
+            # (wh004_scan_content/2) and reports the lockfile itself, so when
+            # both families run WH004 and its lockfile findings would repeat
+            # every unpinned, exempt or stale ref. Standalone hardening scans
+            # keep them.
             findings =
               if :workflow_audit in rules do
-                Enum.reject(findings, &(get_in(&1, [:detail, :kind]) == :actions_lock_stale))
+                Enum.reject(findings, &(&1.rule in ["WH004", "invalid_actions_lock"]))
               else
                 findings
               end

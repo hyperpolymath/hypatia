@@ -943,6 +943,30 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert length(stale) == 1
     end
 
+    test "the combined CLI scan reports an unpinned action once (no WH004 duplicate)" do
+      dir = Path.join(System.tmp_dir!(), "dup-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".github/workflows"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(dir, ".github/workflows/ci.yml"), """
+      on: push
+      permissions:
+        contents: read
+      jobs:
+        a:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: some/action@v1
+      """)
+
+      hits =
+        dir
+        |> Hypatia.CLI.collect_findings([:workflow_audit, :workflow_hardening])
+        |> Enum.filter(&String.contains?(to_string(&1[:reason]), "some/action@v1"))
+
+      assert length(hits) == 1
+    end
+
     test "a different ref of a locked action is NOT accepted" do
       wf = %{"c.yml" => "      - uses: actions/checkout@v6.0.0\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)

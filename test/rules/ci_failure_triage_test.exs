@@ -219,6 +219,16 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
                T.id("external_host_unreachable")
     end
 
+    test "a doctest-only failure is a test failure" do
+      assert T.classify("Finished in 0.1 seconds\n1 doctest, 1 failure\n").primary.rule ==
+               T.id("test_failure")
+    end
+
+    test "'Not authorized' without a Sonar run is not a Sonar setting" do
+      log = "Not authorized or organization not found\n  1) test x\n5 tests, 1 failure\n"
+      assert T.classify(log).primary.layer == :code
+    end
+
     test "gh api with HTTP 502 is a GitHub API outage" do
       %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
       assert p.rule == T.id("api_server_error")
@@ -414,6 +424,25 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       }
 
       assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a quoted default key is still a pin" do
+      contents = %{
+        "a.yml" => "  PA_SHA: #{@a}\n",
+        "b.yml" =>
+          "on:\n  workflow_call:\n    inputs:\n      panic-ref:\n        type: string\n        \"default\": #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a commented-out old pin is not a second pin" do
+      contents = %{
+        "a.yml" => "# old pin: {PA_SHA: #{@b}}\nenv:\n  PA_SHA: #{@a}\n",
+        "b.yml" => "  PA_SHA: #{@a}\n"
+      }
+
+      assert T.check_scanner_pin_drift(contents) == []
     end
 
     test "one commit everywhere is not drift" do
