@@ -578,6 +578,10 @@ while IFS= read -r d; do
         log "  skip ${repo}#${num}: ${why}"
         skipped=$((skipped + 1)); continue
       fi
+      if ! why=$(pr_threads_ready "$repo" "$num"); then
+        log "  skip ${repo}#${num}: ${why}"
+        skipped=$((skipped + 1)); continue
+      fi
       # --match-head-commit: GitHub itself refuses if the head moved after the
       # re-derivation above, so the merge is bound to the SHA that was checked.
       gh pr merge "$num" --repo "$repo" --squash --auto --delete-branch \
