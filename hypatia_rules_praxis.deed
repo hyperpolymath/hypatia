@@ -1319,6 +1319,7 @@
       :id "hypatia/workflow_audit/WF025"
       :text "CodeQL cron-canonical conformance"
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :supersedes ("hypatia/workflow_audit/WF-025")

@@ -95,7 +95,7 @@ near() { # <file> <id>
       # past the next rule literal.
       for (i = hit - 3; i <= hit + 12; i++) {
         if (i < 1 || !(i in line)) continue
-        if (i > hit && line[i] ~ /(rule|id): "[A-Z]/ && line[i] !~ ("\"" id "\"")) break
+        if (i > hit && line[i] ~ /^ *(rule|id): "[A-Z]/ && line[i] !~ ("\"" id "\"")) break
         if (match(line[i], /severity: "?:?(critical|high|medium|warn|low|info)/)) {
           d = (i > hit) ? i - hit : hit - i
           if (d < bd) { bd = d; s = substr(line[i], RSTART, RLENGTH); sub(/.*[:"]/, "", s); best = s }
