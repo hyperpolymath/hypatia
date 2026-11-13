@@ -10,7 +10,7 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
 
       mix hypatia.ci_triage log JOB.log [--exit-code N] [--conclusion C]
                                         [--pr-state open|merged|closed] [--attempts N]
-      mix hypatia.ci_triage gate --required "A,B" --reported "B,C"
+      mix hypatia.ci_triage gate --required A --required B --reported B --reported C
       mix hypatia.ci_triage pins WORKFLOW.yml...
       mix hypatia.ci_triage rules
 
@@ -34,8 +34,8 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
     conclusion: :string,
     pr_state: :string,
     attempts: :integer,
-    required: :string,
-    reported: :string
+    required: :keep,
+    reported: :keep
   ]
 
   @impl Mix.Task
@@ -84,8 +84,11 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
   end
 
   defp gate(opts) do
-    split = fn s -> (s || "") |> String.split(",", trim: true) |> Enum.map(&String.trim/1) end
-    findings = T.check_gate(split.(opts[:required]), split.(opts[:reported]))
+    # One name per option, repeated: check names may contain commas
+    # (`test (ubuntu-latest, 3.12)`), so nothing is split.
+    findings =
+      T.check_gate(Keyword.get_values(opts, :required), Keyword.get_values(opts, :reported))
+
     Enum.each(findings, &emit/1)
     if findings != [], do: exit({:shutdown, 3})
   end
@@ -97,8 +100,14 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
   end
 
   defp pr_state(nil), do: nil
-  defp pr_state(s) when s in ["open", "merged", "closed"], do: String.to_atom(s)
-  defp pr_state(s), do: die("--pr-state must be open, merged or closed, not #{inspect(s)}")
+  @pr_states %{"open" => :open, "merged" => :merged, "closed" => :closed}
+
+  defp pr_state(s) do
+    case Map.fetch(@pr_states, s) do
+      {:ok, state} -> state
+      :error -> die("--pr-state must be open, merged or closed, not #{inspect(s)}")
+    end
+  end
 
   defp put_opt(map, _key, nil), do: map
   defp put_opt(map, key, value), do: Map.put(map, key, value)

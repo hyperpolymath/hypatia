@@ -875,7 +875,9 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
       assert f.type == :actions_lock_stale
       assert f.locked_ref == "actions/checkout@v7.0.1"
-      assert f.severity == :high
+      # Medium, as the unpinned_action finding it replaces was: the estate
+      # gate's blocking set does not change.
+      assert f.severity == :medium
     end
 
     test "a dependency listed only for another workflow does not authorize this one" do

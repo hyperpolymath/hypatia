@@ -112,6 +112,31 @@ defmodule Hypatia.Rules.ActionsLock do
   def pinned?(_, _, _), do: false
 
   @doc """
+  The ref the lock holds for the same action in the same workflow, when it
+  differs from `slug` (the workflow moved past its lock, typically a
+  Dependabot bump); nil otherwise. Such a ref is not pinned, and the remedy
+  is to regenerate the lock, never to SHA-pin inline.
+  """
+  @spec stale_ref(t() | nil, String.t(), String.t()) :: String.t() | nil
+  def stale_ref(%__MODULE__{} = lock, workflow_path, slug)
+      when is_binary(workflow_path) and is_binary(slug) do
+    want = normalise_ref(slug)
+    action = want |> String.split("@", parts: 2) |> hd()
+
+    case workflow_refs(lock, workflow_path) do
+      nil ->
+        nil
+
+      refs ->
+        refs
+        |> Enum.sort()
+        |> Enum.find(fn r -> r != want and hd(String.split(r, "@", parts: 2)) == action end)
+    end
+  end
+
+  def stale_ref(_, _, _), do: nil
+
+  @doc """
   The refs the lock associates with `workflow_path` (`owner/repo@ref` keys),
   or nil when its `workflows:` section lists no such workflow. Basenames
   resolve under `.github/workflows/`, as for `pinned?/3`.

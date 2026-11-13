@@ -80,6 +80,19 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert p.rule == T.id("runner_cancelled")
     end
 
+    test "rules/0 is the whole inventory, including the non-log rules" do
+      names = T.rules() |> Enum.map(& &1.id) |> MapSet.new()
+
+      for n <- ["required_check_never_reported", "scanner_pin_drift", "always_after_cancel"] do
+        assert T.id(n) in names
+      end
+
+      assert Enum.all?(
+               T.rules(),
+               &(&1.route in ["first-line", "referral", "owner-only", "noise"])
+             )
+    end
+
     test "rules/0 lists layers in order and every id is <domain>/<name> without wildcards" do
       rules = T.rules()
       layers = Enum.map(rules, & &1.layer) |> Enum.dedup()
@@ -97,6 +110,63 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     end
   end
 
+  describe "signatures are not over-broad" do
+    test "an application cancellation exception is not a runner cancellation" do
+      log =
+        "  1) test x\n     ** (TaskCanceledException) The operation was canceled.\n5 tests, 1 failure\n"
+
+      %{primary: p, matches: m} = T.classify(log)
+      # Attributed to the code, not written off as a cancelled run.
+      assert p.layer == :code
+      assert p.action != :none
+      refute T.id("runner_cancelled") in Enum.map(m, & &1.rule)
+    end
+
+    test "git 401/403 is a refused credential, not an unreachable host" do
+      log =
+        "fatal: unable to access 'https://github.com/acme/private/': The requested URL returned error: 403\n"
+
+      %{primary: p} = T.classify(log)
+      assert p.rule == T.id("token_invalid")
+      assert p.action == :owner
+    end
+
+    test "a 5xx from the same host is still an outage" do
+      log =
+        "fatal: unable to access 'https://git.sr.ht/~x/y/': The requested URL returned error: 502\n"
+
+      assert T.classify(log).primary.rule == T.id("external_host_unreachable")
+    end
+
+    test "a segfault naming no known tool is the program's own crash" do
+      log =
+        "/tmp/run.sh: line 3: 99 Segmentation fault      ./target/release/my_app\n##[error]Process completed with exit code 139.\n"
+
+      %{primary: p} = T.classify(log)
+      assert p.rule == T.id("process_segfault")
+      assert p.layer == :code
+      assert p.action == :report
+    end
+
+    test "a segfault naming the runtime is a toolchain fault" do
+      log =
+        "/tmp/run.sh: line 1: 22 Segmentation fault      (core dumped) mix hypatia.rsr_score .\n"
+
+      assert T.classify(log).primary.rule == T.id("toolchain_segfault")
+    end
+
+    test "scanner pins differing only in case are the same commit" do
+      sha = "410a8f821ea8297833162565b50a298f787815da"
+
+      contents = %{
+        "a.yml" => "  PA_SHA: #{sha}\n",
+        "b.yml" => "  PA_SHA: #{String.upcase(sha)}\n"
+      }
+
+      assert T.check_scanner_pin_drift(contents) == []
+    end
+  end
+
   describe "context" do
     test "a merge-ref race on a merged PR is a stale run, not a rerun" do
       log = File.read!(Path.join(@dir, "merge-ref-race.txt"))
@@ -108,8 +178,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.classify("", %{conclusion: "cancelled"}).primary.rule == T.id("runner_cancelled")
     end
 
-    test "exit code 139 with no log line is a segfault" do
-      assert T.classify("", %{exit_code: 139}).primary.rule == T.id("toolchain_segfault")
+    test "exit code 139 with no log line is a crash, attributed to the program" do
+      %{primary: p} = T.classify("", %{exit_code: 139})
+      assert p.rule == T.id("process_segfault")
     end
   end
 
@@ -117,13 +188,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "a transient rule reruns within budget, then escalates as persistent" do
       %{primary: p} = T.classify(File.read!(Path.join(@dir, "rate-limit-setup-bun.txt")))
       assert %{action: :rerun, persistent: false} = T.decide(p, 0)
-      assert %{action: :rerun, persistent: false} = T.decide(p, 1)
-      assert %{action: :owner, persistent: true} = T.decide(p, 2)
+      assert %{action: :owner, persistent: true} = T.decide(p, 1)
       assert %{action: :owner, persistent: true} = T.decide(p, 50)
     end
 
-    test "every budget is at most 2, so a rerun loop always ends" do
-      assert Enum.all?(T.rules(), &(&1.retries <= 2))
+    test "every budget is at most 1, matching the squabbler's one re-run per job" do
+      assert Enum.all?(T.rules(), &(&1.retries <= 1))
       assert Enum.all?(T.rules(), &(&1.action == :rerun or &1.retries == 0))
     end
 
@@ -253,6 +323,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "!cancelled() is the fix and does not fire" do
       fixed = String.replace(@deposit, "if: always()", "if: ${{ !cancelled() }}")
       assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => fixed}) == []
+    end
+
+    test "a cross-run download (run-id) is not this run's artifact" do
+      cross =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n        with:\n          name: findings\n",
+          "      - uses: actions/download-artifact@v8.0.2\n        with:\n          name: findings\n          run-id: 12345\n          github-token: x\n"
+        )
+
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => cross}) == []
     end
 
     test "an always() job with no artifact download (a status rollup) does not fire" do

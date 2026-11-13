@@ -72,9 +72,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "runner_cancelled",
       layer: :platform,
       patterns: [
-        ~r/The operation was canceled\.?/,
-        ~r/The run was canceled by/,
-        ~r/This job was cancelled/i
+        # Runner-authored lines only. A bare "The operation was canceled." is
+        # also ordinary exception text (.NET TaskCanceledException) and must
+        # not hide a real failure; `conclusion: cancelled` is authoritative.
+        ~r/##\[error\]The operation was canceled/,
+        ~r/##\[error\]The run was canceled by/
       ],
       action: :none,
       retries: 0,
@@ -94,7 +96,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/x-ratelimit-remaining:\s*0\b/i
       ],
       action: :rerun,
-      retries: 2,
+      retries: 1,
       fix: nil,
       escalation: :owner,
       reason:
@@ -119,13 +121,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "external_host_unreachable",
       layer: :platform,
       patterns: [
-        ~r/fatal: unable to access '(https?:\/\/[^\/']+)/,
+        ~r/fatal: unable to access '[^']+': (Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Recv failure|gnutls_handshake|The requested URL returned error: 5\d\d)/,
         ~r/Could not resolve host:\s*(\S+)/,
         ~r/Failed to connect to (\S+) port \d+/,
         ~r/The requested URL returned error: 5\d\d/
       ],
       action: :rerun,
-      retries: 2,
+      retries: 1,
       fix: nil,
       escalation: :owner,
       reason:
@@ -142,7 +144,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/Server Error \(HTTP 50[234]\)/
       ],
       action: :rerun,
-      retries: 2,
+      retries: 1,
       fix: nil,
       escalation: :owner,
       reason:
@@ -168,7 +170,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "token_invalid",
       layer: :config,
-      patterns: [~r/Bad credentials/],
+      patterns: [
+        ~r/Bad credentials/,
+        # git over HTTPS: the server answered and refused the credential.
+        ~r/fatal: unable to access '[^']+': The requested URL returned error: 40[13]/
+      ],
       action: :owner,
       retries: 0,
       fix: nil,
@@ -274,10 +280,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "toolchain_segfault",
       layer: :toolchain,
+      # Only when the crashing command is a known runtime or compiler. A
+      # segfault in a program the change built is a code failure
+      # (`process_segfault`).
       patterns: [
-        ~r/Segmentation fault/,
-        ~r/exit code 139\b/,
-        ~r/\bSIGSEGV\b/
+        ~r/Segmentation fault[^\n]*\b(mix|elixir|erl|beam\.smp|rustc|cargo|ghc|idris2|zig|pack|hypatia)\b/,
+        ~r/\b(beam\.smp|rustc|idris2|ghc)\b[^\n]*\b(SIGSEGV|signal 11)\b/
       ],
       action: :owner,
       retries: 0,
@@ -339,6 +347,18 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason: "A program raised or panicked. Report to its owner with the evidence line."
     },
     %{
+      name: "process_segfault",
+      layer: :code,
+      patterns: [~r/Segmentation fault/, ~r/exit code 139\b/, ~r/\bSIGSEGV\b/],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :code_owner,
+      reason:
+        "A process crashed with SIGSEGV (exit 139) and the log does not name a known " <>
+          "runtime or compiler, so treat it as the program's own crash and report it."
+    },
+    %{
       name: "test_failure",
       layer: :code,
       patterns: [
@@ -398,12 +418,63 @@ defmodule Hypatia.Rules.CiFailureTriage do
   @doc "The rule id for a rule name."
   def id(name), do: "#{@domain}/#{name}"
 
-  @doc "Every rule, in precedence order, without its patterns."
+  # Rules that are not log patterns: they take check states, workflow sets or
+  # workflow files. Listed so `rules/0` is the whole inventory.
+  @supplemental [
+    %{
+      name: "required_check_never_reported",
+      layer: :config,
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      input: :check_states,
+      reason: "A required check never reported (check_gate/2)."
+    },
+    %{
+      name: "scanner_pin_drift",
+      layer: :config,
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      input: :workflow_set,
+      reason: "panic-attack pinned at different commits (check_scanner_pin_drift/1)."
+    },
+    %{
+      name: "always_after_cancel",
+      layer: :config,
+      action: :fix,
+      retries: 0,
+      fix: "always-to-not-cancelled",
+      escalation: :owner,
+      input: :workflow,
+      reason: "if: always() job that downloads its needs' artifacts (WorkflowAudit WF029)."
+    }
+  ]
+
+  @doc """
+  Every rule, in precedence order, without its patterns. Each carries its
+  `route` under cicd-squabbler ADR 0003: `first-line` (the squabbler acts),
+  `referral` (Hypatia answers), `owner-only` or `noise`.
+  """
   def rules do
-    @rules
+    (Enum.map(@rules, &Map.put(&1, :input, :log)) ++ @supplemental)
     |> Enum.sort_by(&rank/1)
-    |> Enum.map(fn r -> r |> Map.delete(:patterns) |> Map.put(:id, id(r.name)) end)
+    |> Enum.map(fn r ->
+      r |> Map.delete(:patterns) |> Map.put(:id, id(r.name)) |> Map.put(:route, route(r.action))
+    end)
   end
+
+  @doc """
+  The ADR 0003 route for an action. Hypatia never reruns or fixes on its own:
+  a `rerun` or `fix` decision is advice to the first-line fixer.
+  """
+  def route(:rerun), do: "first-line"
+  def route(:fix), do: "first-line"
+  def route(:owner), do: "owner-only"
+  def route(:none), do: "noise"
+  def route(_), do: "referral"
 
   @doc "Actions a decision from these rules may never take."
   def forbidden_actions, do: @forbidden
@@ -506,7 +577,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       for {label, content} <- contents,
           re <- [@scanner_pin, @scanner_input],
           [_, key, sha] <- Regex.scan(re, content) do
-        %{file: label, key: key, sha: sha}
+        %{file: label, key: key, sha: String.downcase(sha)}
       end
       |> Enum.uniq()
 
@@ -553,6 +624,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       fix: rule.fix,
       escalation: rule.escalation,
       reason: rule.reason,
+      route: route(rule.action),
       evidence: text,
       line: n
     }
@@ -589,12 +661,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
   end
 
   defp add_exit_code(matches, %{exit_code: 139}) do
-    segv = id("toolchain_segfault")
+    segv = [id("toolchain_segfault"), id("process_segfault")]
 
-    if Enum.any?(matches, &(&1.rule == segv)) do
+    if Enum.any?(matches, &(&1.rule in segv)) do
       matches
     else
-      rule = Enum.find(@rules, &(&1.name == "toolchain_segfault"))
+      rule = Enum.find(@rules, &(&1.name == "process_segfault"))
       [finding(rule, "exit code 139", 0) | matches]
     end
   end

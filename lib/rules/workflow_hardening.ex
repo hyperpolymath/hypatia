@@ -591,7 +591,11 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       wh004_scan_content(rel, content)
       |> Enum.reject(fn finding ->
-        Hypatia.Rules.ActionsLock.pinned?(lock, rel, finding.detail.uses)
+        # A locked ref is pinned. A ref the lock holds at another version is a
+        # stale lock, reported once by workflow_audit (actions_lock_stale) with
+        # the safe remedy; WH004's inline-SHA advice would drop it from the lock.
+        Hypatia.Rules.ActionsLock.pinned?(lock, rel, finding.detail.uses) or
+          Hypatia.Rules.ActionsLock.stale_ref(lock, rel, finding.detail.uses) != nil
       end)
     end)
   end

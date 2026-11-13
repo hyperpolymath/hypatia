@@ -344,6 +344,31 @@ defmodule Hypatia.Rules.WorkflowAudit do
           Hypatia.Rules.ActionsLock.pinned?(lock, filename, slug) ->
             []
 
+          # The lock lists this action for this workflow at ANOTHER ref: the
+          # workflow moved (typically a Dependabot bump) and the lock did not.
+          # The runner then refuses the job at `Set up job`. The fix is to
+          # regenerate the lock, never to SHA-pin inline (see above). Seen in
+          # EpistemicTypes.jl, ResidualEvidenceTypes.jl and this-ssg (2026-11).
+          # Checked before pin exemptions: an exemption explains a symbolic ref,
+          # it does not make a mismatched lock valid. Medium, as unpinned_action
+          # was, so the estate gate's blocking set does not change.
+          (stale = Hypatia.Rules.ActionsLock.stale_ref(lock, filename, slug)) != nil ->
+            [
+              %{
+                type: :actions_lock_stale,
+                rule_id: "hypatia/workflow_audit/actions_lock_stale",
+                file: filename,
+                action_ref: slug,
+                locked_ref: stale,
+                severity: :medium,
+                action: :regenerate_actions_lock,
+                reason:
+                  "#{filename} uses `#{slug}` but actions.lock pins `#{stale}` for this " <>
+                    "workflow, so the job fails at Set up job. Regenerate the lock " <>
+                    "(`gh actions-lock`) in the same PR as the bump; do not SHA-pin inline."
+              }
+            ]
+
           Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
             [
               %{
@@ -358,28 +383,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
                     "ACCEPTED: #{String.trim_trailing(Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug), ".")}. " <>
                     "Recorded so the exemption is visible rather than " <>
                     "indistinguishable from an unreviewed unpinned action."
-              }
-            ]
-
-          # The lock lists this action for this workflow at ANOTHER ref: the
-          # workflow moved (typically a Dependabot bump) and the lock did not.
-          # The runner then refuses the job at `Set up job`. The fix is to
-          # regenerate the lock, never to SHA-pin inline (see above). Seen in
-          # EpistemicTypes.jl, ResidualEvidenceTypes.jl and this-ssg (2026-11).
-          (stale = stale_lock_ref(lock, filename, slug)) != nil ->
-            [
-              %{
-                type: :actions_lock_stale,
-                rule_id: "hypatia/workflow_audit/actions_lock_stale",
-                file: filename,
-                action_ref: slug,
-                locked_ref: stale,
-                severity: :high,
-                action: :regenerate_actions_lock,
-                reason:
-                  "#{filename} uses `#{slug}` but actions.lock pins `#{stale}` for this " <>
-                    "workflow, so the job fails at Set up job. Regenerate the lock " <>
-                    "(`gh actions-lock`) in the same PR as the bump; do not SHA-pin inline."
               }
             ]
 
@@ -407,25 +410,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end)
     end)
   end
-
-  # The ref the lock holds for the same action in the same workflow, when it
-  # differs from the one the workflow now uses; nil otherwise.
-  defp stale_lock_ref(%Hypatia.Rules.ActionsLock{} = lock, filename, slug) do
-    want = Hypatia.Rules.ActionsLock.normalise_ref(slug)
-    action = want |> String.split("@", parts: 2) |> hd()
-
-    case Hypatia.Rules.ActionsLock.workflow_refs(lock, filename) do
-      nil ->
-        nil
-
-      refs ->
-        Enum.find(Enum.sort(refs), fn r ->
-          r != want and hd(String.split(r, "@", parts: 2)) == action
-        end)
-    end
-  end
-
-  defp stale_lock_ref(_lock, _filename, _slug), do: nil
 
   # The remediation text for an unpinned action. This used to be omitted
   # entirely, so `cli.ex` substituted the generated string
@@ -4216,7 +4200,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
       not Regex.match?(~r/cancelled\(\)/, cond_text) and
       Hypatia.Kyaml.get(job.node, "needs") != nil and
       Enum.any?(job.steps, fn step ->
-        is_binary(step.uses) and String.starts_with?(step.uses, "actions/download-artifact@")
+        # A download with `run-id` reads another run's artifact, which a
+        # cancellation of this run's needs does not remove.
+        is_binary(step.uses) and String.starts_with?(step.uses, "actions/download-artifact@") and
+          Hypatia.Workflow.input(step, "run-id") in [nil, ""]
       end)
   end
 
