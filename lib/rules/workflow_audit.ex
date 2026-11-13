@@ -4544,7 +4544,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> String.trim()
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
 
+    # `||`, negation or grouping can make the push comparison optional, so
+    # only a flat `&&` chain proves it is required.
     not String.contains?(expr, "||") and
+      not Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) and
       expr
       |> String.split("&&")
       |> Enum.any?(&Regex.match?(~r/^\s*github\.event_name\s*==\s*['"]push['"]\s*$/, &1))

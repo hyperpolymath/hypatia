@@ -66,6 +66,18 @@ defmodule Hypatia.Rules.GitleaksFullHistoryTest do
     assert [_] = check(wf)
   end
 
+  test "a negated or grouped push comparison does not exempt the job" do
+    wf =
+      String.replace(
+        @wf,
+        "    runs-on: ubuntu-latest",
+        "    if: ${{ !(true && github.event_name == 'push' && true) }}\n    runs-on: ubuntu-latest"
+      )
+
+    assert wf != @wf
+    assert [_] = check(wf)
+  end
+
   test "a push-only workflow may scan all history" do
     wf = String.replace(@wf, "  pull_request:\n", "")
     assert check(wf) == []
