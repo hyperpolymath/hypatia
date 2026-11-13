@@ -292,7 +292,14 @@ defmodule Hypatia.ScannerSuppression do
   # This is deliberately applied AFTER `detect_secrets/1` (see `cli.ex`), so
   # the matched label is known. `context_safe_line?/3` runs before detection
   # and therefore cannot make this distinction.
-  @form_ambiguous_secret_labels ["Generic API key", "Generic secret", "Password"]
+  # Labels matched by the shape of an assignment, not by an unforgeable
+  # credential prefix, so a commented-out example is documentation.
+  @form_ambiguous_secret_labels [
+    "Generic API key",
+    "Generic secret",
+    "Password",
+    "Token assignment"
+  ]
 
   # ── Placeholder-shaped values (#746, #748) ────────────────────────────────
   #
