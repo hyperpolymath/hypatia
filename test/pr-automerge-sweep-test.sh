@@ -203,4 +203,14 @@ grep -q "$MERGE7" "$FIX/pr.log" || fail "resolved threads: PR 7 should merge"
 [[ "$(disp 8)" == "flag/not_a_dependency_bot" ]] || fail "R3: a human or wave PR must be flagged, got $(disp 8)"
 grep -q "pr merge 8" "$FIX/pr.log" && fail "R3: a non-bot PR must never merge"
 
+# Licence-path parity with PrAutomerge.licence_path?/1 (same cases in
+# test/rules/pr_automerge_test.exs): contains-match, any case.
+eval "$(sed -n '/^is_licence_path() {/,/^}/p' "$ROOT/scripts/sweeps/estate-pr-automerge.sh")"
+for p in LICENSE LICENSES/MPL-2.0.txt docs/LICENSES/x.txt THIRD_PARTY_LICENSES License.md NOTICE REUSE.toml; do
+  is_licence_path "$p" || fail "licence path not vetoed: $p"
+done
+for p in Cargo.toml README.md; do
+  ! is_licence_path "$p" || fail "not a licence path: $p"
+done
+
 echo "ok: pr-automerge sweep"
