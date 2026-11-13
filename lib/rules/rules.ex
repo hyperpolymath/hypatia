@@ -576,7 +576,9 @@ defmodule Hypatia.Rules do
   """
   def scan_workflow(content, opts \\ []) do
     filename = Keyword.get(opts, :filename, "workflow.yml")
-    audit_opts = Keyword.take(opts, [:actions_lock])
+    # One file is not the repository's workflow set: a reusable called only
+    # from another file must not read as uncalled.
+    audit_opts = opts |> Keyword.take([:actions_lock]) |> Keyword.put(:workflows_complete?, false)
 
     findings =
       %{filename => content}
@@ -599,6 +601,12 @@ defmodule Hypatia.Rules do
 
         %{type: :invalid_actions_lock, detail: detail} ->
           [%{rule: "invalid_actions_lock", severity: :high, description: detail}]
+
+        %{type: :actions_lock_stale, reason: reason} ->
+          [%{rule: "actions_lock_stale", severity: :medium, description: reason}]
+
+        %{type: :actions_lock_context_incomplete, detail: detail} ->
+          [%{rule: "actions_lock_context_incomplete", severity: :info, description: detail}]
 
         _accepted_or_unrelated ->
           []

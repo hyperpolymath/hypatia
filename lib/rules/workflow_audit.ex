@@ -96,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
+    always_after_cancel = check_always_after_cancel(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
 
     %{
@@ -137,6 +138,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           toolchain_input_missing ++
           broken_reusable_revisions ++
           moved_reusable_calls ++
+          always_after_cancel ++
           mirror_visibility,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
@@ -164,6 +166,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       toolchain_input_missing_count: length(toolchain_input_missing),
       broken_reusable_revision_count: length(broken_reusable_revisions),
       moved_reusable_call_count: length(moved_reusable_calls),
+      always_after_cancel_count: length(always_after_cancel),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -296,9 +299,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
   canonical findings to add this module's extras: `pin_exempt?` carve-
   outs (hypatia#262 self-verifying-ref reusables) and `known_sha`
   hints from the `@known_good_shas` table.
+
+  `workflow_contents` is taken to be the repository's whole workflow set, which
+  the lock's self-SHA check needs (see `ActionsLock.parse/2`). A caller that
+  holds only part of it (a single-file scan) passes `workflows_complete?:
+  false`: the self-SHA check is then skipped, and an
+  `:actions_lock_context_incomplete` finding says so, rather than judging a
+  reusable called from another file as uncalled.
   """
   def check_unpinned_actions(workflow_contents, opts \\ []) do
-    case parse_actions_lock(Keyword.get(opts, :actions_lock)) do
+    complete? = Keyword.get(opts, :workflows_complete?, true)
+    lock = Keyword.get(opts, :actions_lock)
+
+    case parse_actions_lock(lock, workflow_contents, complete?) do
       {:invalid, finding} ->
         # A present-but-invalid lock is one indivisible integrity failure. Do
         # not also recommend inline SHA pins: `gh actions-lock` deliberately
@@ -306,8 +319,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # transitive dependency and repository-identity coverage.
         [finding]
 
-      {:usable, lock} ->
-        scan_unpinned_actions(workflow_contents, lock)
+      {:usable, parsed} ->
+        incomplete_context_findings(parsed, complete?) ++
+          scan_unpinned_actions(workflow_contents, parsed)
     end
   end
 
@@ -342,6 +356,31 @@ defmodule Hypatia.Rules.WorkflowAudit do
           # and removed dtolnay/rust-toolchain from 7 lockfile entries.
           Hypatia.Rules.ActionsLock.pinned?(lock, filename, slug) ->
             []
+
+          # The lock lists this action for this workflow at ANOTHER ref: the
+          # workflow moved (typically a Dependabot bump) and the lock did not.
+          # The runner then refuses the job at `Set up job`. The fix is to
+          # regenerate the lock, never to SHA-pin inline (see above). Seen in
+          # EpistemicTypes.jl, ResidualEvidenceTypes.jl and this-ssg (2026-11).
+          # Checked before pin exemptions: an exemption explains a symbolic ref,
+          # it does not make a mismatched lock valid. Medium, as unpinned_action
+          # was, so the estate gate's blocking set does not change.
+          (stale = Hypatia.Rules.ActionsLock.stale_ref(lock, filename, slug)) != nil ->
+            [
+              %{
+                type: :actions_lock_stale,
+                rule_id: "hypatia/workflow_audit/actions_lock_stale",
+                file: filename,
+                action_ref: slug,
+                locked_ref: stale,
+                severity: :medium,
+                action: :regenerate_actions_lock,
+                reason:
+                  "#{filename} uses `#{slug}` but actions.lock pins `#{stale}` for this " <>
+                    "workflow, so the job fails at Set up job. Regenerate the lock " <>
+                    "(`gh actions-lock`) in the same PR as the bump; do not SHA-pin inline."
+              }
+            ]
 
           Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
             [
@@ -435,10 +474,38 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Hypatia.Rules.ActionsLock.normalise_ref(slug)
   end
 
-  defp parse_actions_lock(nil), do: {:usable, nil}
+  # Only a lock that carries a self-SHA record has a check that was skipped.
+  defp incomplete_context_findings(%Hypatia.Rules.ActionsLock{} = lock, false) do
+    case Hypatia.Rules.ActionsLock.self_sha_keys(lock) do
+      [] ->
+        []
 
-  defp parse_actions_lock(content) do
-    case Hypatia.Rules.ActionsLock.parse(content) do
+      keys ->
+        [
+          %{
+            type: :actions_lock_context_incomplete,
+            file: "actions.lock",
+            severity: :info,
+            keys: keys,
+            detail:
+              "Self-SHA lock pins #{inspect(keys)} were not checked: only part of the " <>
+                "repository's workflows was scanned. Scan the whole workflow set to check them."
+          }
+        ]
+    end
+  end
+
+  defp incomplete_context_findings(_lock, _complete?), do: []
+
+  defp parse_actions_lock(nil, _workflow_contents, _complete?), do: {:usable, nil}
+
+  defp parse_actions_lock(content, workflow_contents, complete?) do
+    opts =
+      if complete?,
+        do: [reusable_callers: Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)],
+        else: []
+
+    case Hypatia.Rules.ActionsLock.parse(content, opts) do
       {:ok, lock} ->
         {:usable, lock}
 
@@ -2877,6 +2944,120 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  @call_key_re ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([^\s"'#,}\]]+)/
+  @call_inline_re ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([^\s"'#,}\]]+)/
+
+  @doc """
+  The `uses:` references of one workflow's content, split by where they sit,
+  as `{reusable_calls, step_actions}`: two `MapSet`s of `owner/repo@ref` keys
+  (owner/repo lowercased, a full 40-hex ref lowercased, a symbolic ref kept).
+
+    * `reusable_calls` - `jobs.<id>.uses` naming
+      `owner/repo/.github/workflows/<file>.y(a)ml@ref`, in block or flow style,
+      quoted or not (the same job-key reading as WF027).
+    * `step_actions` - `jobs.<id>.steps[].uses` naming an action.
+
+  A `uses:` text inside a `run:` or `env:` block scalar, a string value or a
+  comment is neither.
+  """
+  def reusable_call_sites(content) when is_binary(content) do
+    lines = String.split(content, "\n")
+    continued = wf_continued_uses(lines)
+    flow = wf_flow_lines(content)
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.reduce({MapSet.new(), MapSet.new()}, fn {line, number}, {calls, steps} ->
+      line =
+        case Map.fetch(continued, number) do
+          {:ok, {joined, _how}} -> joined
+          :error -> line
+        end
+
+      case Regex.run(@call_key_re, line) do
+        [_, value] ->
+          case wf027_job_key(lines, flow, number) do
+            nil ->
+              if step_line?(lines, number),
+                do: {calls, add_action(steps, value)},
+                else: {calls, steps}
+
+            _job ->
+              {add_call(calls, value), steps}
+          end
+
+        nil ->
+          @call_inline_re
+          |> Regex.scan(line, return: :index)
+          |> Enum.reduce({calls, steps}, fn [{at, _}, {v_at, v_len}], {c, st} ->
+            value = binary_part(line, v_at, v_len)
+
+            cond do
+              wf027_inline_job?(lines, flow, line, number, at + 1) -> {add_call(c, value), st}
+              flow_step?(lines, flow, line, number, at + 1) -> {c, add_action(st, value)}
+              true -> {c, st}
+            end
+          end)
+      end
+    end)
+  end
+
+  # A flow-style `uses:` is a step action only when its mapping is an item of
+  # a `steps:` sequence of a job (jobs.<id>.steps): the nearest named key above
+  # it is `steps` and `jobs` is above that. A matrix `include:` row, `env:`,
+  # `with:` and the like are not steps.
+  defp flow_step?(lines, flow, line, number, uses_at) do
+    keys =
+      if wf_in_flow?(flow, number) do
+        case wf_flow_context(lines, flow, number, uses_at) do
+          {:ok, keys, [:map | _], _} -> keys
+          _ -> nil
+        end
+      else
+        case {wf_flow_opener_stack(line, uses_at), wf_ancestor_keys(lines, number)} do
+          {{:ok, [open | _] = stack}, ancestors} when is_integer(open) and is_list(ancestors) ->
+            wf_flow_opener_keys(line, stack) ++ ancestors
+
+          _ ->
+            nil
+        end
+      end
+
+    case keys && Enum.filter(keys, &is_binary/1) do
+      ["steps" | rest] -> "jobs" in rest
+      _ -> false
+    end
+  end
+
+  defp step_line?(lines, number) do
+    case wf_ancestor_keys(lines, number) do
+      keys when is_list(keys) -> "steps" in keys
+      _ -> false
+    end
+  end
+
+  defp add_call(set, value) do
+    case Regex.run(
+           ~r/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/\.github\/workflows\/[A-Za-z0-9_.\/-]+\.ya?ml@(.+)$/,
+           value
+         ) do
+      [_, repo, ref] -> MapSet.put(set, lock_key(repo, ref))
+      _ -> set
+    end
+  end
+
+  defp add_action(set, value) do
+    case Regex.run(~r/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\/[^@]*)?@(.+)$/, value) do
+      [_, repo, ref] -> MapSet.put(set, lock_key(repo, ref))
+      _ -> set
+    end
+  end
+
+  defp lock_key(repo, ref) do
+    ref = if Regex.match?(~r/^[0-9A-Fa-f]{40}$/, ref), do: String.downcase(ref), else: ref
+    String.downcase(repo) <> "@" <> ref
+  end
+
   # Is the `uses:` that starts line `number` a key of a job under `jobs:`?
   # :block when its indentation says so, outside any quoted scalar the job
   # opened above it — the reading the fleet fixer makes. A line inside a flow
@@ -4087,11 +4268,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
   @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
   # Guard signals that BLOCK or CONFIRM, never one that merely selects private
   # sources (`if: github.event.repository.private` is the opposite of a guard):
-  # a negated or compared repository.private, a repository.visibility test, an
+  # a negated repository.private (or `== false` / `!= true`; `== true` selects
+  # private sources and is not a guard), a repository.visibility test, an
   # explicit per-forge `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a
   # visibility read from an API (`.visibility`, `.private`, `isPrivate`) that is
   # not the event's own field. Comments are stripped before matching.
-  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*[!=]=|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
+  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*\)?\s*(?:==\s*\(?\s*['"]?false|!=\s*\(?\s*['"]?true)\b|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b(?!-)|\bisPrivate\b/
 
   @doc """
   WF030: a job that force- or mirror-pushes to a forge, gated on a
@@ -4106,13 +4288,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       case Hypatia.Workflow.parse(content, filename) do
         {:ok, %Hypatia.Workflow{jobs: jobs}} when jobs != [] ->
-          texts = job_texts(content, jobs)
+          texts = job_texts(jobs)
 
           for job <- jobs,
               text = Map.fetch!(texts, job.id),
               Regex.match?(@mirror_push, text),
               Regex.match?(@mirror_gate, text),
-              not guarded?(job, texts) do
+              not guarded?(job, jobs, texts) do
             %{
               rule: "WF030",
               rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
@@ -4138,38 +4320,156 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  defp guarded?(job, texts) do
-    ids = [job.id | mirror_direct_needs(job)]
-    Enum.any?(ids, fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  # A needed job's guard counts only when this job still requires that job to
+  # succeed: a status function in `if:` (always(), failure(), cancelled(),
+  # !cancelled()) lets the mirror run after the guard job fails. Needs are
+  # followed transitively (guard -> prepare -> mirror), and the chain stops at
+  # any job that runs after a failure.
+  defp guarded?(job, jobs, texts) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+
+    [job.id | guard_ancestors(job, by_id, MapSet.new([job.id]))]
+    |> Enum.any?(fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  end
+
+  # A needed job lends its guard only if its failure stops the chain: a
+  # status function in this job's `if:` drops every need except those the
+  # condition still requires (`needs.<id>.result == 'success'`), and a need
+  # whose failure is masked (`continue-on-error: true` on the job or a step)
+  # lends nothing, though the chain is still followed through it.
+  defp guard_ancestors(job, by_id, seen) do
+    job
+    |> required_needs()
+    |> Enum.reject(&MapSet.member?(seen, &1))
+    |> Enum.flat_map(fn id ->
+      case Map.fetch(by_id, id) do
+        {:ok, need} ->
+          own = if failure_masked?(need), do: [], else: [id]
+          own ++ guard_ancestors(need, by_id, MapSet.put(seen, id))
+
+        :error ->
+          [id]
+      end
+    end)
+  end
+
+  defp required_needs(job) do
+    needs = mirror_direct_needs(job)
+
+    case job_if(job) do
+      nil ->
+        needs
+
+      cond_text ->
+        if Regex.match?(~r/\b(always|failure|cancelled)\s*\(/, cond_text) do
+          Enum.filter(needs, fn id ->
+            Regex.match?(
+              ~r/needs\.#{Regex.escape(id)}\.result\s*==\s*['"]success['"]/,
+              cond_text
+            )
+          end)
+        else
+          needs
+        end
+    end
+  end
+
+  defp job_if(job) do
+    case Hypatia.Kyaml.get(job.node, "if") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{value: v} when is_binary(v) -> v
+      _ -> nil
+    end
+  end
+
+  defp failure_masked?(job) do
+    steps =
+      case Hypatia.Kyaml.get(job.node, "steps") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+        %{kind: :seq, items: items} -> items
+        _ -> []
+      end
+
+    Enum.any?([job.node | steps], fn node ->
+      case Hypatia.Kyaml.get(node, "continue-on-error") do
+        nil -> false
+        v -> Map.get(Hypatia.Kyaml.deref(v), :value) in [true, "true"]
+      end
+    end)
   end
 
   defp mirror_direct_needs(job) do
     case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
-      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
-      %{value: v} when is_binary(v) -> [v]
-      _ -> []
+      %{kind: :seq, items: items} ->
+        for i <- items, %{value: v} <- [Hypatia.Kyaml.deref(i)], is_binary(v), do: v
+
+      %{value: v} when is_binary(v) ->
+        [v]
+
+      _ ->
+        []
     end
   end
 
-  # Each job's own source lines (from its key to the next job's key), with
-  # YAML comments stripped and shell continuations joined.
-  defp job_texts(content, jobs) do
-    lines = String.split(content, "\n")
-    sorted = Enum.sort_by(jobs, & &1.line)
-    ends = Enum.map(tl(sorted), &(&1.line - 1)) ++ [length(lines)]
-
-    sorted
-    |> Enum.zip(ends)
-    |> Map.new(fn {job, stop} ->
+  # Each job's own text: every key and scalar inside the job's parsed node, so
+  # nothing outside the job (a later top-level key, a sibling flow-style job)
+  # reaches it and YAML comments are already gone. Shell comments are then
+  # stripped quote-aware, line by line, and `\\`-continuations joined.
+  defp job_texts(jobs) do
+    Map.new(jobs, fn job ->
       text =
-        lines
-        |> Enum.slice((job.line - 1)..(stop - 1)//1)
-        |> Enum.join("\n")
-        |> then(&Regex.replace(~r/(^|[ \t])#[^\n]*/m, &1, "\\1"))
-        |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+        if Hypatia.Kyaml.within_budget?(job.node) do
+          job.node
+          |> node_strings([])
+          |> Enum.reverse()
+          |> Enum.map_join("\n", &strip_shell_comments/1)
+          |> then(&Regex.replace(~r/\\\r?\n[ \t]*/, &1, " "))
+        else
+          ""
+        end
 
       {job.id, text}
     end)
+  end
+
+  # Shell comments out of one scalar (a whole `run:` script), with quote state
+  # carried across its lines: a quote opened on one line closes on a later
+  # one, so a `#` after it is a comment only when no quote is open.
+  defp strip_shell_comments(text),
+    do: text |> :binary.bin_to_list() |> strip_shell(nil, true, [])
+
+  defp strip_shell([], _q, _ws?, acc), do: acc |> Enum.reverse() |> List.to_string()
+
+  defp strip_shell([?# | rest], nil, true, acc),
+    do: rest |> Enum.drop_while(&(&1 != ?\n)) |> strip_shell(nil, true, acc)
+
+  defp strip_shell([?\n | rest], q, _ws?, acc), do: strip_shell(rest, q, true, [?\n | acc])
+
+  defp strip_shell([c | rest], nil, _ws?, acc) when c in [?", ?'],
+    do: strip_shell(rest, c, false, [c | acc])
+
+  defp strip_shell([?\\, c | rest], ?", _ws?, acc),
+    do: strip_shell(rest, ?", false, [c, ?\\ | acc])
+
+  defp strip_shell([q | rest], q, _ws?, acc), do: strip_shell(rest, nil, false, [q | acc])
+
+  defp strip_shell([c | rest], q, _ws?, acc),
+    do: strip_shell(rest, q, q == nil and c in [?\s, ?\t], [c | acc])
+
+  defp node_strings(node, acc) do
+    case Hypatia.Kyaml.deref(node) do
+      %{kind: :map, entries: entries} ->
+        Enum.reduce(entries, acc, fn %{key: k, value: v}, a ->
+          node_strings(v, node_strings(k, a))
+        end)
+
+      %{kind: :seq, items: items} ->
+        Enum.reduce(items, acc, &node_strings/2)
+
+      %{value: v} when is_binary(v) ->
+        [v | acc]
+
+      _ ->
+        acc
+    end
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
@@ -4224,6 +4524,177 @@ defmodule Hypatia.Rules.WorkflowAudit do
       (Regex.match?(~r/^on:[ \t]*$/m, content) and
          Regex.match?(~r/^[ \t]+pull_request:/m, content) and
          Regex.match?(@d_burn_bare_push, content))
+  end
+
+  # ─── WF029: `if: always()` job that consumes upstream artifacts ───────
+  #
+  # `always()` also runs the job when the run was CANCELLED. A job that needs
+  # upstream jobs and downloads their artifacts then fails on artifacts the
+  # cancelled jobs never uploaded, and a cancelled run shows a red job.
+  # Seen in cicd-squabbler static-analysis-gate.yml "Deposit findings".
+  # `!cancelled()` keeps the run-even-if-a-need-failed behaviour without
+  # the cancel cascade. Rule id in A5 form:
+  # hypatia/ci_failure_triage/always_after_cancel (see CiFailureTriage).
+
+  @doc """
+  WF029: a job with `if: always()` (and no `cancelled()` guard) that has
+  `needs:` and downloads artifacts. Recipe: replace `always()` with
+  `!cancelled()`.
+  """
+  def check_always_after_cancel(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{jobs: jobs}} ->
+          for job <- jobs, always_after_cancel?(job, jobs) do
+            %{
+              rule: "WF029",
+              rule_id: "hypatia/ci_failure_triage/always_after_cancel",
+              type: :always_after_cancel,
+              file: filename,
+              line: job.line,
+              job: job.id,
+              severity: :medium,
+              reason:
+                "job `#{job.id}` runs with `if: always()`, needs upstream jobs and " <>
+                  "downloads their artifacts. On a cancelled run it still starts, finds " <>
+                  "no artifacts and turns red. Use `if: ${{ !cancelled() }}` instead.",
+              fix_recipe: :always_to_not_cancelled,
+              action: :fix
+            }
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  # An `if:` that is false once the run is cancelled. Structural, not a
+  # substring test: strip `${{ }}`, split on `&&`, and require one conjunct
+  # to be exactly `!cancelled()` or `success()`. Anything else — `||`,
+  # parentheses, comparisons (`!cancelled() == false`), string literals
+  # (`'x && !cancelled()'` is a truthy string) — is uncertain and
+  # treated as unguarded; a false "unguarded" only costs a dismissable finding.
+  defp excludes_cancellation?(cond_text),
+    do: guarded_by?(cond_text, ["!cancelled()", "success()"])
+
+  # Step level: `success()` means "all previous steps succeeded", which is
+  # true at the first step even after a cancel, so only `!cancelled()` counts.
+  defp excludes_cancellation?(cond_text, :step),
+    do: guarded_by?(cond_text, ["!cancelled()"])
+
+  defp guarded_by?(cond_text, guards) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+      # A quoted literal is opaque: `'x && !cancelled()'` is one truthy string.
+      |> String.replace(~r/'(?:[^']|'')*'/, "S")
+      |> String.replace(~r/\s+/, "")
+
+    # `||` or grouping can make any conjunct optional, so the guard is
+    # uncertain. A comparison in ANOTHER conjunct (`github.event_name == 'push'`)
+    # cannot disable an exact `!cancelled()` conjunct, so only the conjunct
+    # itself has to match.
+    if String.contains?(expr, "||") or
+         Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
+      false
+    else
+      expr |> String.split("&&") |> Enum.any?(&(&1 in guards))
+    end
+  end
+
+  # A step with a literal `continue-on-error: true` cannot turn the job red,
+  # so its missing artifact is tolerated. An expression is not literal.
+  defp tolerated_failure?(%{node: node}) when not is_nil(node) do
+    case Hypatia.Kyaml.get(node, "continue-on-error") do
+      nil -> false
+      value -> Map.get(Hypatia.Kyaml.deref(value), :value) in [true, "true"]
+    end
+  end
+
+  defp tolerated_failure?(_), do: false
+
+  defp current_run_download?(run_id) when run_id in [nil, ""], do: true
+
+  # Any expression built from `github.run_id` (`format('{0}', github.run_id)`)
+  # still names this run; only a run id from elsewhere is a cross-run read.
+  defp current_run_download?(run_id) when is_binary(run_id),
+    do: Regex.match?(~r/\bgithub\.run_id\b/, run_id)
+
+  defp current_run_download?(_), do: false
+
+  defp always_after_cancel?(%Hypatia.Workflow.Job{} = job, jobs) do
+    cond_text = job.if || ""
+    needed = needed_jobs(job, jobs)
+
+    # A job with literal `continue-on-error: true` cannot fail the run.
+    Regex.match?(~r/\balways\(\)/, cond_text) and
+      not excludes_cancellation?(cond_text) and
+      not tolerated_failure?(job) and
+      needed != [] and
+      Enum.any?(job.steps, fn step ->
+        # A download with a `run-id` naming ANOTHER run reads that run's
+        # artifact, which cancelling this run's needs does not remove.
+        # `${{ github.run_id }}` is this run, so it still counts.
+        is_binary(step.uses) and
+          String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
+          not excludes_cancellation?(step.if || "", :step) and
+          not tolerated_failure?(step) and
+          current_run_download?(Hypatia.Workflow.input(step, "run-id")) and
+          produced_by_needed?(Hypatia.Workflow.input(step, "name"), needed)
+      end)
+  end
+
+  # The jobs this job needs, transitively: a cancel anywhere upstream can
+  # leave their artifacts missing.
+  defp needed_jobs(job, jobs) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+    collect_needs(direct_needs(job), by_id, MapSet.new()) |> Enum.map(&Map.fetch!(by_id, &1))
+  end
+
+  defp collect_needs([], _by_id, seen), do: MapSet.to_list(seen)
+
+  defp collect_needs([id | rest], by_id, seen) do
+    cond do
+      MapSet.member?(seen, id) or not Map.has_key?(by_id, id) ->
+        collect_needs(rest, by_id, seen)
+
+      true ->
+        collect_needs(direct_needs(by_id[id]) ++ rest, by_id, MapSet.put(seen, id))
+    end
+  end
+
+  defp direct_needs(job) do
+    case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
+      %{value: v} when is_binary(v) -> [v]
+      _ -> []
+    end
+  end
+
+  # A download is at risk only if a needed job uploads what it reads. An
+  # unnamed download reads every artifact; a name built from an expression
+  # cannot be resolved statically, so both count when any needed job uploads.
+  defp produced_by_needed?(name, needed) do
+    # A needed job that calls a reusable workflow (`uses:` at job level) has
+    # no local steps but may upload into this run: treat it as a possible
+    # producer of any name.
+    opaque? = Enum.any?(needed, &is_binary(&1.uses))
+
+    uploads =
+      for j <- needed,
+          s <- j.steps,
+          is_binary(s.uses),
+          String.starts_with?(String.downcase(s.uses), "actions/upload-artifact@"),
+          do: Hypatia.Workflow.input(s, "name") || "artifact"
+
+    cond do
+      opaque? -> true
+      uploads == [] -> false
+      name in [nil, ""] or String.contains?(name, "${{") -> true
+      true -> Enum.any?(uploads, &(&1 == name or String.contains?(&1, "${{")))
+    end
   end
 
   # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─

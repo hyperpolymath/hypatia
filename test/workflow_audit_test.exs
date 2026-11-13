@@ -859,16 +859,122 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock) == []
     end
 
+    # A ref the lock does not hold is never accepted. When the lock holds the
+    # SAME action for this workflow at another ref, the workflow moved past its
+    # lock (a bump), so the finding is a stale lock to regenerate, not an
+    # inline SHA pin (which would drop the action from the lock).
     test "lockfile matching preserves case-sensitive refs" do
       wf = %{"c.yml" => "      - uses: actions/checkout@V7.0.1\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :unpinned_action
+      assert f.type == :actions_lock_stale
+      assert f.action == :regenerate_actions_lock
+    end
+
+    test "Rules.scan_workflow/2 surfaces a stale lock instead of dropping it" do
+      found =
+        Hypatia.Rules.scan_workflow("      - uses: actions/checkout@v6.0.0\n",
+          filename: "c.yml",
+          actions_lock: @lock
+        )
+
+      assert Enum.any?(found, &(&1.rule == "actions_lock_stale"))
+    end
+
+    test "the CLI keeps WF029's advertised A5 rule id" do
+      dir = Path.join(System.tmp_dir!(), "wf029-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".github/workflows"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(dir, ".github/workflows/gate.yml"), """
+      on: pull_request
+      permissions:
+        contents: read
+      jobs:
+        scan:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/upload-artifact@v7.0.0
+              with:
+                name: findings
+        deposit:
+          runs-on: ubuntu-latest
+          needs: [scan]
+          if: always()
+          steps:
+            - uses: actions/download-artifact@v8.0.2
+              with:
+                name: findings
+      """)
+
+      [f] =
+        dir
+        |> Hypatia.CLI.collect_findings([:workflow_audit])
+        |> Enum.filter(&(&1[:type] == "always_after_cancel"))
+
+      assert f.rule_module == "ci_failure_triage"
+    end
+
+    test "the combined CLI scan reports a stale lock once, not also as WH004" do
+      dir = Path.join(System.tmp_dir!(), "stale-lock-#{System.unique_integer([:positive])}")
+      wf_dir = Path.join(dir, ".github/workflows")
+      File.mkdir_p!(wf_dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(wf_dir, "c.yml"), """
+      on: push
+      permissions:
+        contents: read
+      jobs:
+        a:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v6.0.0
+      """)
+
+      File.write!(Path.join(wf_dir, "actions.lock"), @lock)
+
+      findings = Hypatia.CLI.collect_findings(dir, [:workflow_audit, :workflow_hardening])
+
+      stale =
+        Enum.filter(findings, fn f ->
+          String.contains?(to_string(f[:reason]), "actions/checkout@v6.0.0")
+        end)
+
+      assert length(stale) == 1
+    end
+
+    test "the combined CLI scan reports an unpinned action once (no WH004 duplicate)" do
+      dir = Path.join(System.tmp_dir!(), "dup-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".github/workflows"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(dir, ".github/workflows/ci.yml"), """
+      on: push
+      permissions:
+        contents: read
+      jobs:
+        a:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: some/action@v1
+      """)
+
+      hits =
+        dir
+        |> Hypatia.CLI.collect_findings([:workflow_audit, :workflow_hardening])
+        |> Enum.filter(&String.contains?(to_string(&1[:reason]), "some/action@v1"))
+
+      assert length(hits) == 1
     end
 
     test "a different ref of a locked action is NOT accepted" do
       wf = %{"c.yml" => "      - uses: actions/checkout@v6.0.0\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :unpinned_action
+      assert f.type == :actions_lock_stale
+      assert f.locked_ref == "actions/checkout@v7.0.1"
+      # Medium, as the unpinned_action finding it replaces was: the estate
+      # gate's blocking set does not change.
+      assert f.severity == :medium
     end
 
     test "a dependency listed only for another workflow does not authorize this one" do
@@ -899,8 +1005,17 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     test "a generated v0.0.3 lock with hostname fields is valid and keeps association" do
       standards = File.read!("test/fixtures/actions_lock/standards-b3ce78e-v0.0.3.lock")
 
+      # The fixture's self-SHA `hyperpolymath/standards` record is a reusable
+      # edge only if a workflow calls it at job level.
+      wf_with_call =
+        Map.put(@wf, "gov.yml", """
+        jobs:
+          gov:
+            uses: hyperpolymath/standards/.github/workflows/gov.yml@427eb35c40552d912d8c757518e8326f0d20f597
+        """)
+
       refute Enum.any?(
-               WorkflowAudit.check_unpinned_actions(@wf, actions_lock: standards),
+               WorkflowAudit.check_unpinned_actions(wf_with_call, actions_lock: standards),
                &(&1.type == :invalid_actions_lock)
              )
 

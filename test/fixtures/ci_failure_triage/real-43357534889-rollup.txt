@@ -1,0 +1,9 @@
+2026-11-13T03:14:27.5114639Z shell: /usr/bin/bash -e {0}
+2026-11-13T03:14:27.5115281Z env:
+2026-11-13T03:14:27.5115641Z   BUILD_IMAGES: failure
+2026-11-13T03:14:27.5116045Z   INTEGRATION_TESTS: skipped
+2026-11-13T03:14:27.5116472Z   COVERAGE_REPORT: skipped
+2026-11-13T03:14:27.5116929Z ##[endgroup]
+2026-11-13T03:14:27.5278650Z integration-status: ok=0 failed=3 total=3
+2026-11-13T03:14:27.5309582Z ##[error]3 of 3 integration jobs did not report success.
+2026-11-13T03:14:27.5324855Z ##[error]Process completed with exit code 1.

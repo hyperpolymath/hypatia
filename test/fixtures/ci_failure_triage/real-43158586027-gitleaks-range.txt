@@ -1,0 +1,17 @@
+2026-11-12T05:02:09.9061895Z event type: pull_request
+2026-11-12T05:02:10.3201870Z gitleaks cmd: gitleaks detect --redact -v --exit-code=2 --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges --first-parent 41901363fcd775bb9628acf571bbba93cca38420^..bf33aebf77b39ff6642948b76c7d712a6eb5e7d8
+2026-11-12T05:02:10.5996933Z 5:02AM DBG using existing gitleaks config .gitleaks.toml from `(--source)/.gitleaks.toml`
+2026-11-12T05:02:10.7361967Z 5:02AM DBG extending config with default config
+2026-11-12T05:02:10.7368031Z 5:02AM DBG extending config with .gitleaks-estate.toml
+2026-11-12T05:02:10.7381863Z 5:02AM DBG found .gitleaksignore file: .gitleaksignore
+2026-11-12T05:02:10.7384341Z 5:02AM DBG executing: /usr/bin/git -C . log -p -U0 --no-merges --first-parent 41901363fcd775bb9628acf571bbba93cca38420^..bf33aebf77b39ff6642948b76c7d712a6eb5e7d8
+2026-11-12T05:02:10.7404077Z 5:02AM ERR [git] fatal: ambiguous argument '41901363fcd775bb9628acf571bbba93cca38420^..bf33aebf77b39ff6642948b76c7d712a6eb5e7d8': unknown revision or path not in the working tree.
+2026-11-12T05:02:10.7406370Z 5:02AM ERR [git] Use '--' to separate paths from revisions, like this:
+2026-11-12T05:02:10.7407914Z 5:02AM ERR [git] 'git <command> [<revision>...] -- [<file>...]'
+2026-11-12T05:02:10.7421999Z 5:02AM DBG SCM platform parsed from host host=github.com platform=github
+2026-11-12T05:02:10.7423836Z 5:02AM ERR failed to scan Git repository error="stderr is not empty"
+2026-11-12T05:02:10.7425563Z 5:02AM WRN scanned ~0 bytes (0)
+2026-11-12T05:02:10.7426678Z 5:02AM WRN partial scan completed in 143ms
+2026-11-12T05:02:10.7428305Z 5:02AM WRN no leaks found in partial scan
+2026-11-12T05:02:11.5447390Z Artifact gitleaks-results.sarif.zip successfully finalized. Artifact ID 13916234889
+2026-11-12T05:02:11.5481566Z ##[error]ERROR: Unexpected exit code [1]

@@ -1,0 +1,1 @@
+Segmentation fault (core dumped) HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json
