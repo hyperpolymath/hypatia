@@ -100,7 +100,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       ],
       # GitHub's own throttle only: an app's API test that logs the same words
       # is the code under test, not the platform.
-      context: [~r/api\.github\.com|github\.com\/|\bgh api\b|x-github|installation/i],
+      context: [~r/api\.github\.com|\bgh api\b|x-github-request-id|installation ID \d+/i],
       action: :rerun,
       retries: 1,
       fix: nil,
@@ -378,6 +378,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "ssh_key_secret_empty",
       layer: :config,
       patterns: [~r/The ssh-private-key argument is empty/],
+      context: [~r/ssh-agent|webfactory|SSH agent/i],
       action: :owner,
       retries: 0,
       fix: nil,
@@ -404,6 +405,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "dependency_advisory",
       layer: :code,
       patterns: [~r/\bRUSTSEC-\d{4}-\d{4}\b/, ~r/error: \d+ vulnerabilit(y|ies) found/],
+      # An advisory id in a test or fixture is not an audit failure.
+      context: [~r/\d+ vulnerabilit(y|ies) found|cargo[- ]audit|cargo[- ]deny|Crate:\s+\S+/i],
       action: :report,
       retries: 0,
       fix: nil,

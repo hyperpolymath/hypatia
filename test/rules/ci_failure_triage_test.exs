@@ -166,6 +166,29 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("external_host_unreachable") in Enum.map(m, & &1.rule)
     end
 
+    test "a repository URL elsewhere in the log is not GitHub API context" do
+      log =
+        "Cloning https://github.com/org/repo\n  1) test quota\n     ** (RuntimeError) API rate limit exceeded\n5 tests, 1 failure\n"
+
+      %{matches: m} = T.classify(log)
+      refute T.id("api_rate_limit") in Enum.map(m, & &1.rule)
+    end
+
+    test "an advisory id in a failing test is not an audit failure" do
+      log = "  1) test advisory parser reads RUSTSEC-2026-0538\n5 tests, 1 failure\n"
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.rule == T.id("test_failure")
+      refute T.id("dependency_advisory") in Enum.map(m, & &1.rule)
+    end
+
+    test "an app's own empty ssh-private-key message is not the agent secret" do
+      log =
+        "  1) test cli\n     ** (ArgumentError) The ssh-private-key argument is empty\n5 tests, 1 failure\n"
+
+      %{matches: m} = T.classify(log)
+      refute T.id("ssh_key_secret_empty") in Enum.map(m, & &1.rule)
+    end
+
     test "a dotted unresolved host is still external" do
       %{primary: p} = T.classify("curl: (6) Could not resolve host: registry.npmjs.org\n")
       assert p.rule == T.id("external_host_unreachable")
