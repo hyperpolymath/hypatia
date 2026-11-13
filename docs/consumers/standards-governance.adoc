@@ -228,7 +228,7 @@ bash scripts/standards-integration/check-standards-integration.sh \
 == Runtime prerequisites (explicit)
 
 * Runner: `ubuntu-latest` only. The reusables install their own
-  toolchain (Elixir 1.19.4 / OTP 28.5.0.8 via `erlef/setup-beam`) — no
+  toolchain (Elixir 1.19.4 / OTP 28.3 at the pinned standards commit, via `erlef/setup-beam`) — no
   consumer-side Elixir, Rust or Zig setup is required for the scan or
   governance lanes.
 * Repository Actions policy must allow
