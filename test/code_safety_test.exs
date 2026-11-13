@@ -683,6 +683,46 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert unsafe_lines("let v = unsafe { ptr::read(addr) };\n") == [1]
     end
 
+    test "a '\"' char literal before a real block does not hide it (Codex P2)" do
+      assert unsafe_lines("let q = '\"'; unsafe { op() };\n") == [1]
+    end
+
+    test "a comment that only mentions SAFETY: does not excuse the block (Codex P2)" do
+      code = """
+      // TODO: add SAFETY: justification
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [2]
+    end
+
+    test "a dereference line between the comment and the block is code (Codex P2)" do
+      code = """
+      // SAFETY: about the line below only.
+      *boxed = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "a multi-line attribute between the comment and the block is skipped (Codex P2)" do
+      code = """
+      // SAFETY: fd is open and owned here.
+      #[cfg_attr(
+          feature = "x",
+          allow(clippy::undocumented_unsafe_blocks)
+      )]
+      unsafe { libc::close(fd) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "unsafe with its brace on the next line is still flagged (Codex P2)" do
+      assert unsafe_lines("let v = unsafe\n{ op() };\n") != []
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end
@@ -701,6 +741,9 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       for code <- [
             "let b = unsafe { Box::from_raw(p) };",
             "let a = unsafe { Arc::from_raw(p) };",
+            "let t = unsafe { Box::<T>::from_raw(p) };",
+            "let u = unsafe { <Box<T>>::from_raw(p) };",
+            "let w = unsafe { Box::<Vec<u8>>::from_raw(p) };",
             "let s = unsafe { std::slice::from_raw_parts(p, n) };",
             "let f = unsafe { File::from_raw_fd(fd) };"
           ] do

@@ -108,7 +108,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # `unsafe`. A bare `from_raw` also matched safe APIs such as
       # `rustix::process::Pid::from_raw(i32)` (gitbot-fleet#673).
       pattern:
-        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
+        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)(?:(?:::)?<[^;\n]*?>+)?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
       cwe: "CWE-676",
       description: "from_raw constructs types from raw pointers without safety checks"
     },
@@ -945,36 +945,73 @@ defmodule Hypatia.Rules.CodeSafety do
   # nearest non-blank lines above it are a comment block naming `SAFETY:`.
   # Attribute lines (`#[...]`) between the comment and the block are allowed.
   defp unsafe_line_excused?(line, orig_lines, line_number) do
-    code_hits =
-      ~r/unsafe\s*\{/
-      |> Regex.scan(line, return: :index)
-      |> Enum.reject(fn [{off, _} | _] -> inside_string?(binary_part(line, 0, off)) end)
+    hits = Regex.scan(~r/unsafe\s*\{/, line, return: :index)
 
-    code_hits == [] or safety_comment_above?(orig_lines, line_number)
+    code_hits =
+      Enum.reject(hits, fn [{off, _} | _] -> inside_string?(binary_part(line, 0, off)) end)
+
+    # A line with no complete `unsafe {` (e.g. the brace is on the next line)
+    # is never blanked: the file-level pattern may need it.
+    hits != [] and (code_hits == [] or safety_comment_above?(orig_lines, line_number))
   end
 
   # An odd number of unescaped double quotes before the match means it is
-  # inside a string on this line.
+  # inside a string on this line. Character literals ('"', '\\"') are removed
+  # first so they do not count as string delimiters.
   defp inside_string?(prefix) do
     prefix
+    |> String.replace(~r/'(?:\\.|[^'\\])'/, "")
     |> String.replace("\\\"", "")
     |> String.graphemes()
     |> Enum.count(&(&1 == "\""))
     |> rem(2) == 1
   end
 
+  # The nearest non-blank lines above, past any attributes (single- or
+  # multi-line), must be a comment block whose comment LABELS itself
+  # `SAFETY:` (`// SAFETY: ...`, `/* SAFETY: ...`, ` * SAFETY: ...`). A
+  # comment that only mentions the word does not count.
   defp safety_comment_above?(orig_lines, line_number) do
-    orig_lines
-    |> Enum.take(line_number - 1)
-    |> Enum.reverse()
-    |> Enum.map(&String.trim/1)
-    |> Enum.drop_while(&(&1 == "" or String.starts_with?(&1, "#[")))
-    |> Enum.take_while(&comment_line?/1)
-    |> Enum.any?(&String.contains?(&1, "SAFETY:"))
+    block =
+      orig_lines
+      |> Enum.take(line_number - 1)
+      |> Enum.reverse()
+      |> Enum.map(&String.trim/1)
+      |> skip_blanks_and_attributes()
+      |> Enum.take_while(&comment_line?/1)
+
+    # A ` * ...` continuation line counts only inside a real /* block.
+    block_ok =
+      not Enum.any?(block, &String.starts_with?(&1, "*")) or
+        Enum.any?(block, &String.starts_with?(&1, "/*"))
+
+    block_ok and Enum.any?(block, &Regex.match?(~r{^(?://+!?|/\*+!?|\*)\s*SAFETY:}, &1))
   end
 
+  # Lines are in reverse order (nearest first). An attribute that spans lines
+  # ends with `]` on a line that does not start with `#[`; skip up to its `#[`.
+  defp skip_blanks_and_attributes(["" | rest]), do: skip_blanks_and_attributes(rest)
+
+  defp skip_blanks_and_attributes(["#[" <> _ | rest]), do: skip_blanks_and_attributes(rest)
+
+  defp skip_blanks_and_attributes([line | rest] = lines) do
+    if String.ends_with?(line, "]") do
+      case Enum.split_while(rest, &(not String.starts_with?(&1, "#["))) do
+        {_inner, ["#[" <> _ | after_attr]} -> skip_blanks_and_attributes(after_attr)
+        _ -> lines
+      end
+    else
+      lines
+    end
+  end
+
+  defp skip_blanks_and_attributes([]), do: []
+
+  # `//`, `/*`, a block-comment continuation (`*` then space, `/` or end of
+  # line: `*boxed = 1;` is code), or a line closing a block comment.
   defp comment_line?(line) do
-    String.starts_with?(line, ["//", "/*", "*"]) or String.ends_with?(line, "*/")
+    String.starts_with?(line, ["//", "/*"]) or Regex.match?(~r{^\*(\s|/|$)}, line) or
+      String.ends_with?(line, "*/")
   end
 
   @doc false
