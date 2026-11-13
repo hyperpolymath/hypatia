@@ -474,6 +474,22 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => step})
     end
 
+    test "a comparison around !cancelled() is not a guard" do
+      job =
+        String.replace(@deposit, "if: always()", "if: ${{ always() && (!cancelled() == false) }}")
+
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => job})
+
+      step =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n",
+          "      - if: ${{ !cancelled() == false }}\n        uses: actions/download-artifact@v8.0.2\n"
+        )
+
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => step})
+    end
+
     test "a download step guarded by !cancelled() does not fire" do
       guarded =
         String.replace(

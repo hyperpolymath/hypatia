@@ -4194,15 +4194,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  # An `if:` that is false once the run is cancelled: a conjunction that
-  # contains `!cancelled()` or `success()`. Any `||` can make the whole
-  # expression true after a cancel (`always() || !cancelled()`), so an
-  # expression with `||` is never treated as a guard. Conservative: a
-  # false "not guarded" only costs a finding a person can dismiss.
+  # An `if:` that is false once the run is cancelled. Structural, not a
+  # substring test: strip `${{ }}`, split on `&&`, and require one conjunct
+  # to be exactly `!cancelled()` or `success()`. Anything else — `||`,
+  # parentheses, comparisons (`!cancelled() == false`) — is uncertain and
+  # treated as unguarded; a false "unguarded" only costs a dismissable finding.
   defp excludes_cancellation?(cond_text) do
-    not String.contains?(cond_text, "||") and
-      (Regex.match?(~r/!\s*cancelled\(\)/, cond_text) or
-         Regex.match?(~r/\bsuccess\(\)/, cond_text))
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+      |> String.replace(~r/\s+/, "")
+
+    if String.contains?(expr, ["||", "==", "!=", "(!", ")!", "((", "))"]) or
+         Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
+      false
+    else
+      expr |> String.split("&&") |> Enum.any?(&(&1 in ["!cancelled()", "success()"]))
+    end
   end
 
   defp current_run_download?(run_id) when run_id in [nil, ""], do: true
