@@ -4113,7 +4113,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
               text = Map.fetch!(texts, job.id),
               Regex.match?(@mirror_push, text),
               Regex.match?(@mirror_gate, text),
-              not guarded?(job, texts) do
+              not guarded?(job, jobs, texts) do
             %{
               rule: "WF030",
               rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
@@ -4141,10 +4141,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # A needed job's guard counts only when this job still requires that job to
   # succeed: a status function in `if:` (always(), failure(), cancelled(),
-  # !cancelled()) lets the mirror run after the guard job fails.
-  defp guarded?(job, texts) do
-    ids = if runs_after_failure?(job), do: [job.id], else: [job.id | mirror_direct_needs(job)]
-    Enum.any?(ids, fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  # !cancelled()) lets the mirror run after the guard job fails. Needs are
+  # followed transitively (guard -> prepare -> mirror), and the chain stops at
+  # any job that runs after a failure.
+  defp guarded?(job, jobs, texts) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+
+    [job.id | guard_ancestors(job, by_id, MapSet.new([job.id]))]
+    |> Enum.any?(fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  end
+
+  defp guard_ancestors(job, by_id, seen) do
+    if runs_after_failure?(job) do
+      []
+    else
+      job
+      |> mirror_direct_needs()
+      |> Enum.reject(&MapSet.member?(seen, &1))
+      |> Enum.flat_map(fn id ->
+        case Map.fetch(by_id, id) do
+          {:ok, need} -> [id | guard_ancestors(need, by_id, MapSet.put(seen, id))]
+          :error -> [id]
+        end
+      end)
+    end
   end
 
   defp runs_after_failure?(job) do
@@ -4181,7 +4201,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           |> Enum.join("\n")
           |> String.split("\n")
           |> Enum.map_join("\n", &wf_strip_comment/1)
-          |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+          |> then(&Regex.replace(~r/\\\r?\n[ \t]*/, &1, " "))
         else
           ""
         end
