@@ -803,6 +803,30 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert unsafe_lines(~S|let s = "\\"; unsafe { op() };| <> "\n") == [1]
     end
 
+    test "code after a closing */ ends the SAFETY search (Codex P2)" do
+      code = """
+      /*
+       * SAFETY: about earlier code.
+       */ let x = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [4]
+    end
+
+    test "the SAFETY lookup is linear in the number of blocks (Codex P2)" do
+      block = "fn f() {\n    // SAFETY: p is valid.\n    let v = unsafe { op(p) };\n}\n"
+      src = String.duplicate(block, 20_000)
+      matches = Regex.scan(~r/\bunsafe\s*\{/, src, return: :index)
+      lines = String.split(src, "\n")
+
+      {us, kept} = :timer.tc(fn -> CodeSafety.reject_excused_unsafe(src, lines, matches) end)
+
+      assert length(matches) == 20_000
+      assert kept == []
+      assert us < 2_000_000, "took #{div(us, 1000)} ms"
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end
