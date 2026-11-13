@@ -2964,7 +2964,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
             cond do
               wf027_inline_job?(lines, flow, line, number, at + 1) -> {add_call(c, value), st}
-              wf_in_flow?(flow, number) or step_line?(lines, number) -> {c, add_action(st, value)}
+              flow_step?(lines, flow, line, number, at + 1) -> {c, add_action(st, value)}
               true -> {c, st}
             end
           end)
@@ -2972,7 +2972,35 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # A flow-style `uses:` is a step action only when its mapping is an item of
+  # a `steps:` sequence of a job (jobs.<id>.steps): the nearest named key above
+  # it is `steps` and `jobs` is above that. A matrix `include:` row, `env:`,
+  # `with:` and the like are not steps.
+  defp flow_step?(lines, flow, line, number, uses_at) do
+    keys =
+      if wf_in_flow?(flow, number) do
+        case wf_flow_context(lines, flow, number, uses_at) do
+          {:ok, keys, [:map | _], _} -> keys
+          _ -> nil
+        end
+      else
+        case {wf_flow_opener_stack(line, uses_at), wf_ancestor_keys(lines, number)} do
+          {{:ok, [open | _] = stack}, ancestors} when is_integer(open) and is_list(ancestors) ->
+            wf_flow_opener_keys(line, stack) ++ ancestors
+
+          _ ->
+            nil
+        end
+      end
+
+    case keys && Enum.filter(keys, &is_binary/1) do
+      ["steps" | rest] -> "jobs" in rest
+      _ -> false
+    end
+  end
+
   defp step_line?(lines, number) do
+
     case wf_ancestor_keys(lines, number) do
       keys when is_list(keys) -> "steps" in keys
       _ -> false

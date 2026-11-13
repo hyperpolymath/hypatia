@@ -480,6 +480,57 @@ defmodule Hypatia.Rules.ActionsLockTest do
              ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
   end
 
+  test "a flow-style matrix row does not remove the exemption, a flow-style step does" do
+    matrix = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        strategy:
+          matrix:
+            include:
+              - { uses: metadatastician/standards@#{@sha_c} }
+        steps:
+          - run: echo
+    """
+
+    expected = MapSet.new(["metadatastician/standards@" <> @sha_c])
+    assert ActionsLock.reusable_callers([matrix]) == expected
+
+    flow_matrix = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        strategy: { matrix: { include: [ { uses: metadatastician/standards@#{@sha_c} } ] } }
+        steps:
+          - run: echo
+    """
+
+    assert ActionsLock.reusable_callers([flow_matrix]) == expected
+
+    flow_step = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        steps:
+          - { uses: metadatastician/standards@#{@sha_c} }
+    """
+
+    assert ActionsLock.reusable_callers([flow_step]) == MapSet.new()
+
+    flow_steps_seq = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        steps: [ { uses: metadatastician/standards@#{@sha_c} } ]
+    """
+
+    assert ActionsLock.reusable_callers([flow_steps_seq]) == MapSet.new()
+  end
+
   test "a single-file scan skips the self-SHA check and says the context is incomplete" do
     alias Hypatia.Rules.WorkflowAudit
 
