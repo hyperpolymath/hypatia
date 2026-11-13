@@ -863,7 +863,10 @@ defmodule Hypatia.Rules.PrAutomerge do
       Regex.match?(~r/(^|\/)(LICENSE|NOTICE|CODEOWNERS|\.gitattributes|\.editorconfig)/, filename)
   end
 
-  defp licence_path?(filename) do
+  # Public so AdminMergeEligibility (AM010) vetoes exactly the same set;
+  # a second hand-copied list would drift.
+  @doc false
+  def licence_path?(filename) when is_binary(filename) do
     base = Path.basename(filename)
 
     String.starts_with?(base, ["LICENSE", "LICENCE", "COPYING", "NOTICE"]) or
