@@ -191,7 +191,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # The GitHub client forms only; an app's own login test may log the
         # bare phrase.
         ~r/\bgh(?: api)?\b[^\n]*Bad credentials/,
-        ~r/HTTP 401: Bad credentials/,
+        # gh's own error form names the API host; a bare "HTTP 401: Bad
+        # credentials" from an app's HTTP test is not a GitHub token.
+        ~r/HTTP 401: Bad credentials \(https:\/\/api\.github\.com/,
         # git over HTTPS: the server answered and refused the credential.
         ~r/fatal: unable to access '[^']+': The requested URL returned error: 40[13]/
       ],
@@ -898,7 +900,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   def check_scanner_pin_drift(contents) when is_map(contents) do
     sites =
       for {label, content} <- contents,
-          content = strip_yaml_comments(content),
+          content = content |> String.replace("\r\n", "\n") |> strip_yaml_comments(),
           re <- [@scanner_pin, @scanner_input, @scanner_pin_flow, @scanner_input_flow],
           match <- Regex.scan(re, content),
           [key, sha] = Enum.take(match, -2) do

@@ -166,6 +166,14 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("external_host_unreachable") in Enum.map(m, & &1.rule)
     end
 
+    test "an app's bare HTTP 401 Bad credentials is not a GitHub token" do
+      log =
+        "  1) test login\n     ** (RuntimeError) HTTP 401: Bad credentials\n5 tests, 1 failure\n"
+
+      %{matches: m} = T.classify(log)
+      refute T.id("token_invalid") in Enum.map(m, & &1.rule)
+    end
+
     test "a repository URL elsewhere in the log is not GitHub API context" do
       log =
         "Cloning https://github.com/org/repo\n  1) test quota\n     ** (RuntimeError) API rate limit exceeded\n5 tests, 1 failure\n"
@@ -480,6 +488,20 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert Enum.all?(found, &(&1.action == :owner))
     end
 
+    test "a CRLF block-form input default is a pin" do
+      contents = %{
+        "a.yml" =>
+          String.replace(
+            "inputs:\n  panic-ref:\n    type: string\n    default: #{@a}\n",
+            "\n",
+            "\r\n"
+          ),
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
     test "a quoted default key in a flow mapping is a pin" do
       contents = %{
         "a.yml" => "inputs:\n  panic-ref: {\"default\": #{@a}}\n",
@@ -683,6 +705,22 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "always() || !cancelled() on the job is not a guard" do
       pos = String.replace(@deposit, "if: always()", "if: ${{ always() || !cancelled() }}")
       assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => pos})
+    end
+
+    test "an unrelated comparison beside !cancelled() keeps the guard" do
+      g =
+        String.replace(
+          @deposit,
+          "if: always()",
+          "if: ${{ always() && !cancelled() && github.event_name == 'push' }}"
+        )
+
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => g}) == []
+    end
+
+    test "!cancelled() inside a quoted string is not a guard" do
+      g = String.replace(@deposit, "if: always()", "if: ${{ always() && 'x && !cancelled()' }}")
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => g})
     end
 
     test "always() && !cancelled() on the job is a guard" do

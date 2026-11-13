@@ -4588,9 +4588,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
       cond_text
       |> String.trim()
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+      # A quoted literal is opaque: `'x && !cancelled()'` is one truthy string.
+      |> String.replace(~r/'(?:[^']|'')*'/, "S")
       |> String.replace(~r/\s+/, "")
 
-    if String.contains?(expr, ["||", "==", "!=", "(!", ")!", "((", "))", "'", "\""]) or
+    # `||` or grouping can make any conjunct optional, so the guard is
+    # uncertain. A comparison in ANOTHER conjunct (`github.event_name == 'push'`)
+    # cannot disable an exact `!cancelled()` conjunct, so only the conjunct
+    # itself has to match.
+    if String.contains?(expr, "||") or
          Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
       false
     else
