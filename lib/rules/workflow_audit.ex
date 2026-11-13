@@ -98,6 +98,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
     always_after_cancel = check_always_after_cancel(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
+    gitleaks_full_history = check_gitleaks_full_history_on_pr(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -139,7 +140,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           broken_reusable_revisions ++
           moved_reusable_calls ++
           always_after_cancel ++
-          mirror_visibility,
+          mirror_visibility ++
+          gitleaks_full_history,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -4470,6 +4472,85 @@ defmodule Hypatia.Rules.WorkflowAudit do
       _ ->
         acc
     end
+  end
+
+  # ─── WF031: gitleaks scans all history on a PR (CASE-036) ─────────────
+  #
+  # gitbot-fleet#673: a secret scan run on pull_request with
+  # `--log-opts=--all` reads every branch, so one secret anywhere reddens
+  # every PR. Owner ruling 2026-11-13: base..head on PRs, full history on main.
+
+  @pr_events ["pull_request", "pull_request_target"]
+  @gitleaks ~r/\bgitleaks\b/
+  # The value of --log-opts only: a quoted string, or an unquoted word.
+  @log_opts ~r/--log-opts(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s"';]+))/
+
+  @doc """
+  WF031: a workflow triggered by `pull_request` runs gitleaks over all
+  history (`--log-opts=--all`) in a job not gated to `push`. Every PR then
+  inherits any secret on any branch. Scan `base..head` on PRs and keep the
+  full-history pass on `main`. Medium, referral only (cicd-squabbler owns
+  the fix, R1).
+  """
+  def check_gitleaks_full_history_on_pr(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{triggers: triggers, jobs: jobs}} when jobs != [] ->
+          if Enum.any?(triggers, &(&1 in @pr_events)) do
+            texts = job_texts(jobs)
+
+            for job <- jobs,
+                text = Map.fetch!(texts, job.id),
+                Regex.match?(@gitleaks, text),
+                all_history_log_opts?(text),
+                not push_only?(job.if || "") do
+              %{
+                rule: "WF031",
+                rule_id: "hypatia/workflow_audit/gitleaks_full_history_on_pr",
+                type: :gitleaks_full_history_on_pr,
+                file: filename,
+                line: job.line,
+                job: job.id,
+                severity: :medium,
+                action: :report,
+                reason:
+                  "#{filename} job `#{job.id}` runs gitleaks over all history " <>
+                    "(--log-opts=--all) on pull_request, so a secret on any branch " <>
+                    "fails every PR. Scan base..head on PRs; keep the full-history " <>
+                    "pass on main."
+              }
+            end
+          else
+            []
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp all_history_log_opts?(text) do
+    @log_opts
+    |> Regex.scan(text, capture: :all_but_first)
+    |> Enum.any?(fn groups -> groups |> Enum.join(" ") |> String.match?(~r/(^|\s)--all\b/) end)
+  end
+
+  # Push-only when one `&&` conjunct is exactly `github.event_name == 'push'`
+  # and no `||` can bypass it.
+  defp push_only?(cond_text) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+
+    # `||`, negation or grouping can make the push comparison optional, so
+    # only a flat `&&` chain proves it is required.
+    not String.contains?(expr, "||") and
+      not Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) and
+      expr
+      |> String.split("&&")
+      |> Enum.any?(&Regex.match?(~r/^\s*github\.event_name\s*==\s*['"]push['"]\s*$/, &1))
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────

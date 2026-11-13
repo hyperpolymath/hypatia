@@ -116,3 +116,23 @@ merge_ready() {
   [ -z "$c" ] || { echo "ruleset_bypass_actor_present"; return 1; }
   return 0
 }
+
+# pr_threads_ready FULL NUM: owner ruling R6 (2026-11-13). Auto-merge only
+# when every review thread on the PR is resolved. A bot finding left open is
+# not a pass, and GitHub's native auto-merge does not wait for threads unless
+# the ruleset requires conversation resolution. Resolution state exists only
+# in GraphQL. Fails closed: an unreadable answer, or more than 100 threads
+# with none open among them, blocks the merge. Prints the reason on failure.
+pr_threads_ready() {
+  local full="$1" num="$2" out
+  # shellcheck disable=SC2016  # $owner/$name/$number are GraphQL variables
+  out=$(gh api graphql -F owner="${full%%/*}" -F name="${full#*/}" -F number="$num" \
+          -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}' \
+          --jq '.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved | not)] | length) \(.pageInfo.hasNextPage)"' 2>/dev/null) \
+    || { echo "check_unavailable:review_threads"; return 1; }
+  case "$out" in
+    "0 false") return 0 ;;
+    [1-9]*" "*) echo "unresolved_review_threads:${out%% *}"; return 1 ;;
+    *) echo "check_unavailable:review_threads"; return 1 ;;
+  esac
+}
