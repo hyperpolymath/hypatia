@@ -361,6 +361,28 @@ defmodule Hypatia.Rules.WorkflowAudit do
               }
             ]
 
+          # The lock lists this action for this workflow at ANOTHER ref: the
+          # workflow moved (typically a Dependabot bump) and the lock did not.
+          # The runner then refuses the job at `Set up job`. The fix is to
+          # regenerate the lock, never to SHA-pin inline (see above). Seen in
+          # EpistemicTypes.jl, ResidualEvidenceTypes.jl and this-ssg (2026-11).
+          (stale = stale_lock_ref(lock, filename, slug)) != nil ->
+            [
+              %{
+                type: :actions_lock_stale,
+                rule_id: "hypatia/workflow_audit/actions_lock_stale",
+                file: filename,
+                action_ref: slug,
+                locked_ref: stale,
+                severity: :high,
+                action: :regenerate_actions_lock,
+                reason:
+                  "#{filename} uses `#{slug}` but actions.lock pins `#{stale}` for this " <>
+                    "workflow, so the job fails at Set up job. Regenerate the lock " <>
+                    "(`gh actions-lock`) in the same PR as the bump; do not SHA-pin inline."
+              }
+            ]
+
           true ->
             severity = if ref in ["main", "master"], do: :high, else: :medium
 
@@ -385,6 +407,25 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end)
     end)
   end
+
+  # The ref the lock holds for the same action in the same workflow, when it
+  # differs from the one the workflow now uses; nil otherwise.
+  defp stale_lock_ref(%Hypatia.Rules.ActionsLock{} = lock, filename, slug) do
+    want = Hypatia.Rules.ActionsLock.normalise_ref(slug)
+    action = want |> String.split("@", parts: 2) |> hd()
+
+    case Hypatia.Rules.ActionsLock.workflow_refs(lock, filename) do
+      nil ->
+        nil
+
+      refs ->
+        Enum.find(Enum.sort(refs), fn r ->
+          r != want and hd(String.split(r, "@", parts: 2)) == action
+        end)
+    end
+  end
+
+  defp stale_lock_ref(_lock, _filename, _slug), do: nil
 
   # The remediation text for an unpinned action. This used to be omitted
   # entirely, so `cli.ex` substituted the generated string

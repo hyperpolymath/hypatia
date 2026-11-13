@@ -242,6 +242,21 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "empty. Store it where the workflow reads it. Only a person can do this."
     },
     %{
+      name: "pages_not_enabled",
+      layer: :config,
+      patterns: [
+        ~r/Get Pages site failed/,
+        ~r/verify that the repository has Pages enabled/
+      ],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "GitHub Pages is not enabled for the repository (configure-pages cannot find " <>
+          "a site). Enabling it is a repository setting: escalate, never fix in code."
+    },
+    %{
       name: "canon_lockstep",
       layer: :config,
       patterns: [
@@ -279,7 +294,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :code,
       patterns: [
         ~r/regress\w*[^\n]{0,80}\b\d+(\.\d+)?x\b/i,
-        ~r/\b\d+(\.\d+)?x\b[^\n]{0,80}(baseline|threshold)/i
+        ~r/\b\d+(\.\d+)?x\b[^\n]{0,80}(baseline|threshold|limit)/i
       ],
       action: :owner,
       retries: 0,
@@ -338,6 +353,22 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason: "Tests failed. This is a code failure; report it to the change's author."
     },
     %{
+      name: "upstream_artifact_missing",
+      layer: :code,
+      patterns: [
+        ~r/Artifact not found for name/,
+        ~r/Unable to download artifact\(s\)/,
+        ~r/No artifacts found|Unable to find any artifacts/
+      ],
+      action: :upstream,
+      retries: 0,
+      fix: nil,
+      escalation: :none,
+      reason:
+        "An artifact a job expects was never uploaded: the job that makes it failed, " <>
+          "crashed (for example a scanner SIGSEGV) or was cancelled. Triage that job."
+    },
+    %{
       name: "rollup_cascade",
       layer: :code,
       patterns: [~r/\d+ of \d+ [\w -]+ (did not report success|did not complete)/],
@@ -358,7 +389,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
     :edit_ruleset,
     :edit_licence_or_spdx,
     :loosen_canon_gate,
-    :skip_or_quarantine_test
+    :skip_or_quarantine_test,
+    # A security finding (Hypatia critical, a Sonar security rating) stays
+    # open until a person resolves it; no rule closes, baselines or hides it.
+    :close_or_baseline_security_finding
   ]
 
   @doc "The rule id for a rule name."

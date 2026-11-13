@@ -859,16 +859,23 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock) == []
     end
 
+    # A ref the lock does not hold is never accepted. When the lock holds the
+    # SAME action for this workflow at another ref, the workflow moved past its
+    # lock (a bump), so the finding is a stale lock to regenerate, not an
+    # inline SHA pin (which would drop the action from the lock).
     test "lockfile matching preserves case-sensitive refs" do
       wf = %{"c.yml" => "      - uses: actions/checkout@V7.0.1\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :unpinned_action
+      assert f.type == :actions_lock_stale
+      assert f.action == :regenerate_actions_lock
     end
 
     test "a different ref of a locked action is NOT accepted" do
       wf = %{"c.yml" => "      - uses: actions/checkout@v6.0.0\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :unpinned_action
+      assert f.type == :actions_lock_stale
+      assert f.locked_ref == "actions/checkout@v7.0.1"
+      assert f.severity == :high
     end
 
     test "a dependency listed only for another workflow does not authorize this one" do

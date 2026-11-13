@@ -26,6 +26,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"canon-lockstep.txt", "canon_lockstep", :fix},
     {"bench-regression.txt", "bench_regression", :owner},
     {"exunit-failure.txt", "test_failure", :report},
+    # Doctrine 16 sweep, 2026-11-13: Pages off (xmlpull-zig, sholes), bench over
+    # its limit (unified-api-adapter), findings artifact missing after a
+    # scanner SIGSEGV (bactrian, quintessence).
+    {"pages-not-enabled.txt", "pages_not_enabled", :owner},
+    {"bench-over-limit.txt", "bench_regression", :owner},
+    {"findings-artifact-after-segfault.txt", "upstream_artifact_missing", :upstream},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},
     {"real-43358533401-graphql-502.txt", "api_server_error", :rerun},
@@ -126,6 +132,10 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.decide(p, 0).action == :fix
     end
 
+    test "security findings may never be closed or baselined by a rule" do
+      assert :close_or_baseline_security_finding in T.forbidden_actions()
+    end
+
     test "nothing in the forbidden list is an action any rule takes" do
       actions = T.rules() |> Enum.map(& &1.action) |> MapSet.new()
       assert MapSet.disjoint?(actions, MapSet.new(T.forbidden_actions()))
@@ -171,6 +181,47 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "one commit everywhere is not drift" do
       contents = %{"a.yml" => "  PA_SHA: #{@a}\n", "b.yml" => "  PANIC_ATTACK_SHA: #{@a}\n"}
       assert T.check_scanner_pin_drift(contents) == []
+    end
+  end
+
+  describe "actions.lock stale after a bump" do
+    @lock """
+    version: 'v0.0.3'
+    workflows:
+        '.github/workflows/ci.yml':
+            - 'actions/checkout@v7.0.1'
+    dependencies:
+        'actions/checkout@v7.0.1':
+            ref: 'v7.0.1'
+            commit: 'sha1-1111111111111111111111111111111111111111'
+            owner_id: 44036562
+            repo_id: 197814629
+    """
+
+    test "a workflow bumped past its lock entry is a stale lock, not an unpinned action" do
+      wf = %{
+        "ci.yml" =>
+          "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7.0.2\n"
+      }
+
+      case Hypatia.Rules.ActionsLock.parse(@lock) do
+        {:ok, _} ->
+          findings = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
+          assert [%{type: :actions_lock_stale, locked_ref: "actions/checkout@v7.0.1"}] = findings
+          refute Enum.any?(findings, &(&1.type == :unpinned_action))
+
+        {:error, reason} ->
+          flunk("fixture lock did not parse: #{inspect(reason)}")
+      end
+    end
+
+    test "the locked ref itself is still pinned" do
+      wf = %{
+        "ci.yml" =>
+          "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7.0.1\n"
+      }
+
+      assert WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock) == []
     end
   end
 
