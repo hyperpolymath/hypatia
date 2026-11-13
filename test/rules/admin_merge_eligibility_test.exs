@@ -10,6 +10,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       # affinescript 2026-05-28: every required context green except
       # `spark-theatre-gate / SPARK Theatre Gate`, which is phantom.
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "semgrep", "spark-theatre-gate / SPARK Theatre Gate"],
         phantom_contexts: ["spark-theatre-gate / SPARK Theatre Gate"],
         rollup: [
@@ -23,6 +24,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "eligible when all required pass and a phantom is also present in rollup but unconcluded" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -35,6 +37,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "not eligible when a non-phantom required context is failing" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "semgrep", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -48,6 +51,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "not eligible when phantom_contexts is empty" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint"],
         phantom_contexts: [],
         rollup: [%{"name" => "lint", "conclusion" => "SUCCESS"}]
@@ -58,6 +62,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "not eligible when required_contexts is empty" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: [],
         phantom_contexts: ["spark-theatre-gate / SPARK Theatre Gate"],
         rollup: []
@@ -68,6 +73,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "NEUTRAL and SKIPPED count as passing" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "optional-skipped", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -79,9 +85,9 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       assert AM.am010_phantom_only_blocker?(pr_state) == {:eligible, "AM010"}
     end
 
-    test "non-map input falls through to :not_phantom_only" do
-      assert AM.am010_phantom_only_blocker?(nil) == :not_phantom_only
-      assert AM.am010_phantom_only_blocker?("garbage") == :not_phantom_only
+    test "non-map input is fail-closed (:files_unknown), never eligible" do
+      assert AM.am010_phantom_only_blocker?(nil) == :files_unknown
+      assert AM.am010_phantom_only_blocker?("garbage") == :files_unknown
     end
 
     # ALARP type-1 safety: a context flagged phantom by BP008 (sample-based,
@@ -90,6 +96,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
     # commits. Admin-merging would bypass an actively-running check.
     test "in-progress phantom on this PR is NOT treated as phantom (waits for it)" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "path-filtered-thing"],
         phantom_contexts: ["path-filtered-thing"],
         rollup: [
@@ -103,6 +110,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "queued phantom on this PR is NOT treated as phantom" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -116,6 +124,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "pending status (lowercase) on phantom is NOT treated as phantom" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -129,6 +138,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
 
     test "all phantoms in-progress collapses set to empty → not eligible" do
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-a", "phantom-b"],
         phantom_contexts: ["phantom-a", "phantom-b"],
         rollup: [
@@ -145,6 +155,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       # A BP008-flagged phantom that actually ran and failed on this PR
       # is NOT phantom for this commit. AM010 declines.
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -161,6 +172,7 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       # context with SUCCESS, it's passing — eligibility holds for the
       # standard "all passing" reason.
       pr_state = %{
+        files: ["lib/app.ex"],
         required_contexts: ["lint", "phantom-thing"],
         phantom_contexts: ["phantom-thing"],
         rollup: [
@@ -182,6 +194,88 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       catalog = AM.rule_catalog()
       assert Map.has_key?(catalog, "AM010")
       assert catalog["AM010"] =~ "phantom"
+    end
+  end
+
+  # Owner ruling 2026-11-13: licence work is manual and owner-only, so no
+  # licence PR is ever admin-merge eligible, whatever its title.
+  describe "licence PRs are never admin-merge eligible" do
+    for title <- [
+          "license/migrate-to-mpl-2.0",
+          "chore: migrate to MPL-2.0",
+          "chore: migrate licence headers to MPL-2.0"
+        ] do
+      test "#{title} requires review" do
+        assert AM.classify(unquote(title)) == :requires_review
+
+        assert AM.eligible?(%{
+                 title: unquote(title),
+                 isDraft: false,
+                 mergeable: "MERGEABLE",
+                 mergeStateStatus: "BLOCKED"
+               }) == :requires_review
+      end
+    end
+
+    test "AM010 refuses a licence PR even when only a phantom check blocks it" do
+      base = %{
+        required_contexts: ["CodeQL", "lint"],
+        phantom_contexts: ["CodeQL"],
+        rollup: [%{"name" => "lint", "conclusion" => "SUCCESS"}]
+      }
+
+      # Same state, non-licence files: eligible.
+      assert AM.am010_phantom_only_blocker?(Map.put(base, :files, ["lib/app.ex"])) ==
+               {:eligible, "AM010"}
+
+      for path <- [
+            "LICENSE",
+            "LICENCE.md",
+            "COPYING",
+            "NOTICE",
+            "LICENSES/MPL-2.0.txt",
+            "docs/thing.spdx",
+            "REUSE.toml"
+          ] do
+        assert AM.am010_phantom_only_blocker?(Map.put(base, :files, ["lib/app.ex", path])) ==
+                 :licence_requires_owner,
+               path
+      end
+    end
+
+    test "AM010 vetoes the full PrAutomerge licence set" do
+      base = %{
+        required_contexts: ["CodeQL"],
+        phantom_contexts: ["CodeQL"],
+        rollup: []
+      }
+
+      for path <- [
+            "LICENSE_HEADER",
+            "THIRD_PARTY_LICENSES",
+            "SPDX.json",
+            "vendor/x/LICENSES/MIT.txt"
+          ] do
+        assert AM.am010_phantom_only_blocker?(Map.put(base, :files, [path])) ==
+                 :licence_requires_owner,
+               path
+      end
+    end
+
+    test "AM010 is fail-closed when the changed files are unknown" do
+      base = %{
+        required_contexts: ["CodeQL"],
+        phantom_contexts: ["CodeQL"],
+        rollup: []
+      }
+
+      assert AM.am010_phantom_only_blocker?(base) == :files_unknown
+      assert AM.am010_phantom_only_blocker?(Map.put(base, :files, :error)) == :files_unknown
+      assert AM.am010_phantom_only_blocker?(%{}) == :files_unknown
+    end
+
+    test "AM009 still covers linguist excludes" do
+      assert AM.classify("chore(linguist): exclude vendored fixtures") == {:eligible, "AM009"}
     end
   end
 end
