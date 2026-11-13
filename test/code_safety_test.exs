@@ -827,6 +827,16 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert us < 2_000_000, "took #{div(us, 1000)} ms"
     end
 
+    test "an attribute with a trailing comment is skipped (Codex P2)" do
+      code = """
+      // SAFETY: nothing is performed.
+      #[allow(unused_unsafe)] // generated code
+      unsafe {}
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end

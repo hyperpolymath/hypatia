@@ -1006,9 +1006,9 @@ defmodule Hypatia.Rules.CodeSafety do
         skip_blanks_and_attributes(lines, i - 1)
 
       String.starts_with?(line, "#[") ->
-        if String.ends_with?(line, "]"), do: skip_blanks_and_attributes(lines, i - 1), else: i
+        if attribute_end?(line), do: skip_blanks_and_attributes(lines, i - 1), else: i
 
-      String.ends_with?(line, "]") ->
+      attribute_end?(line) ->
         case find_up(lines, i - 1, &String.starts_with?(&1, "#[")) do
           nil -> i
           j -> skip_blanks_and_attributes(lines, j - 1)
@@ -1018,6 +1018,10 @@ defmodule Hypatia.Rules.CodeSafety do
         i
     end
   end
+
+  # The line ends an attribute: its last code character is `]`, with at most
+  # a trailing `//` comment after it.
+  defp attribute_end?(line), do: Regex.match?(~r{\]\s*(//.*)?$}, line)
 
   # Collects the comment lines from index `i` upwards (nearest first). A line
   # that closes a block comment takes every line back to the line that opens
