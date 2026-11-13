@@ -628,4 +628,243 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       refute Enum.any?(CodeSafety.scan_content(bare, "zig"), &(&1.rule == :zig_ptr_cast))
     end
   end
+
+  describe "unsafe_block honours SAFETY comments (gitbot-fleet#673)" do
+    defp unsafe_lines(code) do
+      code
+      |> CodeSafety.scan_content("rust")
+      |> Enum.find(&(&1.rule == :unsafe_block))
+      |> case do
+        nil -> []
+        f -> f.lines
+      end
+    end
+
+    test "a // SAFETY: comment directly above excuses the block" do
+      code = """
+      // SAFETY: pid is a child we spawned and still own.
+      // The process group exists until we reap it.
+      unsafe { libc::killpg(pid, libc::SIGKILL) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "attributes between the comment and the block are allowed" do
+      code = """
+      // SAFETY: the pointer came from Box::into_raw above.
+      #[allow(clippy::undocumented_unsafe_blocks)]
+      unsafe { drop(Box::from_raw(p)) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a /* SAFETY: */ block comment above excuses the block" do
+      code = """
+      /* SAFETY: fd is open and owned by this struct. */
+      unsafe { libc::close(fd) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a SAFETY comment separated by code does not excuse the block" do
+      code = """
+      // SAFETY: about something else.
+      let x = 1;
+      unsafe { ptr::read(addr) };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "an undocumented block is still flagged" do
+      assert unsafe_lines("let v = unsafe { ptr::read(addr) };\n") == [1]
+    end
+
+    test "a '\"' char literal before a real block does not hide it (Codex P2)" do
+      assert unsafe_lines("let q = '\"'; unsafe { op() };\n") == [1]
+    end
+
+    test "a comment that only mentions SAFETY: does not excuse the block (Codex P2)" do
+      code = """
+      // TODO: add SAFETY: justification
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [2]
+    end
+
+    test "a dereference line between the comment and the block is code (Codex P2)" do
+      code = """
+      // SAFETY: about the line below only.
+      *boxed = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "a multi-line attribute between the comment and the block is skipped (Codex P2)" do
+      code = """
+      // SAFETY: fd is open and owned here.
+      #[cfg_attr(
+          feature = "x",
+          allow(clippy::undocumented_unsafe_blocks)
+      )]
+      unsafe { libc::close(fd) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "unsafe with its brace on the next line is still flagged (Codex P2)" do
+      assert unsafe_lines("let v = unsafe\n{ op() };\n") != []
+    end
+
+    test "a SAFETY comment excuses a block whose brace is on the next line (Codex P2)" do
+      code = """
+      // SAFETY: pointer is valid.
+      unsafe
+      { ptr::read(p) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "code ending in a trailing block comment ends the SAFETY search (Codex P2)" do
+      code = """
+      // SAFETY: about something else.
+      let x = 1; /* explanation */
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "code after a leading block comment ends the SAFETY search (Codex P2)" do
+      code = """
+      // SAFETY: about something else.
+      /* explanation */ let x = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "a multi-line /* SAFETY: */ block above excuses the block (Codex P2)" do
+      code = """
+      fn f(p: *const u8) -> u8 {
+          /*
+           * SAFETY: pointer is valid.
+           */
+          unsafe { ptr::read(p) }
+      }
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a multi-line block comment does not shift later line numbers (Codex P2)" do
+      code = """
+      /*
+       * Module notes.
+       */
+      fn f() {}
+      let v = unsafe { ptr::read(addr) };
+      """
+
+      assert unsafe_lines(code) == [5]
+    end
+
+    test "unstarred lines inside a /* SAFETY: */ block are comment text (CodeRabbit)" do
+      code = """
+      /* SAFETY: p is valid.
+         The allocation remains alive.
+      */
+      unsafe { ptr::read(p) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "an attribute line that also holds code ends the SAFETY search (CodeRabbit)" do
+      code = """
+      // SAFETY: justification for the first block.
+      #[allow(unused_unsafe)] unsafe { first() };
+      unsafe { second() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "an escaped backslash closes the string before a real block (CodeRabbit)" do
+      assert unsafe_lines(~S|let s = "\\"; unsafe { op() };| <> "\n") == [1]
+    end
+
+    test "code after a closing */ ends the SAFETY search (Codex P2)" do
+      code = """
+      /*
+       * SAFETY: about earlier code.
+       */ let x = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [4]
+    end
+
+    test "the SAFETY lookup is linear in the number of blocks (Codex P2)" do
+      block = "fn f() {\n    // SAFETY: p is valid.\n    let v = unsafe { op(p) };\n}\n"
+      src = String.duplicate(block, 20_000)
+      matches = Regex.scan(~r/\bunsafe\s*\{/, src, return: :index)
+      lines = String.split(src, "\n")
+
+      {us, kept} = :timer.tc(fn -> CodeSafety.reject_excused_unsafe(src, lines, matches) end)
+
+      assert length(matches) == 20_000
+      assert kept == []
+      assert us < 2_000_000, "took #{div(us, 1000)} ms"
+    end
+
+    test "an attribute with a trailing comment is skipped (Codex P2)" do
+      code = """
+      // SAFETY: nothing is performed.
+      #[allow(unused_unsafe)] // generated code
+      unsafe {}
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "unsafe { inside a string literal is not a block" do
+      assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
+    end
+  end
+
+  describe "from_raw only flags raw-pointer constructors" do
+    defp from_raw?(code) do
+      code |> CodeSafety.scan_content("rust") |> Enum.any?(&(&1.rule == :from_raw))
+    end
+
+    test "the safe rustix Pid::from_raw is not flagged" do
+      refute from_raw?("let pid = rustix::process::Pid::from_raw(1234);\n")
+    end
+
+    test "unsafe raw-pointer constructors are still flagged" do
+      for code <- [
+            "let b = unsafe { Box::from_raw(p) };",
+            "let a = unsafe { Arc::from_raw(p) };",
+            "let t = unsafe { Box::<T>::from_raw(p) };",
+            "let u = unsafe { <Box<T>>::from_raw(p) };",
+            "let w = unsafe { Box::<Vec<u8>>::from_raw(p) };",
+            "let r = unsafe { Box::<[u8; 4]>::from_raw(p) };",
+            "let s = unsafe { std::slice::from_raw_parts(p, n) };",
+            "let f = unsafe { File::from_raw_fd(fd) };",
+            "let k = unsafe { Waker::from_raw(raw) };"
+          ] do
+        assert from_raw?(code <> "\n"), code
+      end
+    end
+  end
 end

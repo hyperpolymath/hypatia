@@ -104,7 +104,11 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :from_raw,
       severity: :high,
-      pattern: ~r/from_raw/,
+      # Only the constructors that take a raw pointer or handle and are
+      # `unsafe`. A bare `from_raw` also matched safe APIs such as
+      # `rustix::process::Pid::from_raw(i32)` (gitbot-fleet#673).
+      pattern:
+        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull|Waker)(?:(?:::)?<(?:[^<>\n]|<(?:[^<>\n]|<[^<>\n]*>)*>)*>)?>?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
       cwe: "CWE-676",
       description: "from_raw constructs types from raw pointers without safety checks"
     },
@@ -890,7 +894,18 @@ defmodule Hypatia.Rules.CodeSafety do
         end)
         |> Enum.join("\n")
 
-      case Regex.scan(rule.pattern, subject, return: :index) do
+      # A documented `unsafe {` (a `SAFETY:` comment block directly above the
+      # line where the match starts) is not a finding; nor is `unsafe {`
+      # inside a string literal. Matches are excused after the scan, so a
+      # block whose brace is on the next line is judged as one block.
+      matches = Regex.scan(rule.pattern, subject, return: :index)
+
+      matches =
+        if rule.id == :unsafe_block,
+          do: reject_excused_unsafe(subject, orig_lines, matches),
+          else: matches
+
+      case matches do
         [] ->
           []
 
@@ -918,6 +933,137 @@ defmodule Hypatia.Rules.CodeSafety do
           ]
       end
     end)
+  end
+
+  # Drops each `unsafe {` match that is inside a string literal on its line,
+  # or whose nearest non-blank lines above are a comment block naming
+  # `SAFETY:`. Matches arrive in order, so the line number is advanced once
+  # through the newline offsets, and the trimmed source lines sit in a tuple:
+  # the work per match is the few lines read, not the whole prefix.
+  @doc false
+  def reject_excused_unsafe(subject, orig_lines, matches) do
+    lines = orig_lines |> Enum.map(&String.trim/1) |> List.to_tuple()
+    newlines = subject |> :binary.matches("\n") |> Enum.map(&elem(&1, 0))
+
+    {kept, _} =
+      Enum.flat_map_reduce(matches, {newlines, 1, 0}, fn [{off, _} | _] = match, pos ->
+        {_, line_number, line_start} = pos = advance_line(pos, off)
+        prefix = binary_part(subject, line_start, off - line_start)
+
+        if inside_string?(prefix) or safety_comment_above?(lines, line_number - 2),
+          do: {[], pos},
+          else: {[match], pos}
+      end)
+
+    kept
+  end
+
+  defp advance_line({[nl | rest], line, _start}, off) when nl < off,
+    do: advance_line({rest, line + 1, nl + 1}, off)
+
+  defp advance_line(pos, _off), do: pos
+
+  # An odd number of unescaped double quotes before the match means it is
+  # inside a string on this line. Character literals ('"', '\\"') are removed
+  # first so they do not count as string delimiters. Escape pairs (`\x`) are
+  # then removed left to right, so `"\\"` still ends with a real quote.
+  # Multi-line and raw (`r#"..."#`) strings are not tracked.
+  defp inside_string?(prefix) do
+    prefix
+    |> String.replace(~r/'(?:\\.|[^'\\])'/, "")
+    |> String.replace(~r/\\./, "")
+    |> String.graphemes()
+    |> Enum.count(&(&1 == "\""))
+    |> rem(2) == 1
+  end
+
+  # The nearest non-blank lines above index `i`, past any attributes (single-
+  # or multi-line), must be a comment block whose comment LABELS itself
+  # `SAFETY:` (`// SAFETY: ...`, `/* SAFETY: ...`, ` * SAFETY: ...`). A
+  # comment that only mentions the word does not count.
+  defp safety_comment_above?(lines, i) do
+    block = collect_comment_block(lines, skip_blanks_and_attributes(lines, i))
+
+    # A ` * ...` continuation line counts only inside a real /* block.
+    block_ok =
+      not Enum.any?(block, &String.starts_with?(&1, "*")) or
+        Enum.any?(block, &String.starts_with?(&1, "/*"))
+
+    block_ok and Enum.any?(block, &Regex.match?(~r{^(?://+!?|/\*+!?|\*)\s*SAFETY:}, &1))
+  end
+
+  # Walks up from index `i` past blank lines and attributes; returns the index
+  # of the first other line (-1 at the top). An attribute that spans lines
+  # ends with `]` on a line that does not start with `#[`; skip up to its `#[`.
+  # A one-line attribute with code after its `]` is a boundary, not skipped.
+  defp skip_blanks_and_attributes(_lines, i) when i < 0, do: i
+
+  defp skip_blanks_and_attributes(lines, i) do
+    line = elem(lines, i)
+
+    cond do
+      line == "" ->
+        skip_blanks_and_attributes(lines, i - 1)
+
+      String.starts_with?(line, "#[") ->
+        if attribute_end?(line), do: skip_blanks_and_attributes(lines, i - 1), else: i
+
+      attribute_end?(line) ->
+        case find_up(lines, i - 1, &String.starts_with?(&1, "#[")) do
+          nil -> i
+          j -> skip_blanks_and_attributes(lines, j - 1)
+        end
+
+      true ->
+        i
+    end
+  end
+
+  # The line ends an attribute: its last code character is `]`, with at most
+  # a trailing `//` comment after it.
+  defp attribute_end?(line), do: Regex.match?(~r{\]\s*(//.*)?$}, line)
+
+  # Collects the comment lines from index `i` upwards (nearest first). A line
+  # that closes a block comment takes every line back to the line that opens
+  # it, so unstarred continuation lines count. A block opened after code ends
+  # the search.
+  defp collect_comment_block(_lines, i) when i < 0, do: []
+
+  defp collect_comment_block(lines, i) do
+    line = elem(lines, i)
+
+    cond do
+      String.ends_with?(line, "*/") and not String.contains?(line, "/*") ->
+        with j when is_integer(j) <- find_up(lines, i - 1, &String.contains?(&1, "/*")),
+             "/*" <> _ <- elem(lines, j) do
+          Enum.map(i..j//-1, &elem(lines, &1)) ++ collect_comment_block(lines, j - 1)
+        else
+          _ -> []
+        end
+
+      comment_line?(line) ->
+        [line | collect_comment_block(lines, i - 1)]
+
+      true ->
+        []
+    end
+  end
+
+  # The nearest index at or above `i` whose line satisfies `fun`, or nil.
+  defp find_up(_lines, i, _fun) when i < 0, do: nil
+
+  defp find_up(lines, i, fun),
+    do: if(fun.(elem(lines, i)), do: i, else: find_up(lines, i - 1, fun))
+
+  # `//`, `/*` (with no code after a closing `*/`), a block-comment
+  # continuation (`*` then space or end of line: `*boxed = 1;` is code), or a
+  # line closing a block comment with no code after the `*/`.
+  defp comment_line?(line) do
+    String.starts_with?(line, "//") or
+      (String.starts_with?(line, "/*") and
+         (String.ends_with?(line, "*/") or not String.contains?(line, "*/"))) or
+      Regex.match?(~r{^\*(\s|$)}, line) or
+      (String.ends_with?(line, "*/") and not String.contains?(line, "/*"))
   end
 
   @doc false
@@ -1231,9 +1377,12 @@ defmodule Hypatia.Rules.CodeSafety do
 
   # `/* ... */` blocks occupying whole lines (start-of-line through
   # end-of-line, possibly spanning lines). Inline blocks after code are
-  # left alone, same conservative posture as above.
+  # left alone, same conservative posture as above. The newlines inside a
+  # block are kept, so line numbers after it stay correct.
   defp strip_rust_whole_line_block_comments(content) do
-    Regex.replace(~r{^[ \t]*/\*.*?\*/[ \t]*$}sm, content, "")
+    Regex.replace(~r{^[ \t]*/\*.*?\*/[ \t]*$}sm, content, fn block ->
+      String.duplicate("\n", length(:binary.matches(block, "\n")))
+    end)
   end
 
   # Idris2 `|||` doc-comments (one or more on consecutive lines) AND
