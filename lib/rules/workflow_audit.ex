@@ -3002,7 +3002,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   defp step_line?(lines, number) do
-
     case wf_ancestor_keys(lines, number) do
       keys when is_list(keys) -> "steps" in keys
       _ -> false
@@ -4246,7 +4245,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # explicit per-forge `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a
   # visibility read from an API (`.visibility`, `.private`, `isPrivate`) that is
   # not the event's own field. Comments are stripped before matching.
-  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*(?:==\s*['"]?false|!=\s*['"]?true)\b|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
+  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*\)?\s*(?:==\s*\(?\s*['"]?false|!=\s*\(?\s*['"]?true)\b|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b(?!-)|\bisPrivate\b/
 
   @doc """
   WF030: a job that force- or mirror-pushes to a forge, gated on a
@@ -4305,27 +4304,68 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.any?(fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
   end
 
+  # A needed job lends its guard only if its failure stops the chain: a
+  # status function in this job's `if:` drops every need except those the
+  # condition still requires (`needs.<id>.result == 'success'`), and a need
+  # whose failure is masked (`continue-on-error: true` on the job or a step)
+  # lends nothing, though the chain is still followed through it.
   defp guard_ancestors(job, by_id, seen) do
-    if runs_after_failure?(job) do
-      []
-    else
-      job
-      |> mirror_direct_needs()
-      |> Enum.reject(&MapSet.member?(seen, &1))
-      |> Enum.flat_map(fn id ->
-        case Map.fetch(by_id, id) do
-          {:ok, need} -> [id | guard_ancestors(need, by_id, MapSet.put(seen, id))]
-          :error -> [id]
+    job
+    |> required_needs()
+    |> Enum.reject(&MapSet.member?(seen, &1))
+    |> Enum.flat_map(fn id ->
+      case Map.fetch(by_id, id) do
+        {:ok, need} ->
+          own = if failure_masked?(need), do: [], else: [id]
+          own ++ guard_ancestors(need, by_id, MapSet.put(seen, id))
+
+        :error ->
+          [id]
+      end
+    end)
+  end
+
+  defp required_needs(job) do
+    needs = mirror_direct_needs(job)
+
+    case job_if(job) do
+      nil ->
+        needs
+
+      cond_text ->
+        if Regex.match?(~r/\b(always|failure|cancelled)\s*\(/, cond_text) do
+          Enum.filter(needs, fn id ->
+            Regex.match?(
+              ~r/needs\.#{Regex.escape(id)}\.result\s*==\s*['"]success['"]/,
+              cond_text
+            )
+          end)
+        else
+          needs
         end
-      end)
     end
   end
 
-  defp runs_after_failure?(job) do
+  defp job_if(job) do
     case Hypatia.Kyaml.get(job.node, "if") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
-      %{value: v} when is_binary(v) -> Regex.match?(~r/\b(always|failure|cancelled)\s*\(/, v)
-      _ -> false
+      %{value: v} when is_binary(v) -> v
+      _ -> nil
     end
+  end
+
+  defp failure_masked?(job) do
+    steps =
+      case Hypatia.Kyaml.get(job.node, "steps") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+        %{kind: :seq, items: items} -> items
+        _ -> []
+      end
+
+    Enum.any?([job.node | steps], fn node ->
+      case Hypatia.Kyaml.get(node, "continue-on-error") do
+        nil -> false
+        v -> Map.get(Hypatia.Kyaml.deref(v), :value) in [true, "true"]
+      end
+    end)
   end
 
   defp mirror_direct_needs(job) do

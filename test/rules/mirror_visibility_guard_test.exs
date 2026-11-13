@@ -299,6 +299,78 @@ defmodule Hypatia.Rules.MirrorVisibilityGuardTest do
     assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
   end
 
+  @chain """
+  on: push
+  jobs:
+    visibility-guard:
+      runs-on: ubuntu-latest
+      steps:
+        - if: github.event.repository.private && vars.GITLAB_MIRROR_PRIVATE_CONFIRMED != 'true'
+          run: exit 1
+    gitlab:
+      needs: [visibility-guard]
+      if: vars.GITLAB_MIRROR_ENABLED == 'true'
+      runs-on: ubuntu-latest
+      steps:
+        - run: git push --force gitlab main
+  """
+
+  test "always() with an explicit success check on the guard job keeps the guard" do
+    wf =
+      String.replace(
+        @chain,
+        "if: vars.GITLAB_MIRROR_ENABLED == 'true'",
+        "if: always() && needs.visibility-guard.result == 'success' && vars.GITLAB_MIRROR_ENABLED == 'true'"
+      )
+
+    assert wf != @chain
+    assert WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf}) == []
+  end
+
+  test "a guard step whose failure is masked by continue-on-error is not a guard" do
+    wf =
+      String.replace(
+        @chain,
+        "        run: exit 1\n",
+        "        run: exit 1\n        continue-on-error: true\n"
+      )
+
+    assert wf != @chain
+
+    assert [%{job: "gitlab"}] =
+             WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
+  test "a job named visibility-guard in needs.<id>.result is not itself a guard" do
+    wf = """
+    on: push
+    jobs:
+      gitlab:
+        if: always() && needs.visibility-guard.result == 'success' && vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: git push --force gitlab main
+    """
+
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
+  test "grouping parentheses around a blocking comparison are still a guard" do
+    for cond <- [
+          "github.event.repository.private == (false)",
+          "(github.event.repository.private) != true"
+        ] do
+      wf =
+        String.replace(
+          @mirror,
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true'",
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true' && #{cond}"
+        )
+
+      assert WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf}) == [], cond
+    end
+  end
+
   test "a force push not gated on a mirror variable is not this rule" do
     plain = String.replace(@mirror, "vars.GITLAB_MIRROR_ENABLED == 'true'", "true")
     assert WorkflowAudit.check_mirror_without_visibility_guard(%{"x.yml" => plain}) == []
