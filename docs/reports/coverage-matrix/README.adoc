@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Public-findings coverage matrix (first pass, 2026-11-13)
+
+`matrix.json` holds one row per finding kind: source, id, severity, problem, published fix,
+hypatia detection (`detected|partial|none|unassessed`), fix status, gap reason, evidence, URL.
+It records ids, titles, severity, the problem and the fix, with the source URL. It copies no licensed text.
+
+*Status: DRAFT.* Detection status comes from reading `lib/rules`, `scripts/ci-health` and grep hits.
+Rows marked `partial` still need a fixture to prove or disprove them. Only the actionlint category
+list was fetched live; the other rows are from knowledge and need verifying against each source URL.
+Not yet ingested: the full CodeQL, Sonar and Semgrep rule lists, and per-rule lists for 20 linters
+(`unassessed`).
+
+Numbers: see `matrix.json` (regenerate counts from it; they change as rules land).
+
+== Route (ADR 0003, cicd-squabbler#154)
+Each row has a `route`: `first-line` (squabbler autofix, via Tsunami-breaker), `referral`
+(Hypatia answers with a Bustfile, via Extended Hypatia) or `owner-only`. The value is a
+heuristic from fix status and gap reason, not a ruling: owner-only = needs a person;
+referral = fix needs escalation or judgement; first-line = otherwise. `upstream` = triage the job that should have produced the missing input (row `upstream_artifact_missing`); `unrouted` = not yet assessed.
+
+Rows whose evidence cites hypatia#1064/#1065 are set to `unassessed` until their detector exists in this tree and is verified; the thread reports them as detected.
+
+== Owner ruling needed
+Two rules disagree: the dictask canon-lockstep gate demands `rsr-profile.a2ml`, while the estate no-new-A2ML policy forbids it (row `standards/rsr-profile.a2ml vs no-new-A2ML`).

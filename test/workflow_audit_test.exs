@@ -1005,8 +1005,17 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     test "a generated v0.0.3 lock with hostname fields is valid and keeps association" do
       standards = File.read!("test/fixtures/actions_lock/standards-b3ce78e-v0.0.3.lock")
 
+      # The fixture's self-SHA `hyperpolymath/standards` record is a reusable
+      # edge only if a workflow calls it at job level.
+      wf_with_call =
+        Map.put(@wf, "gov.yml", """
+        jobs:
+          gov:
+            uses: hyperpolymath/standards/.github/workflows/gov.yml@427eb35c40552d912d8c757518e8326f0d20f597
+        """)
+
       refute Enum.any?(
-               WorkflowAudit.check_unpinned_actions(@wf, actions_lock: standards),
+               WorkflowAudit.check_unpinned_actions(wf_with_call, actions_lock: standards),
                &(&1.type == :invalid_actions_lock)
              )
 

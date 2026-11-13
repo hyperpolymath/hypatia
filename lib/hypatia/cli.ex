@@ -1809,7 +1809,7 @@ defmodule Hypatia.CLI do
         help                             Show this help
 
     pr-eligibility OUTPUT (JSON on stdout):
-        {"eligible":true|false,"reason":"AM010"|null,
+        {"eligible":true|false,"reason":"AM010"|"licence_requires_owner"|null,
          "phantom_contexts":[...],"required_contexts":[...]}
 
     OPTIONS:
