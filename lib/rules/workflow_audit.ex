@@ -294,9 +294,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
   canonical findings to add this module's extras: `pin_exempt?` carve-
   outs (hypatia#262 self-verifying-ref reusables) and `known_sha`
   hints from the `@known_good_shas` table.
+
+  `workflow_contents` is taken to be the repository's whole workflow set, which
+  the lock's self-SHA check needs (see `ActionsLock.parse/2`). A caller that
+  holds only part of it (a single-file scan) passes `workflows_complete?:
+  false`: the self-SHA check is then skipped, and an
+  `:actions_lock_context_incomplete` finding says so, rather than judging a
+  reusable called from another file as uncalled.
   """
   def check_unpinned_actions(workflow_contents, opts \\ []) do
-    case parse_actions_lock(Keyword.get(opts, :actions_lock), workflow_contents) do
+    complete? = Keyword.get(opts, :workflows_complete?, true)
+    lock = Keyword.get(opts, :actions_lock)
+
+    case parse_actions_lock(lock, workflow_contents, complete?) do
       {:invalid, finding} ->
         # A present-but-invalid lock is one indivisible integrity failure. Do
         # not also recommend inline SHA pins: `gh actions-lock` deliberately
@@ -304,8 +314,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # transitive dependency and repository-identity coverage.
         [finding]
 
-      {:usable, lock} ->
-        scan_unpinned_actions(workflow_contents, lock)
+      {:usable, parsed} ->
+        incomplete_context_findings(parsed, complete?) ++
+          scan_unpinned_actions(workflow_contents, parsed)
     end
   end
 
@@ -433,12 +444,38 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Hypatia.Rules.ActionsLock.normalise_ref(slug)
   end
 
-  defp parse_actions_lock(nil, _workflow_contents), do: {:usable, nil}
+  # Only a lock that carries a self-SHA record has a check that was skipped.
+  defp incomplete_context_findings(%Hypatia.Rules.ActionsLock{} = lock, false) do
+    case Hypatia.Rules.ActionsLock.self_sha_keys(lock) do
+      [] ->
+        []
 
-  defp parse_actions_lock(content, workflow_contents) do
-    callers = Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)
+      keys ->
+        [
+          %{
+            type: :actions_lock_context_incomplete,
+            file: "actions.lock",
+            severity: :info,
+            keys: keys,
+            detail:
+              "Self-SHA lock pins #{inspect(keys)} were not checked: only part of the " <>
+                "repository's workflows was scanned. Scan the whole workflow set to check them."
+          }
+        ]
+    end
+  end
 
-    case Hypatia.Rules.ActionsLock.parse(content, reusable_callers: callers) do
+  defp incomplete_context_findings(_lock, _complete?), do: []
+
+  defp parse_actions_lock(nil, _workflow_contents, _complete?), do: {:usable, nil}
+
+  defp parse_actions_lock(content, workflow_contents, complete?) do
+    opts =
+      if complete?,
+        do: [reusable_callers: Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)],
+        else: []
+
+    case Hypatia.Rules.ActionsLock.parse(content, opts) do
       {:ok, lock} ->
         {:usable, lock}
 
@@ -2875,6 +2912,93 @@ defmodule Hypatia.Rules.WorkflowAudit do
         end)
       end)
     end)
+  end
+
+  @call_key_re ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([^\s"'#,}\]]+)/
+  @call_inline_re ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([^\s"'#,}\]]+)/
+
+  @doc """
+  The `uses:` references of one workflow's content, split by where they sit,
+  as `{reusable_calls, step_actions}`: two `MapSet`s of `owner/repo@ref` keys
+  (owner/repo lowercased, a full 40-hex ref lowercased, a symbolic ref kept).
+
+    * `reusable_calls` - `jobs.<id>.uses` naming
+      `owner/repo/.github/workflows/<file>.y(a)ml@ref`, in block or flow style,
+      quoted or not (the same job-key reading as WF027).
+    * `step_actions` - `jobs.<id>.steps[].uses` naming an action.
+
+  A `uses:` text inside a `run:` or `env:` block scalar, a string value or a
+  comment is neither.
+  """
+  def reusable_call_sites(content) when is_binary(content) do
+    lines = String.split(content, "\n")
+    continued = wf_continued_uses(lines)
+    flow = wf_flow_lines(content)
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.reduce({MapSet.new(), MapSet.new()}, fn {line, number}, {calls, steps} ->
+      line =
+        case Map.fetch(continued, number) do
+          {:ok, {joined, _how}} -> joined
+          :error -> line
+        end
+
+      case Regex.run(@call_key_re, line) do
+        [_, value] ->
+          case wf027_job_key(lines, flow, number) do
+            nil ->
+              if step_line?(lines, number),
+                do: {calls, add_action(steps, value)},
+                else: {calls, steps}
+
+            _job ->
+              {add_call(calls, value), steps}
+          end
+
+        nil ->
+          @call_inline_re
+          |> Regex.scan(line, return: :index)
+          |> Enum.reduce({calls, steps}, fn [{at, _}, {v_at, v_len}], {c, st} ->
+            value = binary_part(line, v_at, v_len)
+
+            cond do
+              wf027_inline_job?(lines, flow, line, number, at + 1) -> {add_call(c, value), st}
+              wf_in_flow?(flow, number) or step_line?(lines, number) -> {c, add_action(st, value)}
+              true -> {c, st}
+            end
+          end)
+      end
+    end)
+  end
+
+  defp step_line?(lines, number) do
+    case wf_ancestor_keys(lines, number) do
+      keys when is_list(keys) -> "steps" in keys
+      _ -> false
+    end
+  end
+
+  defp add_call(set, value) do
+    case Regex.run(
+           ~r/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/\.github\/workflows\/[A-Za-z0-9_.\/-]+\.ya?ml@(.+)$/,
+           value
+         ) do
+      [_, repo, ref] -> MapSet.put(set, lock_key(repo, ref))
+      _ -> set
+    end
+  end
+
+  defp add_action(set, value) do
+    case Regex.run(~r/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\/[^@]*)?@(.+)$/, value) do
+      [_, repo, ref] -> MapSet.put(set, lock_key(repo, ref))
+      _ -> set
+    end
+  end
+
+  defp lock_key(repo, ref) do
+    ref = if Regex.match?(~r/^[0-9A-Fa-f]{40}$/, ref), do: String.downcase(ref), else: ref
+    String.downcase(repo) <> "@" <> ref
   end
 
   # Is the `uses:` that starts line `number` a key of a job under `jobs:`?

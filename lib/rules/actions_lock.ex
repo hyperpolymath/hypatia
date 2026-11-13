@@ -103,28 +103,34 @@ defmodule Hypatia.Rules.ActionsLock do
 
   def parse(_, _opts), do: {:error, :missing_or_nonbinary_lock}
 
-  @reusable_call ~r/^\s*(?:-\s*)?uses:\s*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/\.github\/workflows\/[A-Za-z0-9_.\/-]+\.ya?ml@([^\s"'#]+)/m
-
   @doc """
-  The `owner/repo@ref` keys (lowercased) of every reusable workflow called at
-  job level in the given workflow contents (a list of binaries or of
-  `{filename, content}` pairs).
+  The `owner/repo@ref` keys (owner/repo and a full 40-hex ref lowercased) of
+  every reusable workflow called at job level (`jobs.<id>.uses`) in the given
+  workflow contents (a list of binaries, of `{filename, content}` pairs, or a
+  map of filename to content), minus any key that is also used as a step
+  action (`steps[].uses`): the composite use of such a key still hits the
+  invalid pin, so it keeps no exemption.
 
-  Only a `uses:` naming `owner/repo/.github/workflows/<file>.y(a)ml@ref`
-  counts: a step-level action never has that shape. This mirrors
-  `check-lock-sync.sh` in metadatastician/standards.
+  The workflows are read by the same job-aware reader WF027 uses, so quoted
+  keys and flow-style jobs count, and `uses:` text inside a `run:`/`env:`
+  block scalar does not. Mirrors `check-lock-sync.sh` in
+  metadatastician/standards.
   """
-  @spec reusable_callers([binary() | {term(), binary()}] | %{term() => binary()}) ::
-          MapSet.t(String.t())
+  @spec reusable_callers(Enumerable.t()) :: MapSet.t(String.t())
   def reusable_callers(workflow_contents) do
-    workflow_contents
-    |> Enum.map(fn
-      {_name, content} -> content
-      content -> content
-    end)
-    |> Enum.filter(&is_binary/1)
-    |> Enum.flat_map(&Regex.scan(@reusable_call, &1, capture: :all_but_first))
-    |> MapSet.new(fn [repo, ref] -> String.downcase(repo) <> "@" <> ref end)
+    {calls, steps} =
+      workflow_contents
+      |> Enum.map(fn
+        {_name, content} -> content
+        content -> content
+      end)
+      |> Enum.filter(&is_binary/1)
+      |> Enum.map(&Hypatia.Rules.WorkflowAudit.reusable_call_sites/1)
+      |> Enum.reduce({MapSet.new(), MapSet.new()}, fn {c, s}, {ac, as} ->
+        {MapSet.union(ac, c), MapSet.union(as, s)}
+      end)
+
+    MapSet.difference(calls, steps)
   end
 
   @doc """
@@ -636,14 +642,12 @@ defmodule Hypatia.Rules.ActionsLock do
   # set (nil) the caller has no workflows and the check is not run.
   defp validate_leaf_refs(_state, nil), do: :ok
 
+
   defp validate_leaf_refs(state, %MapSet{} = callers) do
     bad =
-      for {key, dependency} <- state.dependencies,
-          [_path, key_ref] = String.split(key, "@", parts: 2),
-          Regex.match?(@sha_ref, key_ref),
-          String.downcase(dependency.ref) == String.downcase(key_ref),
-          not MapSet.member?(callers, String.downcase(key)),
-          do: key
+      state.dependencies
+      |> self_sha_keys()
+      |> Enum.reject(&MapSet.member?(callers, String.downcase(&1)))
 
     case bad do
       [] -> :ok
@@ -651,7 +655,23 @@ defmodule Hypatia.Rules.ActionsLock do
     end
   end
 
+  @doc """
+  The keys of records keyed by a full commit SHA whose `ref` repeats it: the
+  records `parse/2` checks against `:reusable_callers`.
+  """
+  @spec self_sha_keys(t() | map()) :: [String.t()]
+  def self_sha_keys(%__MODULE__{dependencies: dependencies}), do: self_sha_keys(dependencies)
+
+  def self_sha_keys(dependencies) when is_map(dependencies) do
+    for {key, dependency} <- dependencies,
+        [_path, key_ref] = String.split(key, "@", parts: 2),
+        Regex.match?(@sha_ref, key_ref),
+        String.downcase(dependency.ref) == String.downcase(key_ref),
+        do: key
+  end
+
   defp validate_workflow_dependencies(state) do
+
     missing =
       for {path, refs} <- state.workflows,
           ref <- refs,
