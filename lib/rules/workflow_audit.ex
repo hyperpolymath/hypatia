@@ -3002,7 +3002,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   defp step_line?(lines, number) do
-
     case wf_ancestor_keys(lines, number) do
       keys when is_list(keys) -> "steps" in keys
       _ -> false
@@ -4241,11 +4240,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
   @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
   # Guard signals that BLOCK or CONFIRM, never one that merely selects private
   # sources (`if: github.event.repository.private` is the opposite of a guard):
-  # a negated or compared repository.private, a repository.visibility test, an
+  # a negated repository.private (or `== false` / `!= true`; `== true` selects
+  # private sources and is not a guard), a repository.visibility test, an
   # explicit per-forge `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a
   # visibility read from an API (`.visibility`, `.private`, `isPrivate`) that is
   # not the event's own field. Comments are stripped before matching.
-  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*[!=]=|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
+  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*\)?\s*(?:==\s*\(?\s*['"]?false|!=\s*\(?\s*['"]?true)\b|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b(?!-)|\bisPrivate\b/
 
   @doc """
   WF030: a job that force- or mirror-pushes to a forge, gated on a
@@ -4260,13 +4260,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       case Hypatia.Workflow.parse(content, filename) do
         {:ok, %Hypatia.Workflow{jobs: jobs}} when jobs != [] ->
-          texts = job_texts(content, jobs)
+          texts = job_texts(jobs)
 
           for job <- jobs,
               text = Map.fetch!(texts, job.id),
               Regex.match?(@mirror_push, text),
               Regex.match?(@mirror_gate, text),
-              not guarded?(job, texts) do
+              not guarded?(job, jobs, texts) do
             %{
               rule: "WF030",
               rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
@@ -4292,38 +4292,156 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  defp guarded?(job, texts) do
-    ids = [job.id | mirror_direct_needs(job)]
-    Enum.any?(ids, fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  # A needed job's guard counts only when this job still requires that job to
+  # succeed: a status function in `if:` (always(), failure(), cancelled(),
+  # !cancelled()) lets the mirror run after the guard job fails. Needs are
+  # followed transitively (guard -> prepare -> mirror), and the chain stops at
+  # any job that runs after a failure.
+  defp guarded?(job, jobs, texts) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+
+    [job.id | guard_ancestors(job, by_id, MapSet.new([job.id]))]
+    |> Enum.any?(fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  end
+
+  # A needed job lends its guard only if its failure stops the chain: a
+  # status function in this job's `if:` drops every need except those the
+  # condition still requires (`needs.<id>.result == 'success'`), and a need
+  # whose failure is masked (`continue-on-error: true` on the job or a step)
+  # lends nothing, though the chain is still followed through it.
+  defp guard_ancestors(job, by_id, seen) do
+    job
+    |> required_needs()
+    |> Enum.reject(&MapSet.member?(seen, &1))
+    |> Enum.flat_map(fn id ->
+      case Map.fetch(by_id, id) do
+        {:ok, need} ->
+          own = if failure_masked?(need), do: [], else: [id]
+          own ++ guard_ancestors(need, by_id, MapSet.put(seen, id))
+
+        :error ->
+          [id]
+      end
+    end)
+  end
+
+  defp required_needs(job) do
+    needs = mirror_direct_needs(job)
+
+    case job_if(job) do
+      nil ->
+        needs
+
+      cond_text ->
+        if Regex.match?(~r/\b(always|failure|cancelled)\s*\(/, cond_text) do
+          Enum.filter(needs, fn id ->
+            Regex.match?(
+              ~r/needs\.#{Regex.escape(id)}\.result\s*==\s*['"]success['"]/,
+              cond_text
+            )
+          end)
+        else
+          needs
+        end
+    end
+  end
+
+  defp job_if(job) do
+    case Hypatia.Kyaml.get(job.node, "if") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{value: v} when is_binary(v) -> v
+      _ -> nil
+    end
+  end
+
+  defp failure_masked?(job) do
+    steps =
+      case Hypatia.Kyaml.get(job.node, "steps") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+        %{kind: :seq, items: items} -> items
+        _ -> []
+      end
+
+    Enum.any?([job.node | steps], fn node ->
+      case Hypatia.Kyaml.get(node, "continue-on-error") do
+        nil -> false
+        v -> Map.get(Hypatia.Kyaml.deref(v), :value) in [true, "true"]
+      end
+    end)
   end
 
   defp mirror_direct_needs(job) do
     case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
-      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
-      %{value: v} when is_binary(v) -> [v]
-      _ -> []
+      %{kind: :seq, items: items} ->
+        for i <- items, %{value: v} <- [Hypatia.Kyaml.deref(i)], is_binary(v), do: v
+
+      %{value: v} when is_binary(v) ->
+        [v]
+
+      _ ->
+        []
     end
   end
 
-  # Each job's own source lines (from its key to the next job's key), with
-  # YAML comments stripped and shell continuations joined.
-  defp job_texts(content, jobs) do
-    lines = String.split(content, "\n")
-    sorted = Enum.sort_by(jobs, & &1.line)
-    ends = Enum.map(tl(sorted), &(&1.line - 1)) ++ [length(lines)]
-
-    sorted
-    |> Enum.zip(ends)
-    |> Map.new(fn {job, stop} ->
+  # Each job's own text: every key and scalar inside the job's parsed node, so
+  # nothing outside the job (a later top-level key, a sibling flow-style job)
+  # reaches it and YAML comments are already gone. Shell comments are then
+  # stripped quote-aware, line by line, and `\\`-continuations joined.
+  defp job_texts(jobs) do
+    Map.new(jobs, fn job ->
       text =
-        lines
-        |> Enum.slice((job.line - 1)..(stop - 1)//1)
-        |> Enum.join("\n")
-        |> then(&Regex.replace(~r/(^|[ \t])#[^\n]*/m, &1, "\\1"))
-        |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+        if Hypatia.Kyaml.within_budget?(job.node) do
+          job.node
+          |> node_strings([])
+          |> Enum.reverse()
+          |> Enum.map_join("\n", &strip_shell_comments/1)
+          |> then(&Regex.replace(~r/\\\r?\n[ \t]*/, &1, " "))
+        else
+          ""
+        end
 
       {job.id, text}
     end)
+  end
+
+  # Shell comments out of one scalar (a whole `run:` script), with quote state
+  # carried across its lines: a quote opened on one line closes on a later
+  # one, so a `#` after it is a comment only when no quote is open.
+  defp strip_shell_comments(text),
+    do: text |> :binary.bin_to_list() |> strip_shell(nil, true, [])
+
+  defp strip_shell([], _q, _ws?, acc), do: acc |> Enum.reverse() |> List.to_string()
+
+  defp strip_shell([?# | rest], nil, true, acc),
+    do: rest |> Enum.drop_while(&(&1 != ?\n)) |> strip_shell(nil, true, acc)
+
+  defp strip_shell([?\n | rest], q, _ws?, acc), do: strip_shell(rest, q, true, [?\n | acc])
+
+  defp strip_shell([c | rest], nil, _ws?, acc) when c in [?", ?'],
+    do: strip_shell(rest, c, false, [c | acc])
+
+  defp strip_shell([?\\, c | rest], ?", _ws?, acc),
+    do: strip_shell(rest, ?", false, [c, ?\\ | acc])
+
+  defp strip_shell([q | rest], q, _ws?, acc), do: strip_shell(rest, nil, false, [q | acc])
+
+  defp strip_shell([c | rest], q, _ws?, acc),
+    do: strip_shell(rest, q, q == nil and c in [?\s, ?\t], [c | acc])
+
+  defp node_strings(node, acc) do
+    case Hypatia.Kyaml.deref(node) do
+      %{kind: :map, entries: entries} ->
+        Enum.reduce(entries, acc, fn %{key: k, value: v}, a ->
+          node_strings(v, node_strings(k, a))
+        end)
+
+      %{kind: :seq, items: items} ->
+        Enum.reduce(items, acc, &node_strings/2)
+
+      %{value: v} when is_binary(v) ->
+        [v | acc]
+
+      _ ->
+        acc
+    end
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
