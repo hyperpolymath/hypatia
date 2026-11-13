@@ -108,7 +108,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # `unsafe`. A bare `from_raw` also matched safe APIs such as
       # `rustix::process::Pid::from_raw(i32)` (gitbot-fleet#673).
       pattern:
-        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)(?:(?:::)?<[^;\n]*?>+)?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
+        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)(?:(?:::)?<(?:[^<>\n]|<(?:[^<>\n]|<[^<>\n]*>)*>)*>)?>?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
       cwe: "CWE-676",
       description: "from_raw constructs types from raw pointers without safety checks"
     },
@@ -848,23 +848,6 @@ defmodule Hypatia.Rules.CodeSafety do
       # finding survives even though every matching line is known-safe.
       # Rejected lines are BLANKED, not dropped — dropping would shift every
       # subsequent line number (the main.zig:1 class of defect, issue #834).
-      # A documented `unsafe {` (a `SAFETY:` comment block directly above it)
-      # is not a finding; nor is `unsafe {` inside a string literal. The
-      # comment is read from the ORIGINAL lines: `subject` has comments
-      # stripped. Rejected lines are blanked, as below.
-      subject =
-        if rule.id == :unsafe_block do
-          subject
-          |> String.split("\n")
-          |> Enum.with_index(1)
-          |> Enum.map(fn {line, line_number} ->
-            if unsafe_line_excused?(line, orig_lines, line_number), do: "", else: line
-          end)
-          |> Enum.join("\n")
-        else
-          subject
-        end
-
       subject =
         if rule.id == :shell_download_then_run do
           subject
@@ -911,7 +894,18 @@ defmodule Hypatia.Rules.CodeSafety do
         end)
         |> Enum.join("\n")
 
-      case Regex.scan(rule.pattern, subject, return: :index) do
+      # A documented `unsafe {` (a `SAFETY:` comment block directly above the
+      # line where the match starts) is not a finding; nor is `unsafe {`
+      # inside a string literal. Matches are excused after the scan, so a
+      # block whose brace is on the next line is judged as one block.
+      matches = Regex.scan(rule.pattern, subject, return: :index)
+
+      matches =
+        if rule.id == :unsafe_block,
+          do: Enum.reject(matches, &unsafe_match_excused?(subject, orig_lines, &1)),
+          else: matches
+
+      case matches do
         [] ->
           []
 
@@ -944,15 +938,17 @@ defmodule Hypatia.Rules.CodeSafety do
   # True when every `unsafe {` on the line is inside a string literal, or the
   # nearest non-blank lines above it are a comment block naming `SAFETY:`.
   # Attribute lines (`#[...]`) between the comment and the block are allowed.
-  defp unsafe_line_excused?(line, orig_lines, line_number) do
-    hits = Regex.scan(~r/unsafe\s*\{/, line, return: :index)
+  defp unsafe_match_excused?(subject, orig_lines, [{off, _len} | _]) do
+    before = binary_part(subject, 0, off)
+    line_number = length(:binary.matches(before, "\n")) + 1
 
-    code_hits =
-      Enum.reject(hits, fn [{off, _} | _] -> inside_string?(binary_part(line, 0, off)) end)
+    line_prefix =
+      case :binary.matches(before, "\n") do
+        [] -> before
+        nls -> binary_part(before, elem(List.last(nls), 0) + 1, off - elem(List.last(nls), 0) - 1)
+      end
 
-    # A line with no complete `unsafe {` (e.g. the brace is on the next line)
-    # is never blanked: the file-level pattern may need it.
-    hits != [] and (code_hits == [] or safety_comment_above?(orig_lines, line_number))
+    inside_string?(line_prefix) or safety_comment_above?(orig_lines, line_number)
   end
 
   # An odd number of unescaped double quotes before the match means it is
@@ -1011,7 +1007,7 @@ defmodule Hypatia.Rules.CodeSafety do
   # line: `*boxed = 1;` is code), or a line closing a block comment.
   defp comment_line?(line) do
     String.starts_with?(line, ["//", "/*"]) or Regex.match?(~r{^\*(\s|/|$)}, line) or
-      String.ends_with?(line, "*/")
+      (String.ends_with?(line, "*/") and not String.contains?(line, "/*"))
   end
 
   @doc false

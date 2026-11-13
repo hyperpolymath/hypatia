@@ -723,6 +723,26 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert unsafe_lines("let v = unsafe\n{ op() };\n") != []
     end
 
+    test "a SAFETY comment excuses a block whose brace is on the next line (Codex P2)" do
+      code = """
+      // SAFETY: pointer is valid.
+      unsafe
+      { ptr::read(p) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "code ending in a trailing block comment ends the SAFETY search (Codex P2)" do
+      code = """
+      // SAFETY: about something else.
+      let x = 1; /* explanation */
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end
@@ -744,6 +764,7 @@ defmodule Hypatia.Rules.CodeSafetyTest do
             "let t = unsafe { Box::<T>::from_raw(p) };",
             "let u = unsafe { <Box<T>>::from_raw(p) };",
             "let w = unsafe { Box::<Vec<u8>>::from_raw(p) };",
+            "let r = unsafe { Box::<[u8; 4]>::from_raw(p) };",
             "let s = unsafe { std::slice::from_raw_parts(p, n) };",
             "let f = unsafe { File::from_raw_fd(fd) };"
           ] do
