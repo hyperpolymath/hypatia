@@ -106,7 +106,8 @@ pr() { # NUMBER LOGIN SHA
      body:"Bumps [serde](https://github.com/serde-rs/serde) from 1.0.199 to 1.0.200."}'
 }
 threads() { # PR NODES HAS_NEXT_PAGE
-  put "graphql__pr_$1" "{\"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"pageInfo\":{\"hasNextPage\":$3},\"nodes\":$2}}}}}"
+  local pr="$1" nodes="$2" more="$3"
+  put "graphql__pr_${pr}" "{\"data\":{\"repository\":{\"pullRequest\":{\"reviewThreads\":{\"pageInfo\":{\"hasNextPage\":${more}},\"nodes\":${nodes}}}}}}"
 }
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
@@ -176,29 +177,30 @@ rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
 [ ! -f "$FIX/pr.log" ] || fail "no required checks: --auto would merge unchecked"
 grep -q "no_required_checks" "$WORK/log" || fail "skip reason must be logged"
 
+MERGE7="pr merge 7 "
 # R6: an open review thread, an unreadable answer, or an unread second
 # page each stop the merge, with the reason logged.
 estate "$SHA1"; threads 7 '[{"isResolved":true},{"isResolved":false}]' false
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
-! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unresolved review thread: PR 7 may not merge"
+! grep -q "$MERGE7" "$FIX/pr.log" 2>/dev/null || fail "unresolved review thread: PR 7 may not merge"
 grep -q "unresolved_review_threads:1" "$WORK/log" || fail "unresolved thread count must be logged"
 
 estate "$SHA1"; echo "gh: HTTP 502" > "$FIX/graphql__pr_7.err"
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"; rm -f "$FIX/graphql__pr_7.err"
-! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unreadable review threads: PR 7 may not merge"
+! grep -q "$MERGE7" "$FIX/pr.log" 2>/dev/null || fail "unreadable review threads: PR 7 may not merge"
 grep -q "check_unavailable:review_threads" "$WORK/log" || fail "unreadable threads must be logged"
 
 estate "$SHA1"; threads 7 '[{"isResolved":true}]' true
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
-! grep -q "pr merge 7 " "$FIX/pr.log" 2>/dev/null || fail "unread second page of threads: PR 7 may not merge"
+! grep -q "$MERGE7" "$FIX/pr.log" 2>/dev/null || fail "unread second page of threads: PR 7 may not merge"
 
 # Back to all resolved: PR 7 merges again (the gate is not a blanket block).
 estate "$SHA1"; rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
-grep -q "pr merge 7 " "$FIX/pr.log" || fail "resolved threads: PR 7 should merge"
+grep -q "$MERGE7" "$FIX/pr.log" || fail "resolved threads: PR 7 should merge"
 
 # R3: a PR not authored by a dependency bot (e.g. the template upgrade wave)
 # is never auto-merged, whatever its content.
-[ "$(disp 8)" = "flag/not_a_dependency_bot" ] || fail "R3: a human or wave PR must be flagged, got $(disp 8)"
+[[ "$(disp 8)" == "flag/not_a_dependency_bot" ]] || fail "R3: a human or wave PR must be flagged, got $(disp 8)"
 grep -q "pr merge 8" "$FIX/pr.log" && fail "R3: a non-bot PR must never merge"
 
 echo "ok: pr-automerge sweep"
