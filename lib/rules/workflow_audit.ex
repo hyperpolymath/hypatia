@@ -4236,8 +4236,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp current_run_download?(run_id) when run_id in [nil, ""], do: true
 
+  # Any expression built from `github.run_id` (`format('{0}', github.run_id)`)
+  # still names this run; only a run id from elsewhere is a cross-run read.
   defp current_run_download?(run_id) when is_binary(run_id),
-    do: Regex.match?(~r/^\$\{\{\s*github\.run_id\s*\}\}$/, String.trim(run_id))
+    do: Regex.match?(~r/\bgithub\.run_id\b/, run_id)
 
   defp current_run_download?(_), do: false
 
@@ -4245,8 +4247,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     cond_text = job.if || ""
     needed = needed_jobs(job, jobs)
 
+    # A job with literal `continue-on-error: true` cannot fail the run.
     Regex.match?(~r/\balways\(\)/, cond_text) and
       not excludes_cancellation?(cond_text) and
+      not tolerated_failure?(job) and
       needed != [] and
       Enum.any?(job.steps, fn step ->
         # A download with a `run-id` naming ANOTHER run reads that run's

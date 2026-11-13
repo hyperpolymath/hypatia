@@ -98,6 +98,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/API rate limit exceeded/i,
         ~r/exceeded a secondary rate limit/i
       ],
+      # GitHub's own throttle only: an app's API test that logs the same words
+      # is the code under test, not the platform.
+      context: [~r/api\.github\.com|github\.com\/|\bgh api\b|x-github|installation/i],
       action: :rerun,
       retries: 1,
       fix: nil,
@@ -128,7 +131,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :platform,
       patterns: [
         ~r/fatal: unable to access '[^']+': (Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Recv failure|gnutls_handshake|The requested URL returned error: 5\d\d)/,
-        ~r/Could not resolve host:\s*(\S+)/,
+        # A dotted (external) name only: `backend` or `db` is a service under test.
+        ~r/Could not resolve host:\s*([A-Za-z0-9-]+\.[A-Za-z0-9.-]+)/,
         # Not the app under test: a loopback probe that fails is a code failure.
         ~r/Failed to connect to (?!localhost\b|127\.|0\.0\.0\.0\b|\[?::1\]?\b)(\S+) port \d+/
       ],
@@ -360,6 +364,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/Input required and not supplied:\s*(app[-_]id|private[-_]key|client[-_]id)/i,
         ~r/\[@octokit\/auth-app\].*required/
       ],
+      context: [~r/create-github-app-token|@octokit\/auth-app|app[-_]token/i],
       action: :owner,
       retries: 0,
       fix: nil,
@@ -415,6 +420,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/exhausted its Codex allowance/,
         ~r/reached your Codex usage limits/
       ],
+      # Owner ruling R7 covers bot REVIEWS only; a required generation or agent
+      # step out of quota stays actionable.
+      context: [~r/\breview\b/i],
       # Owner ruling R7: bot reviews are advisory, never a gate.
       action: :none,
       retries: 0,
@@ -823,10 +831,28 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # the key, so the match cannot cross into a sibling input's block.
   @scanner_input ~r/^([ \t]*)["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?[ \t]*:[ \t]*\n(?:\1[ \t]+(?!["']?default["']?[ \t]*:)[^\n]*\n){0,6}?\1[ \t]+["']?default["']?[ \t]*:[ \t]*["']?([0-9a-f]{40})/im
 
-  # Drop YAML comments (a `#` at line start or after whitespace) so a kept
-  # "old pin" comment is not read as a second pin. A 40-hex SHA has no `#`.
-  defp strip_yaml_comments(content),
-    do: Regex.replace(~r/(^|[ \t])#[^\n]*/m, content, "\\1")
+  # Drop YAML comments (a `#` at line start or after whitespace, outside
+  # quotes) so a kept "old pin" comment is not read as a second pin, while
+  # `{NOTE: "use # carefully", PA_SHA: <sha>}` keeps its pin.
+  defp strip_yaml_comments(content) do
+    content
+    |> String.split("\n")
+    |> Enum.map_join("\n", &strip_line_comment(String.to_charlist(&1), nil, []))
+  end
+
+  defp strip_line_comment([], _q, acc), do: acc |> Enum.reverse() |> List.to_string()
+
+  defp strip_line_comment([?# | _], nil, acc) when acc == [] or hd(acc) in [?\s, ?\t],
+    do: acc |> Enum.reverse() |> List.to_string()
+
+  defp strip_line_comment([c | rest], nil, acc) when c in [?", ?'],
+    do: strip_line_comment(rest, c, [c | acc])
+
+  defp strip_line_comment([?\\, c | rest], ?", acc),
+    do: strip_line_comment(rest, ?", [c, ?\\ | acc])
+
+  defp strip_line_comment([q | rest], q, acc), do: strip_line_comment(rest, nil, [q | acc])
+  defp strip_line_comment([c | rest], q, acc), do: strip_line_comment(rest, q, [c | acc])
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -836,7 +862,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   """
   # YAML flow forms: `env: {PA_SHA: <sha>}` and `panic-ref: {default: <sha>}`.
   @scanner_pin_flow ~r/[{,]\s*["']?(PANIC_ATTACK_SHA|PA_SHA|panic[-_]attack[-_]sha)["']?\s*:\s*["']?([0-9a-f]{40})/i
-  @scanner_input_flow ~r/["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?\s*:\s*\{[^}]*\bdefault\s*:\s*["']?([0-9a-f]{40})/i
+  @scanner_input_flow ~r/["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?\s*:\s*\{[^}]*\bdefault["']?\s*:\s*["']?([0-9a-f]{40})/i
 
   def check_scanner_pin_drift(contents) when is_map(contents) do
     sites =

@@ -147,6 +147,43 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("runner_cancelled") in Enum.map(m, & &1.rule)
     end
 
+    test "an app's own API rate-limit message is not GitHub throttling" do
+      log =
+        "  1) test quota\n     ** (RuntimeError) API rate limit exceeded for tenant 7\n5 tests, 1 failure\n"
+
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.layer == :code
+      refute T.id("api_rate_limit") in Enum.map(m, & &1.rule)
+    end
+
+    test "an unresolved service name under test is not an external host" do
+      log =
+        "curl: (6) Could not resolve host: backend\n  1) test api\n5 tests, 1 failure\n"
+
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.layer == :code
+      refute T.id("external_host_unreachable") in Enum.map(m, & &1.rule)
+    end
+
+    test "a dotted unresolved host is still external" do
+      %{primary: p} = T.classify("curl: (6) Could not resolve host: registry.npmjs.org\n")
+      assert p.rule == T.id("external_host_unreachable")
+    end
+
+    test "Codex quota outside a review stays actionable" do
+      log =
+        "agent step: You've reached your Codex usage limits\nError: Process completed with exit code 1.\n"
+
+      %{matches: m} = T.classify(log)
+      refute T.id("review_quota_exhausted") in Enum.map(m, & &1.rule)
+    end
+
+    test "a missing client-id input without an App token action is not the App secret rule" do
+      log = "Error: Input required and not supplied: client-id\n"
+      %{matches: m} = T.classify(log)
+      refute T.id("secret_or_variable_missing") in Enum.map(m, & &1.rule)
+    end
+
     test "a bare HTTP 502 from an application is not a GitHub API outage" do
       log = "  1) test proxy\n     ** (RuntimeError) HTTP 502: Bad Gateway\n5 tests, 1 failure\n"
       %{primary: p, matches: m} = T.classify(log)
@@ -407,6 +444,24 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert Enum.all?(found, &(&1.action == :owner))
     end
 
+    test "a quoted default key in a flow mapping is a pin" do
+      contents = %{
+        "a.yml" => "inputs:\n  panic-ref: {\"default\": #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a quoted hash before a flow pin does not hide the pin" do
+      contents = %{
+        "a.yml" => "env: {NOTE: \"use # carefully\", PA_SHA: #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
     test "a quoted pin key is still a pin" do
       contents = %{
         "a.yml" => "env:\n  \"PA_SHA\": #{@a}\n",
@@ -503,6 +558,20 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute f.reason =~ "40-char commit SHA"
     end
 
+    @tag :tmp_dir
+    test "a combined scan keeps hardening's unreadable-lock finding", %{tmp_dir: dir} do
+      wf_dir = Path.join([dir, ".github", "workflows"])
+      File.mkdir_p!(Path.join(wf_dir, "actions.lock"))
+
+      File.write!(
+        Path.join(wf_dir, "ci.yml"),
+        "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7.0.2\n"
+      )
+
+      found = Hypatia.CLI.collect_findings(dir, [:workflow_audit, :workflow_hardening])
+      assert Enum.any?(found, &(&1.type == "invalid_actions_lock"))
+    end
+
     test "the locked ref itself is still pinned" do
       wf = %{
         "ci.yml" =>
@@ -540,6 +609,16 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert f.rule_id == "hypatia/ci_failure_triage/always_after_cancel"
       assert f.job == "deposit"
       assert f.action == :fix
+    end
+
+    test "a job with literal continue-on-error: true cannot fail the run" do
+      tol = String.replace(@deposit, "if: always()", "if: always()\n    continue-on-error: true")
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => tol}) == []
+    end
+
+    test "a run-id composed from github.run_id is this run" do
+      composed = @deposit <> "          run-id: ${{ format('{0}', github.run_id) }}\n"
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => composed})
     end
 
     test "always() || cancelled() is not a guard and still fires" do

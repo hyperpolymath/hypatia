@@ -767,9 +767,23 @@ defmodule Hypatia.CLI do
             # both families run WH004 and its lockfile findings would repeat
             # every unpinned, exempt or stale ref. Standalone hardening scans
             # keep them.
+            # The lockfile finding is dropped only when workflow_audit itself
+            # reported it: an unreadable lock (a directory, :eacces) reaches
+            # workflow_audit as nil and only hardening reports it.
+            audit_reported_lock? =
+              Enum.any?(
+                results,
+                &(Map.get(&1, :rule_module) == "workflow_audit" and
+                    Map.get(&1, :type) == "invalid_actions_lock")
+              )
+
             findings =
               if :workflow_audit in rules do
-                Enum.reject(findings, &(&1.rule in ["WH004", "invalid_actions_lock"]))
+                Enum.reject(
+                  findings,
+                  &(&1.rule == "WH004" or
+                      (&1.rule == "invalid_actions_lock" and audit_reported_lock?))
+                )
               else
                 findings
               end
