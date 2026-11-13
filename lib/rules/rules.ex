@@ -602,6 +602,9 @@ defmodule Hypatia.Rules do
         %{type: :invalid_actions_lock, detail: detail} ->
           [%{rule: "invalid_actions_lock", severity: :high, description: detail}]
 
+        %{type: :actions_lock_stale, reason: reason} ->
+          [%{rule: "actions_lock_stale", severity: :medium, description: reason}]
+
         %{type: :actions_lock_context_incomplete, detail: detail} ->
           [%{rule: "actions_lock_context_incomplete", severity: :info, description: detail}]
 

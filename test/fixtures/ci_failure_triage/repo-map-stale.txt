@@ -1,0 +1,1 @@
+FAIL: committed REPOSITORY-MAP.adoc is stale — run: just repo-map

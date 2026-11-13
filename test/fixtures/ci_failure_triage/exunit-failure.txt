@@ -1,0 +1,6 @@
+Run mix test
+...........F.....
+  1) test parses a lock (Hypatia.Rules.ActionsLockTest)
+Finished in 1.7 seconds
+571 tests, 1 failure
+##[error]Process completed with exit code 2.

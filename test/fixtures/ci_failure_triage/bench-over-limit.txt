@@ -1,0 +1,3 @@
+Run just bench-gate
+escape_hatches: 2.285x against a 2.0x limit
+##[error]Process completed with exit code 1.
