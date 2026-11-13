@@ -212,6 +212,23 @@ defmodule Hypatia.Rules.MirrorVisibilityGuardTest do
     assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
   end
 
+  test "a quote spanning lines does not shelter a later comment" do
+    wf = """
+    on: push
+    jobs:
+      gitlab:
+        if: vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              printf '%s' 'multi
+              line' # TODO github.event.repository.visibility
+              git push --force gitlab main
+    """
+
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
   test "a shell comment in a script is still not a guard" do
     wf = """
     on: push

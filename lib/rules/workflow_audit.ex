@@ -4392,9 +4392,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           job.node
           |> node_strings([])
           |> Enum.reverse()
-          |> Enum.join("\n")
-          |> String.split("\n")
-          |> Enum.map_join("\n", &wf_strip_comment/1)
+          |> Enum.map_join("\n", &strip_shell_comments/1)
           |> then(&Regex.replace(~r/\\\r?\n[ \t]*/, &1, " "))
         else
           ""
@@ -4403,6 +4401,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
       {job.id, text}
     end)
   end
+
+  # Shell comments out of one scalar (a whole `run:` script), with quote state
+  # carried across its lines: a quote opened on one line closes on a later
+  # one, so a `#` after it is a comment only when no quote is open.
+  defp strip_shell_comments(text),
+    do: text |> :binary.bin_to_list() |> strip_shell(nil, true, [])
+
+  defp strip_shell([], _q, _ws?, acc), do: acc |> Enum.reverse() |> List.to_string()
+
+  defp strip_shell([?# | rest], nil, true, acc),
+    do: rest |> Enum.drop_while(&(&1 != ?\n)) |> strip_shell(nil, true, acc)
+
+  defp strip_shell([?\n | rest], q, _ws?, acc), do: strip_shell(rest, q, true, [?\n | acc])
+
+  defp strip_shell([c | rest], nil, _ws?, acc) when c in [?", ?'],
+    do: strip_shell(rest, c, false, [c | acc])
+
+  defp strip_shell([?\\, c | rest], ?", _ws?, acc),
+    do: strip_shell(rest, ?", false, [c, ?\\ | acc])
+
+  defp strip_shell([q | rest], q, _ws?, acc), do: strip_shell(rest, nil, false, [q | acc])
+
+  defp strip_shell([c | rest], q, _ws?, acc),
+    do: strip_shell(rest, q, q == nil and c in [?\s, ?\t], [c | acc])
 
   defp node_strings(node, acc) do
     case Hypatia.Kyaml.deref(node) do
