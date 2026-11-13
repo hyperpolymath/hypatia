@@ -435,11 +435,11 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
-    ;; defaulted: class excusable-at scope-form
+    ;; defaulted: excusable-at scope-form
     (rule-def
       :id "hypatia/disambiguation_rules/DR001"
       :text "`Ephapax` ↔ `AffineScript` co-occurrence flag"
-      :class gate
+      :class advisory
       :severity minor
       :excusable-at repo
       :scope-form exact-paths
@@ -840,11 +840,11 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
-    ;; defaulted: class excusable-at scope-form
+    ;; defaulted: excusable-at scope-form
     (rule-def
       :id "hypatia/pin_integrity/PI005"
       :text "a pin whose upstream ref has moved (stale-pin, advisory)"
-      :class gate
+      :class advisory
       :severity minor
       :excusable-at repo
       :scope-form exact-paths

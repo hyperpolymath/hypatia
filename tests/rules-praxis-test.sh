@@ -90,6 +90,8 @@ if row hypatia/branch_protection/BP001 | grep -q ':severity high' && row hypatia
 if row hypatia/git_state/GS007 | grep -q ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
 if row hypatia/code_scanning_alerts/CSA006 | grep -q ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi
 
+if row hypatia/pin_integrity/PI005 | grep -q ':class advisory' && row hypatia/disambiguation_rules/DR001 | grep -q ':class advisory'; then ok "rules the code calls advisory in words are class advisory"; else bad "PI005 or DR001 is not class advisory"; fi
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi

@@ -155,7 +155,10 @@ for f in lib/rules/*.ex; do
   if [ -n "$table" ]; then
     while IFS='|' read -r _ id sev text _; do
       id=$(echo "$id" | tr -d ' '); sev=$(echo "$sev" | tr -d ' ')
-      emit "hypatia/$m/$id" "$(printf '%s' "$text" | clean)" "$(sev_map "$sev")" gate active "" "" "class excusable-at scope-form"
+      # The row says so in words (PI005: "(stale-pin, advisory)"): advisory.
+      cls=gate; d="class excusable-at scope-form"
+      case "$text" in *[Aa]dvisory*) cls=advisory; d="excusable-at scope-form" ;; esac
+      emit "hypatia/$m/$id" "$(printf '%s' "$text" | clean)" "$(sev_map "$sev")" "$cls" active "" "" "$d"
     done <<<"$table"
   fi
 
@@ -170,6 +173,9 @@ for f in lib/rules/*.ex; do
     [ -z "$text" ] && text=$(printf '%s' "$desc" | clean)
     d=""
     [ -z "$text" ] && { text="$id in lib/rules/$m.ex."; d="text "; }
+    # The module doc can state that its info findings are advisory and not
+    # blocking (DisambiguationRules: `severity: :info` (advisory, not blocking)).
+    [ -z "$adv" ] && [ "$sev" = info ] && grep -qE 'severity: :info.*\(advisory' "$f" && adv=advisory
     class=${adv:-gate}
     [ -z "$adv" ] && d="${d}class "
     emit "hypatia/$m/$id" "$text" "$(sev_map "$sev")" "$class" active "" "" "${d}excusable-at scope-form"
