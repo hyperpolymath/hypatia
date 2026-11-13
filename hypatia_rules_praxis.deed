@@ -1565,6 +1565,15 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/workflow_audit/WF030"
+      :text "forge mirror without a source-visibility guard"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/workflow_audit/duplicate_workflow"
       :text "Two or more workflow files are byte-identical."
       :class gate
