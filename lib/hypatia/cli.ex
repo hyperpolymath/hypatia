@@ -777,12 +777,23 @@ defmodule Hypatia.CLI do
                     Map.get(&1, :type) == "invalid_actions_lock")
               )
 
+            # WH002 "absent" repeats workflow_audit's missing_permissions for the
+            # same file; keep WH002's write-all forms, which say more.
+            audit_missing_perms =
+              for r <- results,
+                  Map.get(r, :rule_module) == "workflow_audit",
+                  Map.get(r, :type) == "missing_permissions",
+                  into: MapSet.new(),
+                  do: Path.basename(to_string(Map.get(r, :file, "")))
+
             findings =
               if :workflow_audit in rules do
                 Enum.reject(
                   findings,
                   &(&1.rule == "WH004" or
-                      (&1.rule == "invalid_actions_lock" and audit_reported_lock?))
+                      (&1.rule == "invalid_actions_lock" and audit_reported_lock?) or
+                      (&1.rule == "WH002" and &1.reason =~ "absent" and
+                         MapSet.member?(audit_missing_perms, Path.basename(to_string(&1.file)))))
                 )
               else
                 findings

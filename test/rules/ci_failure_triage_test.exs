@@ -370,6 +370,18 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert p.action == :report
     end
 
+    test "a nonzero exit with no known signature is reported, never clean" do
+      %{primary: p} =
+        T.classify("Traceback (most recent call last):\nValueError: bad\n", %{exit_code: 1})
+
+      assert p.rule == T.id("unrecognized_failure")
+      assert p.action == :report
+    end
+
+    test "exit code 0 with no signature stays clean" do
+      assert %{primary: nil} = T.classify("all good\n", %{exit_code: 0})
+    end
+
     test "exit code 139 with no log line is a crash, attributed to the program" do
       %{primary: p} = T.classify("", %{exit_code: 139})
       assert p.rule == T.id("process_segfault")
@@ -571,6 +583,24 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
       found = Hypatia.CLI.collect_findings(dir, [:workflow_audit, :workflow_hardening])
       assert Enum.any?(found, &(&1.type == "invalid_actions_lock"))
+    end
+
+    @tag :tmp_dir
+    test "a combined scan reports a missing permissions block once", %{tmp_dir: dir} do
+      wf_dir = Path.join([dir, ".github", "workflows"])
+      File.mkdir_p!(wf_dir)
+
+      File.write!(
+        Path.join(wf_dir, "ci.yml"),
+        "on: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n"
+      )
+
+      found = Hypatia.CLI.collect_findings(dir, [:workflow_audit, :workflow_hardening])
+      assert Enum.count(found, &(&1.type == "missing_permissions")) == 1
+      refute Enum.any?(found, &(&1.type == "WH002"))
+
+      alone = Hypatia.CLI.collect_findings(dir, [:workflow_hardening])
+      assert Enum.any?(alone, &(&1.type == "WH002"))
     end
 
     test "the locked ref itself is still pinned" do

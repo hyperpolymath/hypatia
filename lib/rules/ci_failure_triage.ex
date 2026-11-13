@@ -624,6 +624,20 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "runtime or compiler, so treat it as the program's own crash and report it."
     },
     %{
+      # Never matched by a pattern: added only when a nonzero exit code has no
+      # known signature, so a failed job is never classified as clean.
+      name: "unrecognized_failure",
+      layer: :code,
+      patterns: [],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :code_owner,
+      reason:
+        "The job exited nonzero and no known signature matched. Report it with the " <>
+          "log tail; if it recurs, it is a candidate for a new signature."
+    },
+    %{
       name: "test_failure",
       layer: :code,
       patterns: [
@@ -1001,6 +1015,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
       rule = Enum.find(@rules, &(&1.name == "process_segfault"))
       [finding(rule, "exit code 139", 0) | matches]
     end
+  end
+
+  defp add_exit_code([], %{exit_code: code}) when is_integer(code) and code != 0 do
+    rule = Enum.find(@rules, &(&1.name == "unrecognized_failure"))
+    [finding(rule, "exit code #{code}", 0)]
   end
 
   defp add_exit_code(matches, _ctx), do: matches
