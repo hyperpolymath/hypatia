@@ -100,6 +100,32 @@ if row hypatia/supply_chain/SC012 | grep -q ':severity high' && row hypatia/stru
   && row hypatia/research_extensions/RE001 | grep -q ':severity high' && ! row hypatia/code_scanning_alerts/CSA001 | grep -q ':severity'; then
   ok "computed severities are read; run-time severities stay empty"; else bad "computed severity rows are wrong"; fi
 
+# The names findings actually carry resolve (A5 R09). Ground truth: every
+# rule_module/type pair in this repo's .hypatia-baseline.json, and the 17 pairs
+# A5 counts in the standards baseline. A baseline entry whose name no code in
+# lib/ mentions is stale, not a gap; the list below is checked against lib/ so it
+# cannot hide a real one.
+STALE='inbox_automation/IA001 inbox_automation/IA002 inbox_automation/IA003 inbox_automation/IA004 inbox_automation/IA005 inbox_automation/IA006 inbox_automation/IA007 workflow_audit/inbox_steward_intake_missing workflow_audit/inbox_steward_missing'
+STANDARDS='cicd_rules/banned_language_file code_safety/js_exec_sync code_safety/ncl_k9_missing_pedigree code_safety/unwrap_without_check code_scanning_alerts/CSA001 code_scanning_alerts/CSA002 code_scanning_alerts/CSA003 content_patterns/download_then_run_shell content_patterns/eval_in_shell content_patterns/http_in_docs content_patterns/known_fake_action_sha content_patterns/npx_in_workflow green_web/non_green_hosting research_extensions/RE001 scorecard/DependencyPinning structural_drift/SD022 workflow_hardening/WH013'
+pairs_missing() { # <deed file>: baseline pairs with no registry id
+  local pair out=""
+  for pair in $(jq -r '.[] | "\(.rule_module)/\(.type)"' .hypatia-baseline.json | sort -u) $STANDARDS; do
+    grep -qF -- "\"hypatia/$pair\"" "$1" && continue
+    case " $STALE " in *" $pair "*) continue ;; esac
+    out="$out $pair"
+  done
+  printf '%s' "$out"
+}
+unresolved=$(pairs_missing "$deed")
+if [ -z "$unresolved" ]; then ok "every baseline pair resolves to a registry id"; else bad "baseline pairs not in the registry:$unresolved"; fi
+sed 's|"hypatia/code_safety/js_exec_sync"|"hypatia/code_safety/js_exec_gone"|' "$deed" >"$work/pair.deed"
+if [ "$(pairs_missing "$work/pair.deed")" = " code_safety/js_exec_sync" ]; then ok "a baseline pair missing from the registry is caught"; else bad "a removed baseline pair was not caught"; fi
+stale_wrong=""
+for pair in $STALE; do
+  if grep -rqF -- "${pair#*/}" lib; then stale_wrong="$stale_wrong $pair"; fi
+done
+if [ -z "$stale_wrong" ]; then ok "the stale baseline names are in no code under lib/"; else bad "listed as stale but lib/ mentions:$stale_wrong"; fi
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi

@@ -11,6 +11,10 @@
 # maps an existing id by PREFIX only: `<module>/<ID>` becomes
 # `hypatia/<module>/<ID>`. No id that hypatia emits is changed here.
 #
+# A second pass (section 6) adds the plain `type` names that findings carry:
+# SARIF ruleIds, .hypatia-baseline.json and .hypatia-ignore key on those, not on
+# the coded ids. See the comment at section 6 for each vocabulary's source.
+#
 # Sources, all read from the tree (same extraction as gen-rule-catalogue.sh):
 #   1. lib/rules/*.ex: prefixed ids in `rule:`/`id:` literals, and the rows of
 #      a moduledoc table `| ID | severity | text |` (pr_automerge.ex).
@@ -84,8 +88,8 @@ first_sentence() { sed -E 's/^(([^.]|[.][^ ])*[.])  ?[A-Z].*/\1/'; }
 # The severity and class the code states next to the first literal of $id.
 # Prints "<severity> US <advisory?> US <description>" (US = \037, not a tab:
 # IFS would merge empty tab fields); a field is empty when the code is silent.
-near() { # <file> <id>
-  awk -v id="$2" '
+near() { # <file> <id> [hit-regex for an atom-named rule]
+  awk -v id="$2" -v hitre="${3:-}" '
     function comp(l,   t, w) {
       t = l
       while (match(t, /:(critical|high|medium|warn|low|info)/)) {
@@ -97,7 +101,7 @@ near() { # <file> <id>
     { line[NR] = $0 }
     # A one-line severity helper: defp re001_severity(job), do: if(..., do: :high, else: :warn)
     match($0, /defp [a-z0-9_]*severity[a-z0-9_]*\(/) { nm = substr($0, RSTART + 5, RLENGTH - 6); helper[nm] = $0 }
-    $0 ~ ("(rule|id): \"" id "\"") || $0 ~ ("(rule|id): \"" id "[^0-9]") { hits[++n] = NR }
+    hitre != "" ? ($0 ~ hitre) : ($0 ~ ("(rule|id): \"" id "\"") || $0 ~ ("(rule|id): \"" id "[^0-9]")) { hits[++n] = NR }
     END {
       if (!n) { printf "\037\037\n"; exit }
       # Every emitting literal counts. Per literal the map is read 3 lines back
@@ -267,6 +271,90 @@ while IFS=$'\t' read -r old new newtext; do
   awk -F'\t' -v OFS='\t' -v o="$old" -v n="$new" '$1 == o { $2 = "Superseded by " n " (same rule; this id stays valid and is not changed at its source). " $2 } { print }' "$rows" >"$rows.t"
   mv "$rows.t" "$rows"
 done <<<"$SUPERSEDE"
+
+# 6. The plain names findings carry today (A5 3.3: `rule_module/type` becomes
+#    `hypatia/<rule_module>/<type>`). SARIF ruleIds, .hypatia-baseline.json and
+#    .hypatia-ignore key on these, so a deviation resolves only if they are here.
+#    Source of each vocabulary (what lib/hypatia/cli.ex emits as `type`):
+#      code_safety       `id: :name` entries with a `pattern:` in code_safety.ex
+#      content_patterns  `id: :name` entries with `applies_to:` in the
+#                        @blocked_patterns table of cicd_rules.ex
+#      honest_completion, green_web, root_hygiene, workflow_audit: `type: :name`
+#                        atoms (workflow_audit also `rule: "name"` strings)
+#      scorecard         the `category: "Name"` of each check in scorecard_ingestor.ex
+#      fixed names       literals in cli.ex / the rule files, each guarded below
+# An id that already has a row (a coded id, a named or superseded one) is skipped.
+has_row() { awk -F'\t' -v i="$1" '$1 == i { f = 1 } END { exit !f }' "$rows"; }
+
+# Entries of a pattern table: "name US severity US text". One entry runs from its
+# `id: :name,` line to the next one; `need` names a key it must contain.
+entries() { # <file> <need-regex> [block-start-regex]
+  awk -v need="$2" -v bstart="${3:-}" '
+    function flush() { if (name != "" && (need == "" || has)) printf "%s\037%s\037%s\n", name, sev, txt; name = ""; sev = ""; txt = ""; has = 0; pend = 0 }
+    bstart != "" && $0 ~ bstart { inb = 1 }
+    bstart != "" && inb && /^  \]/ { flush(); inb = 0 }
+    bstart != "" && !inb { next }
+    match($0, /^ *id: :[a-z0-9_]+,/) { flush(); name = $0; sub(/^ *id: :/, "", name); sub(/,.*/, "", name); next }
+    name == "" { next }
+    need != "" && $0 ~ need { has = 1 }
+    sev == "" && match($0, /severity: :(critical|high|medium|warn|low|info)/) { sev = substr($0, RSTART + 11, RLENGTH - 11) }
+    txt == "" && pend && match($0, /"[^"]+"/) { txt = substr($0, RSTART + 1, RLENGTH - 2); pend = 0 }
+    txt == "" && match($0, /(description|reason): *$/) { pend = 1 }
+    txt == "" && match($0, /(description|reason): *"[^"]+"/) { t = substr($0, RSTART, RLENGTH); sub(/^[a-z]+: *"/, "", t); sub(/"$/, "", t); txt = t }
+    END { flush() }' "$1"
+}
+
+# emit one emitted-name row; $4 is the text ("" gives the documented placeholder).
+emit_name() { # <module> <name> <severity-word> <text> [advisory]
+  local id="hypatia/$1/$2" d="class excusable-at scope-form" text cls=gate
+  has_row "$id" && return 0
+  text=$(printf '%s' "$4" | first_sentence | clean)
+  [ -z "$text" ] && { text="$id in lib/rules/$1.ex."; d="text $d"; }
+  [ -n "${5:-}" ] && { cls=advisory; d="${d/class /}"; }
+  emit "$id" "$text" "$(sev_map "$3")" "$cls" active "" "" "$d"
+}
+
+while IFS=$'\037' read -r name sev txt; do
+  emit_name code_safety "$name" "$sev" "$txt"
+done < <(entries lib/rules/code_safety.ex 'pattern:')
+# cli.ex gives a content-pattern finding `Map.get(f, :severity, "medium")`, so an
+# entry that states no severity is medium.
+grep -qF 'severity: to_string(Map.get(f, :severity, "medium"))' lib/hypatia/cli.ex ||
+  { echo "gen-rules-praxis: cli.ex no longer defaults content_patterns severity to medium; update the generator" >&2; exit 1; }
+while IFS=$'\037' read -r name sev txt; do
+  emit_name content_patterns "$name" "${sev:-medium}" "$txt"
+done < <(entries lib/rules/cicd_rules.ex 'applies_to:' '^  @blocked_patterns \[')
+
+for m in honest_completion green_web root_hygiene workflow_audit; do
+  f=lib/rules/$m.ex
+  names=$({ grep -ohE '^ *type: :[a-z][a-z0-9_]+' "$f" | sed 's/.*: ://'; } || true)
+  [ "$m" = workflow_audit ] && names="$names
+$({ grep -ohE '^ *rule: "[a-z][a-z0-9_]+"' "$f" | sed 's/.*: "//; s/"$//'; } || true)"
+  for name in $(printf '%s\n' "$names" | sort -u); do
+    [ -z "$name" ] && continue
+    IFS=$'\037' read -r sev adv desc <<<"$(near "$f" "$name" "(type|rule): (:|\")$name([^a-z0-9_]|\$)")"
+    emit_name "$m" "$name" "$sev" "$desc" "$adv"
+  done
+done
+
+# Scorecard: one type per check category.
+for name in $({ grep -ohE 'category: "[A-Za-z]+"' lib/scorecard_ingestor.ex | sed 's/.*: "//; s/"$//'; } | sort -u); do
+  emit_name scorecard "$name" "" "OpenSSF Scorecard check category $name."
+done
+
+# Fixed names, each proved by a literal in the code that emits it.
+while IFS=$'\t' read -r mod name f lit text; do
+  grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($mod/$name)" >&2; exit 1; }
+  emit_name "$mod" "$name" "" "$text"
+done <<'EOF'
+cicd_rules	missing_requirement	lib/hypatia/cli.ex	type: "missing_requirement"	A file the repo must have is missing.
+cicd_rules	banned_language_file	lib/hypatia/cli.ex	type: "banned_language_file"	A file in a banned language is in the repo.
+workflow_audit	no_workflows_dir	lib/hypatia/cli.ex	type: "no_workflows_dir"	The repo has no .github/workflows directory.
+honest_completion	inflated_completion	lib/hypatia/cli.ex	type: "inflated_completion"	The claimed completion is far above the evidence.
+migration_rules	deprecated_api	lib/hypatia/cli.ex	type: "deprecated_api"	A deprecated API is in use.
+security_errors	secret_detected	lib/hypatia/cli.ex	rule_type = "secret_detected"	A line holds what looks like a literal secret.
+structured_format	SF001	lib/rules/structured_format.ex	type: "SF001"	A regex rebuilds a workflow field that a structured reader should read.
+EOF
 
 # A5 RL3/R08: no two rows share a text. Where the code gives one text to two
 # modules (CSA002/SSA002 "Severity summary"), qualify each with its module.
