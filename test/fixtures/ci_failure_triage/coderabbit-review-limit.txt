@@ -1,3 +1,4 @@
+<!-- This is an auto-generated comment: rate limited by coderabbit.ai -->
 > [!WARNING]
 > ## Review limit reached
 > You've used all free OSS reviews for now. Wait for the free limit to reset to keep reviewing this public repository.

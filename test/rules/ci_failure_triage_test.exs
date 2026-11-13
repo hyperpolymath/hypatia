@@ -185,6 +185,30 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert p.rule == T.id("runtime_exception")
     end
 
+    test "key-decoder errors need a GitHub App token step in the log" do
+      log =
+        "##[error]error:1E08010C:DECODER routines::unsupported\n  1) test x\n5 tests, 1 failure\n"
+
+      refute T.id("app_key_wrong_format") in Enum.map(T.classify(log).matches, & &1.rule)
+    end
+
+    test "an app's own 'Review limit reached' is not CodeRabbit" do
+      log = "Review limit reached for user 7\n  1) test x\n5 tests, 1 failure\n"
+      assert T.classify(log).primary.layer == :code
+    end
+
+    test "gate and pins findings carry a route" do
+      [g] = T.check_gate(["lint"], [])
+      assert g.route == "owner-only"
+      a = String.duplicate("a", 40)
+      b = String.duplicate("b", 40)
+
+      [p | _] =
+        T.check_scanner_pin_drift(%{"x.yml" => "  PA_SHA: #{a}\n", "y.yml" => "  PA_SHA: #{b}\n"})
+
+      assert p.route == "owner-only"
+    end
+
     test "gh api with HTTP 502 is a GitHub API outage" do
       %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
       assert p.rule == T.id("api_server_error")
@@ -448,6 +472,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         runs-on: ubuntu-latest
         steps:
           - run: echo scan
+          - uses: actions/upload-artifact@v7.0.0
+            with:
+              name: findings
       deposit:
         runs-on: ubuntu-latest
         needs: [scan]
@@ -537,6 +564,46 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         )
 
       assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => tolerated}) == []
+    end
+
+    test "step-level success() is not a guard (true at the first step)" do
+      step =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n",
+          "      - if: success()\n        uses: actions/download-artifact@v8.0.2\n"
+        )
+
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => step})
+    end
+
+    test "an artifact no needed job uploads does not fire" do
+      other =
+        String.replace(
+          @deposit,
+          "          name: findings\n  deposit:",
+          "          name: other\n  deposit:"
+        )
+
+      assert other =~ "name: other"
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => other}) == []
+    end
+
+    test "an artifact uploaded by a transitive need still fires" do
+      chain =
+        String.replace(
+          @deposit,
+          "  deposit:",
+          "  mid:\n    runs-on: ubuntu-latest\n    needs: [scan]\n    steps:\n      - run: echo mid\n  deposit:"
+        )
+        |> String.replace(
+          "needs: [scan]\n    if: always()",
+          "needs: [mid]\n    if: always()"
+        )
+
+      # Guard the fixture edits themselves: deposit now needs only mid.
+      assert chain =~ "needs: [mid]\n    if: always()"
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => chain})
     end
 
     test "a download step guarded by !cancelled() does not fire" do

@@ -4170,7 +4170,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       case Hypatia.Workflow.parse(content, filename) do
         {:ok, %Hypatia.Workflow{jobs: jobs}} ->
-          for job <- jobs, always_after_cancel?(job) do
+          for job <- jobs, always_after_cancel?(job, jobs) do
             %{
               rule: "WF029",
               rule_id: "hypatia/ci_failure_triage/always_after_cancel",
@@ -4200,7 +4200,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # parentheses, comparisons (`!cancelled() == false`), string literals
   # (`'x && !cancelled()'` is a truthy string) — is uncertain and
   # treated as unguarded; a false "unguarded" only costs a dismissable finding.
-  defp excludes_cancellation?(cond_text) do
+  defp excludes_cancellation?(cond_text),
+    do: guarded_by?(cond_text, ["!cancelled()", "success()"])
+
+  # Step level: `success()` means "all previous steps succeeded", which is
+  # true at the first step even after a cancel, so only `!cancelled()` counts.
+  defp excludes_cancellation?(cond_text, :step),
+    do: guarded_by?(cond_text, ["!cancelled()"])
+
+  defp guarded_by?(cond_text, guards) do
     expr =
       cond_text
       |> String.trim()
@@ -4211,7 +4219,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
          Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
       false
     else
-      expr |> String.split("&&") |> Enum.any?(&(&1 in ["!cancelled()", "success()"]))
+      expr |> String.split("&&") |> Enum.any?(&(&1 in guards))
     end
   end
 
@@ -4233,22 +4241,69 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp current_run_download?(_), do: false
 
-  defp always_after_cancel?(%Hypatia.Workflow.Job{} = job) do
+  defp always_after_cancel?(%Hypatia.Workflow.Job{} = job, jobs) do
     cond_text = job.if || ""
+    needed = needed_jobs(job, jobs)
 
     Regex.match?(~r/\balways\(\)/, cond_text) and
       not excludes_cancellation?(cond_text) and
-      Hypatia.Kyaml.get(job.node, "needs") != nil and
+      needed != [] and
       Enum.any?(job.steps, fn step ->
         # A download with a `run-id` naming ANOTHER run reads that run's
         # artifact, which cancelling this run's needs does not remove.
         # `${{ github.run_id }}` is this run, so it still counts.
         is_binary(step.uses) and
           String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
-          not excludes_cancellation?(step.if || "") and
+          not excludes_cancellation?(step.if || "", :step) and
           not tolerated_failure?(step) and
-          current_run_download?(Hypatia.Workflow.input(step, "run-id"))
+          current_run_download?(Hypatia.Workflow.input(step, "run-id")) and
+          produced_by_needed?(Hypatia.Workflow.input(step, "name"), needed)
       end)
+  end
+
+  # The jobs this job needs, transitively: a cancel anywhere upstream can
+  # leave their artifacts missing.
+  defp needed_jobs(job, jobs) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+    collect_needs(direct_needs(job), by_id, MapSet.new()) |> Enum.map(&Map.fetch!(by_id, &1))
+  end
+
+  defp collect_needs([], _by_id, seen), do: MapSet.to_list(seen)
+
+  defp collect_needs([id | rest], by_id, seen) do
+    cond do
+      MapSet.member?(seen, id) or not Map.has_key?(by_id, id) ->
+        collect_needs(rest, by_id, seen)
+
+      true ->
+        collect_needs(direct_needs(by_id[id]) ++ rest, by_id, MapSet.put(seen, id))
+    end
+  end
+
+  defp direct_needs(job) do
+    case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
+      %{value: v} when is_binary(v) -> [v]
+      _ -> []
+    end
+  end
+
+  # A download is at risk only if a needed job uploads what it reads. An
+  # unnamed download reads every artifact; a name built from an expression
+  # cannot be resolved statically, so both count when any needed job uploads.
+  defp produced_by_needed?(name, needed) do
+    uploads =
+      for j <- needed,
+          s <- j.steps,
+          is_binary(s.uses),
+          String.starts_with?(String.downcase(s.uses), "actions/upload-artifact@"),
+          do: Hypatia.Workflow.input(s, "name") || "artifact"
+
+    cond do
+      uploads == [] -> false
+      name in [nil, ""] or String.contains?(name, "${{") -> true
+      true -> Enum.any?(uploads, &(&1 == name or String.contains?(&1, "${{")))
+    end
   end
 
   # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─

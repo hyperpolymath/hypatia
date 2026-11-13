@@ -339,6 +339,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/error:1E08010C/,
         ~r/Invalid keyData/
       ],
+      # The decoder errors are any key parser's; only a GitHub App token step
+      # elsewhere in the same log ties them to the App's private key.
+      context: [~r/create-github-app-token/],
       action: :owner,
       retries: 0,
       fix: nil,
@@ -393,6 +396,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "review_rate_limited",
       layer: :platform,
       patterns: [~r/Review limit reached/],
+      # An app's own review feature may log the phrase; CodeRabbit's comment
+      # carries its own marker.
+      context: [~r/coderabbit/i],
       action: :none,
       retries: 0,
       fix: nil,
@@ -696,7 +702,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
     (Enum.map(@rules, &Map.put(&1, :input, :log)) ++ @supplemental)
     |> Enum.sort_by(&rank/1)
     |> Enum.map(fn r ->
-      r |> Map.delete(:patterns) |> Map.put(:id, id(r.name)) |> Map.put(:route, route(r.action))
+      r
+      |> Map.drop([:patterns, :context])
+      |> Map.put(:id, id(r.name))
+      |> Map.put(:route, route(r.action))
     end)
   end
 
@@ -729,7 +738,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
     matches =
       @rules
       |> Enum.flat_map(fn rule ->
-        case first_hit(rule, lines) do
+        case first_hit(rule, lines, log) do
           nil -> []
           {text, n} -> [finding(rule, text, n)]
         end
@@ -784,6 +793,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         rule: id("required_check_never_reported"),
         layer: :config,
         action: :owner,
+        route: route(:owner),
         retries: 0,
         fix: nil,
         escalation: :owner,
@@ -832,6 +842,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
           rule: id("scanner_pin_drift"),
           layer: :config,
           action: :owner,
+          route: route(:owner),
           retries: 0,
           fix: nil,
           escalation: :owner,
@@ -852,7 +863,16 @@ defmodule Hypatia.Rules.CiFailureTriage do
 
   # ── internals ─────────────────────────────────────────────────────────
 
-  defp first_hit(rule, lines) do
+  defp first_hit(rule, lines, log) do
+    if in_context?(rule, log), do: scan_lines(rule, lines)
+  end
+
+  # A rule with `:context` fires only when one of those patterns appears
+  # somewhere in the whole log (the signature line alone is ambiguous).
+  defp in_context?(%{context: ctx}, log), do: Enum.any?(ctx, &Regex.match?(&1, log))
+  defp in_context?(_rule, _log), do: true
+
+  defp scan_lines(rule, lines) do
     Enum.find_value(lines, fn {text, n} ->
       if Enum.any?(rule.patterns, &Regex.match?(&1, text)), do: {String.trim(text), n}
     end)
