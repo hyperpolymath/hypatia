@@ -4197,7 +4197,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # An `if:` that is false once the run is cancelled. Structural, not a
   # substring test: strip `${{ }}`, split on `&&`, and require one conjunct
   # to be exactly `!cancelled()` or `success()`. Anything else — `||`,
-  # parentheses, comparisons (`!cancelled() == false`) — is uncertain and
+  # parentheses, comparisons (`!cancelled() == false`), string literals
+  # (`'x && !cancelled()'` is a truthy string) — is uncertain and
   # treated as unguarded; a false "unguarded" only costs a dismissable finding.
   defp excludes_cancellation?(cond_text) do
     expr =
@@ -4206,7 +4207,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
       |> String.replace(~r/\s+/, "")
 
-    if String.contains?(expr, ["||", "==", "!=", "(!", ")!", "((", "))"]) or
+    if String.contains?(expr, ["||", "==", "!=", "(!", ")!", "((", "))", "'", "\""]) or
          Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
       false
     else
