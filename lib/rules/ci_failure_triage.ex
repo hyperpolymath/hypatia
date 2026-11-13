@@ -92,6 +92,28 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "an upstream job was cancelled, that job runs with `if: always()`: see WF029."
     },
     %{
+      # CASE-043: estate gates that read GitHub state (rulesets, the workflow
+      # catalogue, a callee workflow at a pinned SHA) and refuse to pass when
+      # the read fails. Three signatures in one 3-minute window on
+      # metadatastician/standards#1514/#1518 and its main: one API event.
+      name: "github_state_unreadable",
+      layer: :platform,
+      patterns: [
+        ~r/could not read branch rulesets/,
+        ~r/could not read the workflow catalogue/,
+        ~r/could not be read at [0-9a-f]{7,40}\S* \(offline with no cache entry, or the API refused\)/
+      ],
+      action: :rerun,
+      retries: 1,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "A gate could not read GitHub state (rulesets, the workflow catalogue or a " <>
+          "pinned callee) and correctly refused to pass. Not the change. Rerun once; " <>
+          "if it fails again, the token the gate uses lacks read access or is rate " <>
+          "limited, and only a person can fix that."
+    },
+    %{
       name: "api_rate_limit",
       layer: :platform,
       patterns: [

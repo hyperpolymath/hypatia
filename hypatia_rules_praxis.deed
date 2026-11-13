@@ -467,6 +467,14 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/ci_failure_triage/github_state_unreadable"
+      :text "A gate could not read GitHub state (rulesets, the workflow catalogue or a pinned callee) and correctly refused to pass."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/ci_failure_triage/kyaml_format"
       :text "A YAML file is not in KYAML form (quintessence compose.yaml)."
       :class gate
