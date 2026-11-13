@@ -273,7 +273,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "dependabot_ecosystem_mismatch",
       layer: :config,
-      patterns: [~r/has a bun\.lock file but no package-lock\.json/],
+      patterns: [
+        ~r/has a bun\.lock file but no package-lock\.json/,
+        # cicd-squabbler SQ-TOOL-02 signature (run 43225380901).
+        ~r/Dependabot detected that Bun is misconfigured/
+      ],
       action: :fix,
       retries: 0,
       fix: "dependabot.yml: package-ecosystem npm -> bun for that directory",

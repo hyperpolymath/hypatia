@@ -4194,6 +4194,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # An `if:` that is false once the run is cancelled: `!cancelled()` or
+  # `success()`. A bare `cancelled()` (e.g. `always() || cancelled()`) is
+  # still true after a cancel, so it does not count as a guard.
+  defp excludes_cancellation?(cond_text) do
+    Regex.match?(~r/!\s*cancelled\(\)/, cond_text) or
+      Regex.match?(~r/\bsuccess\(\)/, cond_text)
+  end
+
   defp current_run_download?(run_id) when run_id in [nil, ""], do: true
 
   defp current_run_download?(run_id) when is_binary(run_id),
@@ -4205,7 +4213,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     cond_text = job.if || ""
 
     Regex.match?(~r/\balways\(\)/, cond_text) and
-      not Regex.match?(~r/cancelled\(\)/, cond_text) and
+      not excludes_cancellation?(cond_text) and
       Hypatia.Kyaml.get(job.node, "needs") != nil and
       Enum.any?(job.steps, fn step ->
         # A download with a `run-id` naming ANOTHER run reads that run's
@@ -4213,6 +4221,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # `${{ github.run_id }}` is this run, so it still counts.
         is_binary(step.uses) and
           String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
+          not excludes_cancellation?(step.if || "") and
           current_run_download?(Hypatia.Workflow.input(step, "run-id"))
       end)
   end
