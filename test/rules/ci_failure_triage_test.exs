@@ -15,6 +15,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   # from the reported signature (the line that matters is the reported text).
   @corpus [
     {"rate-limit-setup-bun.txt", "api_rate_limit", :rerun},
+    {"mirror-ssh-key-empty.txt", "ssh_key_secret_empty", :owner},
     {"rate-limit-then-tests-red.txt", "api_rate_limit", :rerun},
     {"merge-ref-race.txt", "merge_ref_race", :report},
     {"invalid-lockfile-pin.txt", "actions_lock_invalid_pin", :fix},

@@ -375,6 +375,20 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "empty. Store it where the workflow reads it. Only a person can do this."
     },
     %{
+      name: "ssh_key_secret_empty",
+      layer: :config,
+      patterns: [~r/The ssh-private-key argument is empty/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "An SSH key secret (webfactory/ssh-agent `ssh-private-key`) reached the step " <>
+          "empty. Seen on forge mirrors whose `*_MIRROR_ENABLED` variable is on while " <>
+          "the forge's key secret was never set, so every push to main fails. Add the " <>
+          "secret or turn the variable off. Only a person can do this; never rerun."
+    },
+    %{
       name: "security_findings_reported",
       layer: :code,
       patterns: [~r/Hypatia reported \d+ (critical|high) finding/i],
