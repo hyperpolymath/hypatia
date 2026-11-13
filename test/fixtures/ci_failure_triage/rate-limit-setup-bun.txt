@@ -1,0 +1,7 @@
+##[group]Run oven-sh/setup-bun@v2
+with:
+  bun-version: latest
+##[endgroup]
+Downloading a new version of Bun: https://api.github.com/repos/oven-sh/bun/releases
+##[error]HttpError: API rate limit exceeded for installation ID 51234567. If you reach out to GitHub Support for help, please include the request ID 0400:3A1B:1C2D:3E4F.
+##[error]Process completed with exit code 1.

@@ -1,0 +1,6 @@
+Run scripts/check-canon-lockstep.sh --strict
+  PASS  canon.lock parses
+  FAIL  instance declares-against 2.1.4, standards publishes 2.1.5
+passed 4   failed 1   skipped 0
+GATE A FAILED — the canon and the spine are not in lockstep.
+##[error]Process completed with exit code 1.

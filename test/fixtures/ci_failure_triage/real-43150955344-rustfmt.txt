@@ -1,0 +1,17 @@
+2026-11-12T03:51:33.0673589Z rustc 1.99.1 (58cf8f9c3 2026-10-13)
+2026-11-12T03:51:33.0821963Z ##[group]Run cargo fmt --all -- --check
+2026-11-12T03:51:33.0823126Z cargo fmt --all -- --check
+2026-11-12T03:51:33.0853801Z shell: /usr/bin/bash -e {0}
+2026-11-12T03:51:33.0859562Z ##[endgroup]
+2026-11-12T03:51:33.4308807Z Diff in /home/runner/work/hypatia/hypatia/fixer/src/fixer.rs:225:
+2026-11-12T03:51:33.4317484Z          let fixer = WorkflowFixer::new();
+2026-11-12T03:51:33.4321598Z          let wf = "name: ci\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n";
+2026-11-12T03:51:33.4324985Z          let out = fixer.fix_missing_permissions(wf).expect("a block is added");
+2026-11-12T03:51:33.4328317Z -        assert!(out.contains("\npermissions:\n  contents: read\n"), "got: {out}");
+2026-11-12T03:51:33.4330785Z +        assert!(
+2026-11-12T03:51:33.4332896Z +            out.contains("\npermissions:\n  contents: read\n"),
+2026-11-12T03:51:33.4335116Z +            "got: {out}"
+2026-11-12T03:51:33.4336828Z +        );
+2026-11-12T03:51:33.4338597Z          assert!(!out.contains("read-all"), "got: {out}");
+2026-11-12T03:51:33.4340627Z      }
+2026-11-12T03:51:33.5236370Z ##[error]Process completed with exit code 1.

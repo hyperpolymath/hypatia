@@ -1,0 +1,3 @@
+ERROR Fail to load the list of plugins installed on the server: Not authorized or organization not found
+INFO  EXECUTION FAILURE
+##[error]Action failed: The process '/opt/sonar-scanner/bin/sonar-scanner' failed with exit code 3

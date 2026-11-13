@@ -96,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
+    always_after_cancel = check_always_after_cancel(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
 
     %{
@@ -137,6 +138,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           toolchain_input_missing ++
           broken_reusable_revisions ++
           moved_reusable_calls ++
+          always_after_cancel ++
           mirror_visibility,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
@@ -164,6 +166,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       toolchain_input_missing_count: length(toolchain_input_missing),
       broken_reusable_revision_count: length(broken_reusable_revisions),
       moved_reusable_call_count: length(moved_reusable_calls),
+      always_after_cancel_count: length(always_after_cancel),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -353,6 +356,31 @@ defmodule Hypatia.Rules.WorkflowAudit do
           # and removed dtolnay/rust-toolchain from 7 lockfile entries.
           Hypatia.Rules.ActionsLock.pinned?(lock, filename, slug) ->
             []
+
+          # The lock lists this action for this workflow at ANOTHER ref: the
+          # workflow moved (typically a Dependabot bump) and the lock did not.
+          # The runner then refuses the job at `Set up job`. The fix is to
+          # regenerate the lock, never to SHA-pin inline (see above). Seen in
+          # EpistemicTypes.jl, ResidualEvidenceTypes.jl and this-ssg (2026-11).
+          # Checked before pin exemptions: an exemption explains a symbolic ref,
+          # it does not make a mismatched lock valid. Medium, as unpinned_action
+          # was, so the estate gate's blocking set does not change.
+          (stale = Hypatia.Rules.ActionsLock.stale_ref(lock, filename, slug)) != nil ->
+            [
+              %{
+                type: :actions_lock_stale,
+                rule_id: "hypatia/workflow_audit/actions_lock_stale",
+                file: filename,
+                action_ref: slug,
+                locked_ref: stale,
+                severity: :medium,
+                action: :regenerate_actions_lock,
+                reason:
+                  "#{filename} uses `#{slug}` but actions.lock pins `#{stale}` for this " <>
+                    "workflow, so the job fails at Set up job. Regenerate the lock " <>
+                    "(`gh actions-lock`) in the same PR as the bump; do not SHA-pin inline."
+              }
+            ]
 
           Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
             [
@@ -4496,6 +4524,177 @@ defmodule Hypatia.Rules.WorkflowAudit do
       (Regex.match?(~r/^on:[ \t]*$/m, content) and
          Regex.match?(~r/^[ \t]+pull_request:/m, content) and
          Regex.match?(@d_burn_bare_push, content))
+  end
+
+  # ─── WF029: `if: always()` job that consumes upstream artifacts ───────
+  #
+  # `always()` also runs the job when the run was CANCELLED. A job that needs
+  # upstream jobs and downloads their artifacts then fails on artifacts the
+  # cancelled jobs never uploaded, and a cancelled run shows a red job.
+  # Seen in cicd-squabbler static-analysis-gate.yml "Deposit findings".
+  # `!cancelled()` keeps the run-even-if-a-need-failed behaviour without
+  # the cancel cascade. Rule id in A5 form:
+  # hypatia/ci_failure_triage/always_after_cancel (see CiFailureTriage).
+
+  @doc """
+  WF029: a job with `if: always()` (and no `cancelled()` guard) that has
+  `needs:` and downloads artifacts. Recipe: replace `always()` with
+  `!cancelled()`.
+  """
+  def check_always_after_cancel(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{jobs: jobs}} ->
+          for job <- jobs, always_after_cancel?(job, jobs) do
+            %{
+              rule: "WF029",
+              rule_id: "hypatia/ci_failure_triage/always_after_cancel",
+              type: :always_after_cancel,
+              file: filename,
+              line: job.line,
+              job: job.id,
+              severity: :medium,
+              reason:
+                "job `#{job.id}` runs with `if: always()`, needs upstream jobs and " <>
+                  "downloads their artifacts. On a cancelled run it still starts, finds " <>
+                  "no artifacts and turns red. Use `if: ${{ !cancelled() }}` instead.",
+              fix_recipe: :always_to_not_cancelled,
+              action: :fix
+            }
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  # An `if:` that is false once the run is cancelled. Structural, not a
+  # substring test: strip `${{ }}`, split on `&&`, and require one conjunct
+  # to be exactly `!cancelled()` or `success()`. Anything else — `||`,
+  # parentheses, comparisons (`!cancelled() == false`), string literals
+  # (`'x && !cancelled()'` is a truthy string) — is uncertain and
+  # treated as unguarded; a false "unguarded" only costs a dismissable finding.
+  defp excludes_cancellation?(cond_text),
+    do: guarded_by?(cond_text, ["!cancelled()", "success()"])
+
+  # Step level: `success()` means "all previous steps succeeded", which is
+  # true at the first step even after a cancel, so only `!cancelled()` counts.
+  defp excludes_cancellation?(cond_text, :step),
+    do: guarded_by?(cond_text, ["!cancelled()"])
+
+  defp guarded_by?(cond_text, guards) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+      # A quoted literal is opaque: `'x && !cancelled()'` is one truthy string.
+      |> String.replace(~r/'(?:[^']|'')*'/, "S")
+      |> String.replace(~r/\s+/, "")
+
+    # `||` or grouping can make any conjunct optional, so the guard is
+    # uncertain. A comparison in ANOTHER conjunct (`github.event_name == 'push'`)
+    # cannot disable an exact `!cancelled()` conjunct, so only the conjunct
+    # itself has to match.
+    if String.contains?(expr, "||") or
+         Regex.match?(~r/\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) do
+      false
+    else
+      expr |> String.split("&&") |> Enum.any?(&(&1 in guards))
+    end
+  end
+
+  # A step with a literal `continue-on-error: true` cannot turn the job red,
+  # so its missing artifact is tolerated. An expression is not literal.
+  defp tolerated_failure?(%{node: node}) when not is_nil(node) do
+    case Hypatia.Kyaml.get(node, "continue-on-error") do
+      nil -> false
+      value -> Map.get(Hypatia.Kyaml.deref(value), :value) in [true, "true"]
+    end
+  end
+
+  defp tolerated_failure?(_), do: false
+
+  defp current_run_download?(run_id) when run_id in [nil, ""], do: true
+
+  # Any expression built from `github.run_id` (`format('{0}', github.run_id)`)
+  # still names this run; only a run id from elsewhere is a cross-run read.
+  defp current_run_download?(run_id) when is_binary(run_id),
+    do: Regex.match?(~r/\bgithub\.run_id\b/, run_id)
+
+  defp current_run_download?(_), do: false
+
+  defp always_after_cancel?(%Hypatia.Workflow.Job{} = job, jobs) do
+    cond_text = job.if || ""
+    needed = needed_jobs(job, jobs)
+
+    # A job with literal `continue-on-error: true` cannot fail the run.
+    Regex.match?(~r/\balways\(\)/, cond_text) and
+      not excludes_cancellation?(cond_text) and
+      not tolerated_failure?(job) and
+      needed != [] and
+      Enum.any?(job.steps, fn step ->
+        # A download with a `run-id` naming ANOTHER run reads that run's
+        # artifact, which cancelling this run's needs does not remove.
+        # `${{ github.run_id }}` is this run, so it still counts.
+        is_binary(step.uses) and
+          String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
+          not excludes_cancellation?(step.if || "", :step) and
+          not tolerated_failure?(step) and
+          current_run_download?(Hypatia.Workflow.input(step, "run-id")) and
+          produced_by_needed?(Hypatia.Workflow.input(step, "name"), needed)
+      end)
+  end
+
+  # The jobs this job needs, transitively: a cancel anywhere upstream can
+  # leave their artifacts missing.
+  defp needed_jobs(job, jobs) do
+    by_id = Map.new(jobs, &{&1.id, &1})
+    collect_needs(direct_needs(job), by_id, MapSet.new()) |> Enum.map(&Map.fetch!(by_id, &1))
+  end
+
+  defp collect_needs([], _by_id, seen), do: MapSet.to_list(seen)
+
+  defp collect_needs([id | rest], by_id, seen) do
+    cond do
+      MapSet.member?(seen, id) or not Map.has_key?(by_id, id) ->
+        collect_needs(rest, by_id, seen)
+
+      true ->
+        collect_needs(direct_needs(by_id[id]) ++ rest, by_id, MapSet.put(seen, id))
+    end
+  end
+
+  defp direct_needs(job) do
+    case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
+      %{value: v} when is_binary(v) -> [v]
+      _ -> []
+    end
+  end
+
+  # A download is at risk only if a needed job uploads what it reads. An
+  # unnamed download reads every artifact; a name built from an expression
+  # cannot be resolved statically, so both count when any needed job uploads.
+  defp produced_by_needed?(name, needed) do
+    # A needed job that calls a reusable workflow (`uses:` at job level) has
+    # no local steps but may upload into this run: treat it as a possible
+    # producer of any name.
+    opaque? = Enum.any?(needed, &is_binary(&1.uses))
+
+    uploads =
+      for j <- needed,
+          s <- j.steps,
+          is_binary(s.uses),
+          String.starts_with?(String.downcase(s.uses), "actions/upload-artifact@"),
+          do: Hypatia.Workflow.input(s, "name") || "artifact"
+
+    cond do
+      opaque? -> true
+      uploads == [] -> false
+      name in [nil, ""] or String.contains?(name, "${{") -> true
+      true -> Enum.any?(uploads, &(&1 == name or String.contains?(&1, "${{")))
+    end
   end
 
   # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─

@@ -1,0 +1,3 @@
+Dependabot encountered an error performing the update
+Error: The updater encountered one or more errors.
+misconfigured_tooling: The /frontend directory has a bun.lock file but no package-lock.json. Set package-ecosystem: bun
