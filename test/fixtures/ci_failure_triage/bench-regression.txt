@@ -1,0 +1,3 @@
+Run just bench-check
+escape_hatches: 2.053x baseline (threshold 1.50x) REGRESSED
+##[error]Process completed with exit code 1.

@@ -1,0 +1,1 @@
+##[error]CodeQL did not detect any code written in languages supported by CodeQL. This can be because the database was created from source files in a language that CodeQL does not support (Python or YAML).

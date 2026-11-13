@@ -1,0 +1,5 @@
+Run actions/create-github-app-token@v2
+with:
+  app-id:
+  private-key: ***
+##[error]Input required and not supplied: app-id

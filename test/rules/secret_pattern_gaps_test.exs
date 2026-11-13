@@ -91,6 +91,14 @@ defmodule Hypatia.Rules.SecretPatternGapsTest do
       refute "Token assignment" in labels
     end
 
+    test "a PAT on one line does not hide a distinct literal token on another" do
+      pat = "ghp_" <> String.duplicate("a1B2c3D4e5", 3) <> "a1B2c3"
+      file = "GITHUB_TOKEN=" <> pat <> "\nDEPLOY_TOKEN=" <> @value <> "\n"
+      labels = SecurityErrors.detect_secrets(file)
+      assert "GitHub PAT" in labels
+      assert "Token assignment" in labels
+    end
+
     test "a commented-out example is documentation, not a finding" do
       line = "# DEPLOY_TOKEN=" <> @value
       assert Hypatia.ScannerSuppression.comment_masked_secret_label?("Token assignment", line, 5)

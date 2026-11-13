@@ -1,0 +1,4 @@
+error[E0451]: fields `encoded_node`, `nonunion_members`, `members_by_discriminant` and `members_by_name` of struct `RawStructSchema` are private
+   --> target/debug/build/puggle-4d09960dcce0077a/out/puggle_handoff_capnp.rs:314:7
+error: could not compile `puggle` (lib) due to 2 previous errors
+##[error]Process completed with exit code 101.

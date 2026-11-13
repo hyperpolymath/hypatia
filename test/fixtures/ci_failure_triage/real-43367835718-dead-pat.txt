@@ -1,0 +1,23 @@
+2026-11-13T04:48:21.6690304Z [harden-runner] main-step
+2026-11-13T04:48:21.6695693Z View security insights and recommended policy at:
+2026-11-13T04:48:21.6769973Z https://app.stepsecurity.io/github/hyperpolymath/hypatia/actions/runs/43367835718
+2026-11-13T04:48:21.6833465Z ##[group]Run set -euo pipefail
+2026-11-13T04:48:21.6833939Z set -euo pipefail
+2026-11-13T04:48:21.6834297Z R="hyperpolymath/verisimdb-data"
+2026-11-13T04:48:21.6834687Z PROBE="preflight/${GITHUB_RUN_ID}"
+2026-11-13T04:48:21.6835150Z SHA="$(gh api "repos/${R}/git/ref/heads/main" --jq .object.sha)"
+2026-11-13T04:48:21.6835934Z if ! gh api -X POST "repos/${R}/git/refs" \
+2026-11-13T04:48:21.6836564Z        -f "ref=refs/heads/${PROBE}" -f "sha=${SHA}" --jq .ref >/dev/null 2>"$RUNNER_TEMP/probe-err.txt"; then
+2026-11-13T04:48:21.6837154Z   cat "$RUNNER_TEMP/probe-err.txt" >&2
+2026-11-13T04:48:21.6838701Z   echo "::error title=verisimdb-data is not writable::HYPATIA_DISPATCH_PAT cannot create a branch on ${R}, so this rescan would discard ~20 minutes of scanning at the final step. Grant the token repository access to ${R} with Contents: Read and write AND Pull requests: Read and write. Note a fine-grained PAT must list the repo explicitly; org/user-wide scope is not inherited."
+2026-11-13T04:48:21.6840138Z   exit 78
+2026-11-13T04:48:21.6840398Z fi
+2026-11-13T04:48:21.6840766Z gh api -X DELETE "repos/${R}/git/refs/heads/${PROBE}" >/dev/null
+2026-11-13T04:48:21.6841462Z echo "verisimdb-data is writable — proceeding with the scan."
+2026-11-13T04:48:21.6894934Z shell: /usr/bin/bash -e {0}
+2026-11-13T04:48:21.6895281Z env:
+2026-11-13T04:48:21.6896114Z   GH_TOKEN: ***
+2026-11-13T04:48:21.6896387Z ##[endgroup]
+2026-11-13T04:48:21.9593277Z gh: Bad credentials (HTTP 401)
+2026-11-13T04:48:21.9612886Z ##[error]Process completed with exit code 1.
+2026-11-13T04:48:21.9750477Z Post job cleanup.

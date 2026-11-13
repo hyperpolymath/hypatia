@@ -1,0 +1,3 @@
+./Project.toml: non-v8 UUID literal (<uuid elided: the fixture must not carry a non-v8 literal>)
+UUID check failed. Use ESTATE-UUID-V8 (docs/decisions/ADR-008-uuid-v8-estate-standard.adoc) and type external/legacy IDs explicitly.
+##[error]Process completed with exit code 1.

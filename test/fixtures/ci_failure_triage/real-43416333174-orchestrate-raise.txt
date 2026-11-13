@@ -1,0 +1,28 @@
+2026-11-13T11:21:22.6684254Z ==> hypatia
+2026-11-13T11:21:22.6685656Z Compiling 155 files (.ex)
+2026-11-13T11:21:27.8861941Z Generated hypatia app
+2026-11-13T11:21:28.4647264Z 11:21:28.454 [info] Running Hypatia.Web.Router with Bandit 1.14.1 at 0.0.0.0:9090 (http)
+2026-11-13T11:21:28.4649266Z 11:21:28.464 [info] VCL Client initialized (built-in Elixir parser)
+2026-11-13T11:21:28.4660149Z 11:21:28.465 [info] Diagnostics monitor started - checking every 30s
+2026-11-13T11:21:28.4858986Z 11:21:28.485 [info] LearningScheduler started. Polling every 300s.
+2026-11-13T11:21:28.4861646Z 11:21:28.486 [info] SelfDiagnostics started. Health checks every 10 min.
+2026-11-13T11:21:28.4867276Z 11:21:28.486 [info] Blackboard initialised (ETS tables: :hypatia_blackboard, :hypatia_blackboard_meta)
+2026-11-13T11:21:28.6515914Z 11:21:28.651 [info] Graph of Trust built: 65 nodes, 0 edges (0 cross-repo)
+2026-11-13T11:21:28.6552647Z 11:21:28.654 [info] Neural Coordinator initialized: 8 networks, 6 phases; source "/home/runner/work/hypatia/hypatia/data/verisim" is ready (RBF cold; trains on first learning cycle) (persisted trust scores ignored; rebuilt from current qualified outcomes)
+2026-11-13T11:21:28.6554503Z 11:21:28.655 [info] Kin.Contingency started -- emergency level: :normal
+2026-11-13T11:21:28.6555421Z 11:21:28.655 [info] Kin.Arbiter started -- bot conflict resolution active.
+2026-11-13T11:21:28.6556199Z 11:21:28.655 [info] Kin.Gate started -- all bot actions require Gate approval.
+2026-11-13T11:21:28.6557350Z 11:21:28.655 [info] Kin.Coordinator started. Polling siblings every 5 min.
+2026-11-13T11:21:28.6558099Z 11:21:28.655 [info] Kin.Watchdog started. Monitoring 8 processes.
+2026-11-13T11:21:28.6787994Z 11:21:28.678 [info] Graph of Trust built: 65 nodes, 0 edges (0 cross-repo)
+2026-11-13T11:21:28.6791284Z ** (ArgumentError) unqualified observation batch: receipt/observation unavailable or not a regular file; no new manifest written
+2026-11-13T11:21:28.6792611Z     (hypatia 0.1.0) lib/merge_orchestration/loop.ex:287: Hypatia.MergeOrchestration.Loop.unqualified_batch!/1
+2026-11-13T11:21:28.6793792Z     (hypatia 0.1.0) lib/merge_orchestration/loop.ex:217: Hypatia.MergeOrchestration.Loop.read_observations/2
+2026-11-13T11:21:28.6794916Z     (hypatia 0.1.0) lib/merge_orchestration/loop.ex:82: Hypatia.MergeOrchestration.Loop.run/1
+2026-11-13T11:21:28.6795785Z     (hypatia 0.1.0) lib/merge_orchestration/scheduler.ex:50: Hypatia.MergeOrchestration.Scheduler.cycle/1
+2026-11-13T11:21:28.6796574Z     (hypatia 0.1.0) lib/mix/tasks/hypatia.merge_orchestrate.ex:45: Mix.Tasks.Hypatia.MergeOrchestrate.run/1
+2026-11-13T11:21:28.6797278Z     (mix 1.17.3) lib/mix/task.ex:495: anonymous fn/3 in Mix.Task.run_task/5
+2026-11-13T11:21:28.6797912Z     (mix 1.17.3) lib/mix/cli.ex:96: Mix.CLI.run_task/2
+2026-11-13T11:21:28.6798408Z     /home/runner/work/_temp/.setup-beam/elixir/bin/mix:2: (file)
+2026-11-13T11:21:28.6946195Z ##[error]Process completed with exit code 1.
+2026-11-13T11:21:28.7071595Z Post job cleanup.

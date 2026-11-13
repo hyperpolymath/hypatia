@@ -1,0 +1,3 @@
+bash "$RUNNER_TEMP/kyaml-format.sh" --check "${present[@]}"
+##[error]kyaml-format: build/container/compose.yaml is not KYAML — run scripts/kyaml-format.sh build/container/compose.yaml
+kyaml-format: 1 of 3 file(s) are not KYAML

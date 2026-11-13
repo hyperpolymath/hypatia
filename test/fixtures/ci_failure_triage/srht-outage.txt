@@ -1,0 +1,5 @@
+Run pack install-deps hypatia-abi.ipkg
+Cloning into '/home/runner/.pack/db'...
+fatal: unable to access 'https://git.sr.ht/~sircmpwn/idris2-pack-db/': The requested URL returned error: 502
+Error: Failed to clone git repository (exit code 128)
+##[error]Process completed with exit code 128.
