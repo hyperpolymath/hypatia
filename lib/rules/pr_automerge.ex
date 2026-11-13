@@ -866,12 +866,17 @@ defmodule Hypatia.Rules.PrAutomerge do
   # Public so AdminMergeEligibility (AM010) vetoes exactly the same set;
   # a second hand-copied list would drift.
   @doc false
+  # Same set as `is_licence_path` in scripts/sweeps/estate-pr-automerge.sh:
+  # a basename CONTAINING the word in any case (THIRD_PARTY_LICENSES,
+  # License.md), REUSE.toml, or a LICENSES/ directory anywhere. A wider
+  # veto only sends more PRs to owner review.
   def licence_path?(filename) when is_binary(filename) do
-    base = Path.basename(filename)
+    base = filename |> Path.basename() |> String.upcase()
 
-    String.starts_with?(base, ["LICENSE", "LICENCE", "COPYING", "NOTICE"]) or
-      String.contains?(String.upcase(base), "SPDX") or
-      String.starts_with?(filename, "LICENSES/")
+    String.contains?(base, ["LICENSE", "LICENCE", "COPYING", "NOTICE", "SPDX"]) or
+      base == "REUSE.TOML" or
+      String.starts_with?(filename, "LICENSES/") or
+      String.contains?(filename, "/LICENSES/")
   end
 
   defp dependency_manifest?(filename) do
