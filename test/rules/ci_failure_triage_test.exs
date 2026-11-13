@@ -49,7 +49,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"dependabot-bun.txt", "dependabot_ecosystem_mismatch", :fix},
     {"real-131888629871-cargo-audit.txt", "dependency_advisory", :report},
     {"coderabbit-review-limit.txt", "review_rate_limited", :none},
-    {"codex-credits.txt", "review_quota_exhausted", :owner},
+    {"codex-credits.txt", "review_quota_exhausted", :none},
     {"deed-cancelled.txt", "runner_cancelled", :none},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},

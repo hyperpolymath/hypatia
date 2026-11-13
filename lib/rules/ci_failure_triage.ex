@@ -399,13 +399,14 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/exhausted its Codex allowance/,
         ~r/reached your Codex usage limits/
       ],
-      action: :owner,
+      # Owner ruling R7: bot reviews are advisory, never a gate.
+      action: :none,
       retries: 0,
       fix: nil,
       escalation: :owner,
       reason:
-        "The Codex paying account has no credits; no review will run until the " <>
-          "owner tops it up or switches Codex off."
+        "The Codex paying account has no credits, so no Codex review runs. Bot " <>
+          "reviews are advisory (owner ruling R7): nothing waits on it."
     },
     %{
       name: "pages_not_enabled",
@@ -443,7 +444,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason:
         "The repo is out of lockstep with the canon standards publishes. If the " <>
           "job is an old inline copy, that is SQ-CANON-01 (first-line). If the pin " <>
-          "itself must change, the owner bumps it. Never loosen the spine gate to pass."
+          "itself must change, the owner bumps it. Owner ruling R10: the gate " <>
+          "accepts the deed form, so a missing rsr-profile.a2ml is fixed in the " <>
+          "gate, never by adding the file. Never loosen the spine gate to pass."
     },
     %{
       name: "toolchain_segfault",
@@ -466,7 +469,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
         "A tool crashed with SIGSEGV (exit 139), not a test verdict. Do not rerun: " <>
           "the estate case was deterministic (OTP 28.5.0.8 miscompiling PinSites in " <>
           "`mix hypatia.rsr_score`, hypatia#1062). Record the runtime version and " <>
-          "escalate; pin a known-good runtime rather than editing code to dodge it."
+          "escalate. Owner ruling R2: the interim estate pin is OTP 27.3.4.19 until " <>
+          "hypatia#1062 merges; never edit code to dodge it."
     },
     %{
       name: "bench_regression",
