@@ -76,7 +76,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # also ordinary exception text (.NET TaskCanceledException) and must
         # not hide a real failure; `conclusion: cancelled` is authoritative.
         ~r/##\[error\]The operation was canceled/,
-        ~r/##\[error\]The run was canceled by/
+        ~r/##\[error\]The run was canceled by/,
+        # A verdict job reporting that the job it reads was cancelled by a
+        # newer push (rsr-template-repo#337: `Fork governance failed
+        # (deed=cancelled)`). Superseded, not a defect.
+        ~r/\bfailed \([\w-]+=cancelled\)/
       ],
       action: :none,
       retries: 0,
@@ -204,6 +208,32 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "if the bad leaf comes from a standards commit, fix it there (solutions at source)."
     },
     %{
+      name: "actions_lock_missing_ref",
+      layer: :config,
+      patterns: [~r/refs missing from the lockfile/i],
+      action: :fix,
+      retries: 0,
+      fix: "regenerate-actions-lock",
+      escalation: :owner,
+      reason:
+        "A workflow uses an action ref that actions.lock does not record (the " <>
+          "lock-sync gate). Regenerate the lock with gh-actions-lock against the real " <>
+          "ref; never hand-write a leaf."
+    },
+    %{
+      name: "generated_file_stale",
+      layer: :config,
+      patterns: [~r/committed \S+ is stale\s*[—-]+\s*run: \S/],
+      action: :fix,
+      retries: 0,
+      fix: "run-named-regenerator",
+      escalation: :owner,
+      reason:
+        "A committed generated file no longer matches its source (e.g. " <>
+          "REPOSITORY-MAP.adoc, `just repo-map`). Run the command the gate names and " <>
+          "commit the result."
+    },
+    %{
       name: "actions_lock_unresolvable_pin",
       layer: :config,
       patterns: [
@@ -254,6 +284,18 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "empty. Store it where the workflow reads it. Only a person can do this."
     },
     %{
+      name: "security_findings_reported",
+      layer: :code,
+      patterns: [~r/Hypatia reported \d+ (critical|high) finding/i],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "A security scan reported findings at gate severity. The owner decides; " <>
+          "never autofix, close or baseline a security finding to turn the check green."
+    },
+    %{
       name: "pages_not_enabled",
       layer: :config,
       patterns: [
@@ -273,7 +315,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :config,
       patterns: [
         ~r/the canon and the spine are not in lockstep/i,
-        ~r/canon[^\n]{0,40}lockstep[^\n]{0,40}(FAIL|mismatch)/i
+        ~r/canon[^\n]{0,40}lockstep[^\n]{0,40}(FAIL|mismatch|broken)/i,
+        # dictask: the pin needs rsr-profile.a2ml, which the estate forbids.
+        # A gate/rule contradiction: owner ruling, never a generated file.
+        ~r/cannot declare a canon pin/
       ],
       # Split by cause with cicd-squabbler: an old INLINE copy of the
       # lockstep job is SQ-CANON-01 (first-line, adopt-canon-lockstep.sh); a
@@ -296,6 +341,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
       # (`process_segfault`).
       patterns: [
         ~r/Segmentation fault[^\n]*\b(mix|elixir|erl|beam\.smp|rustc|cargo|ghc|idris2|zig|pack)\b/,
+        # hypatia-cli.sh runs a pure-Elixir escript: a segfault there is the
+        # BEAM (OTP-19951 on OTP 28, hypatia#1062), not Hypatia's code.
+        ~r/Segmentation fault[^\n]*hypatia-cli\.sh/,
         ~r/\b(beam\.smp|rustc|idris2|ghc)\b[^\n]*\b(SIGSEGV|signal 11)\b/
       ],
       action: :owner,

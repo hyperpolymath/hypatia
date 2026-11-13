@@ -32,6 +32,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"pages-not-enabled.txt", "pages_not_enabled", :owner},
     {"bench-over-limit.txt", "bench_regression", :owner},
     {"findings-artifact-after-segfault.txt", "upstream_artifact_missing", :upstream},
+    # Experiment-owner intake, 2026-11-13 (rule 16 sweep cases): scanner
+    # segfault (bactrian, quintessence), Hypatia criticals (puggle), lock
+    # missing a ref (this-ssg), canon lockstep (EpistemicTypes.jl, dictask),
+    # stale REPOSITORY-MAP (dictask), superseded deed (rsr-template-repo#337).
+    {"hypatia-cli-segfault.txt", "toolchain_segfault", :owner},
+    {"hypatia-critical-findings.txt", "security_findings_reported", :owner},
+    {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
+    {"canon-lockstep-broken.txt", "canon_lockstep", :owner},
+    {"canon-pin-needs-profile.txt", "canon_lockstep", :owner},
+    {"repo-map-stale.txt", "generated_file_stale", :fix},
+    {"deed-cancelled.txt", "runner_cancelled", :none},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},
     {"real-43358533401-graphql-502.txt", "api_server_error", :rerun},
