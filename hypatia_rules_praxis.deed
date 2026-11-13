@@ -675,6 +675,15 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/cicd_rules/banned_language_file"
+      :text "A file in a banned language is in the repo."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/cicd_rules/duplicate_workflow"
       :text "Superseded by hypatia/cicd_rules/waste_duplicate_workflow (same rule; this id stays valid and is not changed at its source). CI/CD waste: multiple workflows do the same thing."
       :class gate
@@ -685,6 +694,15 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/cicd_rules/missing_requirement"
+      :text "A file the repo must have is missing."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/cicd_rules/waste_duplicate_workflow"
       :text "CI/CD waste: multiple workflows do the same thing."
       :class gate
@@ -692,6 +710,861 @@
       :excusable-at repo
       :scope-form exact-paths
       :supersedes ("hypatia/cicd_rules/duplicate_workflow")
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ada_pragma_suppress"
+      :text "Ada pragma Suppress disables runtime checks"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ada_unchecked_access"
+      :text "Ada Unchecked_Access bypasses accessibility checks"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ada_unchecked_conversion"
+      :text "Ada Unchecked_Conversion bypasses type safety"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ada_unchecked_deallocation"
+      :text "Ada Unchecked_Deallocation manual memory management"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/admitted"
+      :text "Admitted leaves proof hole"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/agda_postulate"
+      :text "Agda postulate assumes without proof -- potential soundness hole"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/agda_type_in_type"
+      :text "UNSOUND: --type-in-type collapses type hierarchy (Girard's paradox)"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/as_ptr"
+      :text "as_ptr exposes raw pointer that may dangle or alias unsafely"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/assert_smaller"
+      :text "assert_smaller bypasses termination checker"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/assert_total"
+      :text "assert_total bypasses totality checker"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/believe_me"
+      :text "believe_me undermines formal verification"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/coq_admit_tactic"
+      :text "Coq admit tactic leaves goal unproven"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/coq_axiom"
+      :text "User-defined Coq axiom -- not verified by kernel"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/default_to_root"
+      :text "Default to root UID"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_atom_from_user"
+      :text "String.to_atom with user input exhausts the atom table -- use String.to_existing_atom or a fixed map"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_code_eval"
+      :text "Code.eval_* -- arbitrary code execution risk"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_no_ssl_verify"
+      :text "SSL verify_none disables certificate validation -- MITM risk"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_os_cmd"
+      :text ":os.cmd with interpolation -- shell injection risk"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_port_open_shell"
+      :text "Port.open spawn -- validate command before execution"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_send_resp_no_escape"
+      :text "send_resp with interpolation -- potential XSS if HTML content type"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_send_unsanitised"
+      :text "binary_to_term without :safe option -- deserialization attack"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_system_cmd_dynamic_binary"
+      :text "System.cmd with interpolated executable name -- binary substitution risk"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_system_shell"
+      :text "System.shell with interpolation -- shell injection risk"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/elixir_wildcard_plug_cors"
+      :text "Plug CORS origin wildcard -- restrict to known origins"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/env_var_injection"
+      :text "Environment variable in Command::new without validation"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/erlang_atom_from_untrusted"
+      :text "Atom creation from untrusted input may exhaust atom table"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/erlang_binary_to_term_unsafe"
+      :text "binary_to_term without safe decoding options -- deserialization attack"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/erlang_command_exec"
+      :text "Shell command execution from Erlang runtime -- validate input and avoid shell"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/erlang_insecure_httpc"
+      :text "Insecure HTTP request in Erlang code -- use HTTPS"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/erlang_tls_verify_none"
+      :text "TLS verification disabled in ssl:connect -- MITM risk"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/expect_in_hot_path"
+      :text "expect() in hot path"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/fake_signature"
+      :text "Fake/placeholder cryptographic value"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/from_raw"
+      :text "from_raw constructs types from raw pointers without safety checks"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/fstar_admit"
+      :text "F* admit accepts goal without proof"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/fstar_assume"
+      :text "F* assume introduces unverified assumption"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/getexn_on_external"
+      :text "getExn on external data -- use pattern matching"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/handle_as_fn_name"
+      :text "Function named `handle` collides with AffineScript HANDLE keyword token (used by `handle body { handlers }` effect-handler expression form)."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/hol4_mk_thm"
+      :text "UNSOUND: mk_thm bypasses HOL4 kernel entirely"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/isabelle_oops"
+      :text "Isabelle oops -- intentionally incomplete proof"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_deno_all_perms"
+      :text "Deno -A grants all permissions -- use specific --allow-* flags"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_document_write"
+      :text "document.write -- XSS risk"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_eval"
+      :text "eval() -- arbitrary code execution"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_exec_sync"
+      :text "Shell execution -- validate input before passing to shell"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_hardcoded_secret"
+      :text "Possible hardcoded credential -- use environment variable"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_http_url_in_code"
+      :text "HTTP URL in code -- use HTTPS for non-localhost"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_innerhtml"
+      :text "innerHTML assignment -- XSS risk, use textContent or SafeDOM"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_insecure_random_security_context"
+      :text "Math.random() used for security-sensitive identifier/token generation -- use crypto.randomUUID or getRandomValues"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/js_wildcard_cors"
+      :text "Wildcard CORS -- restrict to specific origins or use env var"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/json_decode_no_validation"
+      :text "JSON decode without validation"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/lean_axiom"
+      :text "User-defined axiom -- not verified by Lean kernel"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/lean_native_decide"
+      :text "native_decide bypasses kernel checking via native code evaluation"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/lock_unwrap"
+      :text "Lock.unwrap() without poison handling"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/manually_drop"
+      :text "ManuallyDrop requires manual resource management, risk of leaks"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/mem_forget"
+      :text "mem::forget leaks memory by skipping Drop"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_action_version_tag"
+      :text "GitHub Action pinned by tag not SHA -- supply chain risk"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_banned_language_ref"
+      :text "Banned language referenced in Nickel build target"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_docker_not_podman"
+      :text "Docker reference in Nickel config -- Podman/Containerfile highly preferred (Docker permitted)"
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_hardcoded_secret"
+      :text "Hardcoded credential in Nickel config -- use SecretRef"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_http_url"
+      :text "HTTP URL in Nickel config -- must use HTTPS"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_k9_missing_pedigree"
+      :text "K9 contractile missing pedigree section"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ncl_weak_hash"
+      :text "Weak hash (MD5/SHA-1) in config -- use SHA-256+"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/obj_magic"
+      :text "Obj.magic bypassing type safety"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/obj_magic_ocaml"
+      :text "Obj.magic bypasses type system"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/obj_repr"
+      :text "Obj.repr unsafe representation access"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ocaml_style_float_add"
+      :text "OCaml-style float addition `+.` is not accepted by AffineScript - use unified `+` for both Int and Float"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ocaml_style_float_div"
+      :text "OCaml-style float division `/.` is not accepted by AffineScript - use unified `/` for both Int and Float"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ocaml_style_float_mul"
+      :text "OCaml-style float multiplication `*.` is not accepted by AffineScript - use unified `*` for both Int and Float"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/ocaml_style_float_sub"
+      :text "OCaml-style float subtraction `-.` is not accepted by AffineScript - use unified `-` for both Int and Float"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/panic_macro"
+      :text "panic! macro causes unrecoverable crash"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/path_traversal_risk"
+      :text "Path traversal risk with user input"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/permissive_bypass"
+      :text "Permissive/audit mode continues after verification failure"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/rwlock_unwrap"
+      :text "RwLock read/write unwrap -- poison will cascade panic"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/shell_download_then_run"
+      :text "Download-and-execute pattern (curl|wget pipe to shell) -- verify integrity before execution"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/shell_process_substitution_download_exec"
+      :text "Process-substitution download-and-execute detected -- avoid executing remote scripts directly"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/shell_unquoted"
+      :text "Unquoted shell variable in exec"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/sorry"
+      :text "sorry leaves proof hole"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/stub_crypto_function"
+      :text "Stub cryptographic implementation -- must not ship to production"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/stub_hash_return"
+      :text "Rust function returning stub value -- placeholder not real implementation"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/todo_crypto"
+      :text "TODO marker on cryptographic function -- not yet implemented"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/todo_macro"
+      :text "todo! macro marks incomplete implementation that will panic"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/transmute"
+      :text "mem::transmute bypasses type safety with unchecked bit reinterpretation"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/undefined_error"
+      :text "undefined/error causes runtime crash"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unimplemented_macro"
+      :text "unimplemented! macro marks unfinished code that will panic"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unsafe_block"
+      :text "unsafe block -- requires SAFETY comment"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unsafe_coerce"
+      :text "unsafeCoerce bypasses type system"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unsafe_perform_io"
+      :text "unsafePerformIO breaks referential transparency"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unsafe_perform_io_hs"
+      :text "unsafePerformIO breaks purity"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unwrap_dangerous_default"
+      :text "unwrap_or(0) masks errors with 0 default -- no panic; verify 0 is safe"
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/unwrap_without_check"
+      :text "unwrap() without prior check -- DoS via panic"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/wildcard_cors"
+      :text "Wildcard CORS allowing any origin"
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/zig_align_cast"
+      :text "Zig @alignCast performs unchecked alignment cast"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/zig_bit_cast"
+      :text "Zig @bitCast reinterprets bits without type checking"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/zig_int_to_ptr"
+      :text "Zig @intToPtr converts integer to pointer without safety checks"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/zig_ptr_cast"
+      :text "Zig @ptrCast performs unchecked pointer type conversion"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/code_safety/zig_ptr_to_int"
+      :text "Zig @ptrToInt exposes raw pointer address"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
@@ -741,6 +1614,105 @@
     (rule-def
       :id "hypatia/code_scanning_alerts/CSA006"
       :text "Scorecard configuration advice"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/download_then_run_shell"
+      :text "download-then-run banned -- verify checksum/signature before execution"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/eval_in_shell"
+      :text "eval banned in shell scripts -- use direct expansion or arrays"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/hardcoded_tmp"
+      :text "Hardcoded /tmp/ path (CWE-377: predictable, shared, symlink-attackable)."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/http_in_docs"
+      :text "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/innerhtml_usage"
+      :text "innerHTML/document.write banned -- use rescript-dom-mounter SafeDOM"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/install_without_frozen_lockfile"
+      :text "CI installs must be `bun install --frozen-lockfile` -- a bare install resolves outside the lockfile and can run versions the lockfile never sanctioned"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/js_insecure_random_security_context"
+      :text "Math.random in security-sensitive context -- use crypto.randomUUID/getRandomValues"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/known_fake_action_sha"
+      :text "Known-fabricated action SHA pin - `gh api commits/<sha>` returns 422."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/mu_plugin_no_guard"
+      :text "WordPress mu-plugins must guard constants with defined() check"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/npx_in_workflow"
+      :text "npx / `npm run` in CI -- use `bunx` or `bun run` instead."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/content_patterns/v_build_in_ci"
+      :text "V-lang banned (org policy 2026-04-10) -- migrate `v <cmd>` to `zig <cmd>` (see v-ecosystem carve-outs in :vlang_detected for exemption paths)"
       :class gate
       :severity medium
       :excusable-at repo
@@ -947,6 +1919,177 @@
       :text "Shallow clone (history-coverage instrument health)"
       :class gate
       :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/domain_green_check_needed"
+      :text "hypatia/green_web/domain_green_check_needed in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/green_badge_present"
+      :text "hypatia/green_web/green_badge_present in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/green_hosting_confirmed"
+      :text "hypatia/green_web/green_hosting_confirmed in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/green_registry_confirmed"
+      :text "hypatia/green_web/green_registry_confirmed in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/missing_green_badge"
+      :text "hypatia/green_web/missing_green_badge in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/non_green_cdn"
+      :text "hypatia/green_web/non_green_cdn in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/non_green_hosting"
+      :text "hypatia/green_web/non_green_hosting in lib/rules/green_web.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/green_web/non_green_registry"
+      :text "hypatia/green_web/non_green_registry in lib/rules/green_web.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/dangerous_pattern"
+      :text "hypatia/honest_completion/dangerous_pattern in lib/rules/honest_completion.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/high_fixme_density"
+      :text "hypatia/honest_completion/high_fixme_density in lib/rules/honest_completion.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/high_stub_count"
+      :text "hypatia/honest_completion/high_stub_count in lib/rules/honest_completion.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/high_todo_density"
+      :text "hypatia/honest_completion/high_todo_density in lib/rules/honest_completion.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/inflated_completion"
+      :text "The claimed completion is far above the evidence."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/no_ci"
+      :text "hypatia/honest_completion/no_ci in lib/rules/honest_completion.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/no_state_file"
+      :text "hypatia/honest_completion/no_state_file in lib/rules/honest_completion.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/no_tests"
+      :text "hypatia/honest_completion/no_tests in lib/rules/honest_completion.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/honest_completion/stale_issue_reference"
+      :text "hypatia/honest_completion/stale_issue_reference in lib/rules/honest_completion.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/implementation_inside_canon/HYP-S009"
+      :text "An implementation manifest sits inside a local canonical spec home."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/migration_rules/deprecated_api"
+      :text "A deprecated API is in use."
+      :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1416,10 +2559,194 @@
       :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
+      :id "hypatia/root_hygiene/banned"
+      :text "hypatia/root_hygiene/banned in lib/rules/root_hygiene.ex."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/root_hygiene/missing"
+      :text "hypatia/root_hygiene/missing in lib/rules/root_hygiene.ex."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/root_hygiene/stale"
+      :text "hypatia/root_hygiene/stale in lib/rules/root_hygiene.ex."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
       :id "hypatia/rules/ERR-LIC-001"
       :text "ERR-LIC-001 in lib/rules/rules.ex."
       :class gate
       :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/BestPracticesBadge"
+      :text "OpenSSF Scorecard check category BestPracticesBadge."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/BinaryArtifact"
+      :text "OpenSSF Scorecard check category BinaryArtifact."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/BranchProtection"
+      :text "OpenSSF Scorecard check category BranchProtection."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/CodeReview"
+      :text "OpenSSF Scorecard check category CodeReview."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/ContinuousIntegration"
+      :text "OpenSSF Scorecard check category ContinuousIntegration."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/ContributorDiversity"
+      :text "OpenSSF Scorecard check category ContributorDiversity."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/DangerousWorkflow"
+      :text "OpenSSF Scorecard check category DangerousWorkflow."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/DependencyPinning"
+      :text "OpenSSF Scorecard check category DependencyPinning."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/DependencyUpdate"
+      :text "OpenSSF Scorecard check category DependencyUpdate."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/FuzzTesting"
+      :text "OpenSSF Scorecard check category FuzzTesting."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/KnownVulnerabilities"
+      :text "OpenSSF Scorecard check category KnownVulnerabilities."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/LicenseCompliance"
+      :text "OpenSSF Scorecard check category LicenseCompliance."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/PackagePublishing"
+      :text "OpenSSF Scorecard check category PackagePublishing."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/ProjectMaintenance"
+      :text "OpenSSF Scorecard check category ProjectMaintenance."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/ReleaseSigning"
+      :text "OpenSSF Scorecard check category ReleaseSigning."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/SecurityPolicy"
+      :text "OpenSSF Scorecard check category SecurityPolicy."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/SoftwareBOM"
+      :text "OpenSSF Scorecard check category SoftwareBOM."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/StaticAnalysis"
+      :text "OpenSSF Scorecard check category StaticAnalysis."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/TokenPermissions"
+      :text "OpenSSF Scorecard check category TokenPermissions."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/scorecard/WebhookSecurity"
+      :text "OpenSSF Scorecard check category WebhookSecurity."
+      :class gate
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1456,6 +2783,15 @@
       :text "Dismissed without acceptable resolution"
       :class gate
       :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/security_errors/secret_detected"
+      :text "A line holds what looks like a literal secret."
+      :class gate
+      :severity critical
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1617,6 +2953,15 @@
       :text "Detect executable policy that requires descriptiles in retired paths."
       :class gate
       :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: excusable-at scope-form
+    (rule-def
+      :id "hypatia/structured_format/SF001"
+      :text "A regex rebuilds a workflow field that a structured reader should read."
+      :class advisory
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1938,10 +3283,226 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/actions_expression_injection"
+      :text "hypatia/workflow_audit/actions_expression_injection in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/actions_lock_context_incomplete"
+      :text "hypatia/workflow_audit/actions_lock_context_incomplete in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/actions_lock_stale"
+      :text "hypatia/workflow_audit/actions_lock_stale in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/broad_permissions"
+      :text "hypatia/workflow_audit/broad_permissions in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/chapel_abi_runs_on_mismatch"
+      :text "hypatia/workflow_audit/chapel_abi_runs_on_mismatch in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/chapel_chpl_about_dropped"
+      :text "hypatia/workflow_audit/chapel_chpl_about_dropped in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/chapel_chpl_llvm_unset"
+      :text "hypatia/workflow_audit/chapel_chpl_llvm_unset in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/chapel_manpath_unset"
+      :text "hypatia/workflow_audit/chapel_manpath_unset in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/chapel_printchplenv_glob_brittle"
+      :text "hypatia/workflow_audit/chapel_printchplenv_glob_brittle in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/codeql_cron_drift"
+      :text "hypatia/workflow_audit/codeql_cron_drift in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/codeql_language_matrix_mismatch"
+      :text "hypatia/workflow_audit/codeql_language_matrix_mismatch in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/codeql_missing_actions_language"
+      :text "hypatia/workflow_audit/codeql_missing_actions_language in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/concurrency_missing_readonly"
+      :text "hypatia/workflow_audit/concurrency_missing_readonly in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/d_burn_double_trigger"
+      :text "hypatia/workflow_audit/d_burn_double_trigger in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/download_then_run"
+      :text "hypatia/workflow_audit/download_then_run in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/duplicate_workflow"
       :text "Two or more workflow files are byte-identical."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/flawed_regex"
+      :text "grep with unescaped dot -- may match unintended characters"
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/gitleaks_full_history_on_pr"
+      :text "hypatia/workflow_audit/gitleaks_full_history_on_pr in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/invalid_actions_lock"
+      :text "hypatia/workflow_audit/invalid_actions_lock in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/known_broken_reusable_revision"
+      :text "hypatia/workflow_audit/known_broken_reusable_revision in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/mirror_without_visibility_guard"
+      :text "hypatia/workflow_audit/mirror_without_visibility_guard in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/missing_caching"
+      :text "hypatia/workflow_audit/missing_caching in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/missing_permissions"
+      :text "hypatia/workflow_audit/missing_permissions in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/missing_secret_history_scan"
+      :text "hypatia/workflow_audit/missing_secret_history_scan in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/missing_spdx"
+      :text "hypatia/workflow_audit/missing_spdx in lib/rules/workflow_audit.ex."
       :class gate
       :severity minor
       :excusable-at repo
@@ -1956,6 +3517,185 @@
       :excusable-at repo
       :scope-form exact-paths
       :supersedes ("hypatia/workflow_audit/ERR-WF-013")
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/missing_workflow"
+      :text "hypatia/workflow_audit/missing_workflow in lib/rules/workflow_audit.ex."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/no_workflows_dir"
+      :text "The repo has no .github/workflows directory."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/nonroot_container_checkout_eacces"
+      :text "hypatia/workflow_audit/nonroot_container_checkout_eacces in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/npermissions_typo"
+      :text "hypatia/workflow_audit/npermissions_typo in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/orphan_reusable_sha_pin"
+      :text "hypatia/workflow_audit/orphan_reusable_sha_pin in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/pin_exempt_accepted"
+      :text "hypatia/workflow_audit/pin_exempt_accepted in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/reusable_call_to_moved_repository"
+      :text "hypatia/workflow_audit/reusable_call_to_moved_repository in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/reusable_caller_context_self_checkout"
+      :text "hypatia/workflow_audit/reusable_caller_context_self_checkout in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/scorecard_publish_with_run_step"
+      :text "hypatia/workflow_audit/scorecard_publish_with_run_step in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/scorecard_wrapper_missing_job_permissions"
+      :text "hypatia/workflow_audit/scorecard_wrapper_missing_job_permissions in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/secret_action_without_presence_gate"
+      :text "hypatia/workflow_audit/secret_action_without_presence_gate in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/secret_scan_without_history"
+      :text "hypatia/workflow_audit/secret_scan_without_history in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/sha_pinned_toolchain_without_input"
+      :text "hypatia/workflow_audit/sha_pinned_toolchain_without_input in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/stale_continue_on_error"
+      :text "hypatia/workflow_audit/stale_continue_on_error in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/unanchored_heading_regex"
+      :text "hypatia/workflow_audit/unanchored_heading_regex in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/unpinned_action"
+      :text "hypatia/workflow_audit/unpinned_action in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/unsafe_curl_payload"
+      :text "hypatia/workflow_audit/unsafe_curl_payload in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/workflow_linter_self_reference"
+      :text "hypatia/workflow_audit/workflow_linter_self_reference in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/workflow_sha_as_foreign_ref"
+      :text "hypatia/workflow_audit/workflow_sha_as_foreign_ref in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity critical
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/wrong_sha_pin"
+      :text "hypatia/workflow_audit/wrong_sha_pin in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
@@ -2078,6 +3818,15 @@
     (rule-def
       :id "hypatia/workflow_hardening/WH014"
       :text "a scanner or findings-count failure is masked in a workflow that"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_hardening/invalid_actions_lock"
+      :text "hypatia/workflow_hardening/invalid_actions_lock in lib/rules/workflow_hardening.ex."
       :class gate
       :severity high
       :excusable-at repo

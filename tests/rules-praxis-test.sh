@@ -100,6 +100,67 @@ if row hypatia/supply_chain/SC012 | grep -q ':severity high' && row hypatia/stru
   && row hypatia/research_extensions/RE001 | grep -q ':severity high' && ! row hypatia/code_scanning_alerts/CSA001 | grep -q ':severity'; then
   ok "computed severities are read; run-time severities stay empty"; else bad "computed severity rows are wrong"; fi
 
+# The names findings actually carry resolve (A5 R09). Ground truth: every
+# rule_module/type pair in this repo's .hypatia-baseline.json, and the 17 pairs
+# A5 counts in the standards baseline. A baseline entry whose name no code in
+# lib/ mentions is stale, not a gap; the list below is checked against lib/ so it
+# cannot hide a real one.
+STALE='inbox_automation/IA001 inbox_automation/IA002 inbox_automation/IA003 inbox_automation/IA004 inbox_automation/IA005 inbox_automation/IA006 inbox_automation/IA007 workflow_audit/inbox_steward_intake_missing workflow_audit/inbox_steward_missing'
+STANDARDS='cicd_rules/banned_language_file code_safety/js_exec_sync code_safety/ncl_k9_missing_pedigree code_safety/unwrap_without_check code_scanning_alerts/CSA001 code_scanning_alerts/CSA002 code_scanning_alerts/CSA003 content_patterns/download_then_run_shell content_patterns/eval_in_shell content_patterns/http_in_docs content_patterns/known_fake_action_sha content_patterns/npx_in_workflow green_web/non_green_hosting research_extensions/RE001 scorecard/DependencyPinning structural_drift/SD022 workflow_hardening/WH013'
+pairs_missing() { # <deed file>: baseline pairs with no registry id
+  local pair out=""
+  for pair in $(jq -r '.[] | "\(.rule_module)/\(.type)"' .hypatia-baseline.json | sort -u) $STANDARDS; do
+    grep -qF -- "\"hypatia/$pair\"" "$1" && continue
+    case " $STALE " in *" $pair "*) continue ;; esac
+    out="$out $pair"
+  done
+  printf '%s' "$out"
+}
+unresolved=$(pairs_missing "$deed")
+if [ -z "$unresolved" ]; then ok "every baseline pair resolves to a registry id"; else bad "baseline pairs not in the registry:$unresolved"; fi
+sed 's|"hypatia/code_safety/js_exec_sync"|"hypatia/code_safety/js_exec_gone"|' "$deed" >"$work/pair.deed"
+if [ "$(pairs_missing "$work/pair.deed")" = " code_safety/js_exec_sync" ]; then ok "a baseline pair missing from the registry is caught"; else bad "a removed baseline pair was not caught"; fi
+stale_wrong=""
+for pair in $STALE; do
+  if grep -rqF -- "${pair#*/}" lib; then stale_wrong="$stale_wrong $pair"; fi
+done
+if [ -z "$stale_wrong" ]; then ok "the stale baseline names are in no code under lib/"; else bad "listed as stale but lib/ mentions:$stale_wrong"; fi
+
+# Coverage of the normalizers: every `rule_module: "m"` whose `type: "t"` is a
+# string literal a few lines below (cli.ex and the rule files) is in the registry.
+# A name a finding is moved off by a `rule_id` override is not (WF029 is emitted
+# under ci_failure_triage), and the module-owned names below are checked by hand.
+missing_pairs=""
+while read -r pair; do
+  [ -z "$pair" ] && continue
+  grep -qF -- "\"hypatia/$pair\"" "$deed" || missing_pairs="$missing_pairs $pair"
+done < <(awk '
+  /rule_module: "[a-z_]+"/ { match($0, /rule_module: "[a-z_]+"/); m = substr($0, RSTART + 14, RLENGTH - 15); left = 6; next }
+  left > 0 { left--; if (match($0, /type: "[A-Za-z0-9_]+"/)) { print m "/" substr($0, RSTART + 7, RLENGTH - 8); left = 0 } }
+' lib/hypatia/cli.ex lib/rules/*.ex | sort -u)
+if [ -z "$missing_pairs" ]; then ok "every literal rule_module/type pair in the code is in the registry"; else bad "pairs in the code but not the registry:$missing_pairs"; fi
+if ! grep -qF '"hypatia/workflow_audit/always_after_cancel"' "$deed" && grep -qF '"hypatia/ci_failure_triage/always_after_cancel"' "$deed"; then ok "a name moved by a rule_id override is registered under its real module only"; else bad "always_after_cancel is registered under workflow_audit, or missing under ci_failure_triage"; fi
+if row hypatia/structured_format/SF001 | grep -q ':class advisory' && row hypatia/cicd_rules/banned_language_file | grep -q ':severity critical' && row hypatia/implementation_inside_canon/HYP-S009 | grep -q ':status active' && row hypatia/workflow_hardening/invalid_actions_lock | grep -q ':status active'; then ok "fixed names carry the code's severity and advisory flag; HYP-S009 and invalid_actions_lock are registered"; else bad "a fixed-name row is wrong"; fi
+
+# Portability: gawk and mawk differ (a `\[` in a -v value is valid in one and a
+# fatal regex error in the other, and the awk then dies without a word inside a
+# process substitution). The output must not depend on which awk is installed, so
+# run the generator under each one found and require the committed bytes and an
+# empty stderr.
+awkdir="$work/awk"; mkdir -p "$awkdir"
+for a in gawk mawk original-awk; do
+  command -v "$a" >/dev/null 2>&1 || continue
+  ln -sf "$(command -v "$a")" "$awkdir/awk"
+  # SIGPIPE is ignored here, as it is for a step on the CI runner: a writer to a
+  # closed pipe then prints "Broken pipe" instead of dying silently, so an
+  # early-closing pipe (`head -1`) in the generator shows up on a dev machine too.
+  if PATH="$awkdir:$PATH" sh -c 'trap "" PIPE; exec bash scripts/gen-rules-praxis.sh --stdout' 2>"$work/awk.err" | cmp -s - "$deed" && [ ! -s "$work/awk.err" ]; then
+    ok "the generator gives the committed registry under $a"
+  else
+    bad "the generator differs or warns under $a"; head -3 "$work/awk.err" >&2
+  fi
+done
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi
