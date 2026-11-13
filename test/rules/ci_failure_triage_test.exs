@@ -167,6 +167,24 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.classify(log).primary.rule == T.id("scan_range_missing_commit")
     end
 
+    test "an app's own failure text does not trip platform/config rules" do
+      for line <- [
+            "checkout failed (state=cancelled)",
+            "Server Error (HTTP 502)",
+            "fatal: ambiguous argument 'abc1234..def5678': unknown revision",
+            "login test: Bad credentials"
+          ] do
+        log = line <> "\n  1) test x\n5 tests, 1 failure\n"
+        %{primary: p} = T.classify(log)
+        assert p.layer == :code, "#{line} -> #{inspect(p.rule)}"
+      end
+    end
+
+    test "a namespaced Elixir exception is a runtime exception" do
+      %{primary: p} = T.classify("** (Jason.DecodeError) unexpected byte\n")
+      assert p.rule == T.id("runtime_exception")
+    end
+
     test "gh api with HTTP 502 is a GitHub API outage" do
       %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
       assert p.rule == T.id("api_server_error")

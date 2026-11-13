@@ -870,6 +870,45 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert f.action == :regenerate_actions_lock
     end
 
+    test "Rules.scan_workflow/2 surfaces a stale lock instead of dropping it" do
+      found =
+        Hypatia.Rules.scan_workflow("      - uses: actions/checkout@v6.0.0\n",
+          filename: "c.yml",
+          actions_lock: @lock
+        )
+
+      assert Enum.any?(found, &(&1.rule == "actions_lock_stale"))
+    end
+
+    test "the combined CLI scan reports a stale lock once, not also as WH004" do
+      dir = Path.join(System.tmp_dir!(), "stale-lock-#{System.unique_integer([:positive])}")
+      wf_dir = Path.join(dir, ".github/workflows")
+      File.mkdir_p!(wf_dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(wf_dir, "c.yml"), """
+      on: push
+      permissions:
+        contents: read
+      jobs:
+        a:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v6.0.0
+      """)
+
+      File.write!(Path.join(wf_dir, "actions.lock"), @lock)
+
+      findings = Hypatia.CLI.collect_findings(dir, [:workflow_audit, :workflow_hardening])
+
+      stale =
+        Enum.filter(findings, fn f ->
+          String.contains?(to_string(f[:reason]), "actions/checkout@v6.0.0")
+        end)
+
+      assert length(stale) == 1
+    end
+
     test "a different ref of a locked action is NOT accepted" do
       wf = %{"c.yml" => "      - uses: actions/checkout@v6.0.0\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)

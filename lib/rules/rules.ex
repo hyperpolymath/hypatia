@@ -600,6 +600,9 @@ defmodule Hypatia.Rules do
         %{type: :invalid_actions_lock, detail: detail} ->
           [%{rule: "invalid_actions_lock", severity: :high, description: detail}]
 
+        %{type: :actions_lock_stale, reason: reason} ->
+          [%{rule: "actions_lock_stale", severity: :medium, description: reason}]
+
         _accepted_or_unrelated ->
           []
       end)

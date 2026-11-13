@@ -80,7 +80,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # A verdict job reporting that the job it reads was cancelled by a
         # newer push (rsr-template-repo#337: `Fork governance failed
         # (deed=cancelled)`). Superseded, not a defect.
-        ~r/\bfailed \([\w-]+=cancelled\)/
+        ~r/\bgovernance failed \(deed=cancelled\)/i
       ],
       action: :none,
       retries: 0,
@@ -149,7 +149,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # api.github.com host tie it to the GitHub API.
         ~r/\bgh(?: api)?\b[^\n]*\bHTTP 50[234]: /,
         ~r/api\.github\.com[^\n]*\b50[234]\b/,
-        ~r/Server Error \(HTTP 50[234]\)/
+        ~r/\bgh\b[^\n]*Server Error \(HTTP 50[234]\)/
       ],
       action: :rerun,
       retries: 1,
@@ -163,7 +163,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "scan_range_missing_commit",
       layer: :platform,
       patterns: [
-        ~r/fatal: ambiguous argument '[0-9a-f]{7,40}\^?\.\.[0-9a-f]{7,40}': unknown revision/,
+        # Scanner prefix required: a test running git on a bad range emits the
+        # same message.
+        ~r/(?:\[git\]|gitleaks|trufflehog)[^\n]*fatal: ambiguous argument '[0-9a-f]{7,40}\^?\.\.[0-9a-f]{7,40}': unknown revision/i,
         # `bad object` alone is any git caller's (a test with a bad SHA); only
         # a range scanner's prefix ties it to this cause.
         ~r/(?:\[git\]|gitleaks|trufflehog)[^\n]*fatal: bad object [0-9a-f]{40}/i
@@ -181,7 +183,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "token_invalid",
       layer: :config,
       patterns: [
-        ~r/Bad credentials/,
+        # The GitHub client forms only; an app's own login test may log the
+        # bare phrase.
+        ~r/\bgh(?: api)?\b[^\n]*Bad credentials/,
+        ~r/HTTP 401: Bad credentials/,
         # git over HTTPS: the server answered and refused the credential.
         ~r/fatal: unable to access '[^']+': The requested URL returned error: 40[13]/
       ],
@@ -568,7 +573,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "runtime_exception",
       layer: :code,
-      patterns: [~r/\*\* \(\w+(Error|Exception)\)/, ~r/thread '[^']+' panicked at/],
+      patterns: [~r/\*\* \((?:\w+\.)*\w+(Error|Exception)\)/, ~r/thread '[^']+' panicked at/],
       action: :report,
       retries: 0,
       fix: nil,

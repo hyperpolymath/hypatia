@@ -750,6 +750,16 @@ defmodule Hypatia.CLI do
       if :workflow_hardening in rules do
         case Hypatia.Rules.WorkflowHardening.scan(repo_path) do
           %{findings: findings} ->
+            # A stale actions.lock ref is reported by workflow_audit as
+            # `actions_lock_stale` when that family also runs; WH004 keeps it
+            # only for standalone hardening scans, so drop the duplicate here.
+            findings =
+              if :workflow_audit in rules do
+                Enum.reject(findings, &(get_in(&1, [:detail, :kind]) == :actions_lock_stale))
+              else
+                findings
+              end
+
             normalized =
               Enum.map(findings, fn f ->
                 %{
