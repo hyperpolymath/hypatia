@@ -1,0 +1,4 @@
+Run mix hypatia.rsr_score . --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
+Compiling 155 files (.ex)
+/home/runner/work/_temp/abc.sh: line 1:  2211 Segmentation fault      (core dumped) mix hypatia.rsr_score . --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
+##[error]Process completed with exit code 139.

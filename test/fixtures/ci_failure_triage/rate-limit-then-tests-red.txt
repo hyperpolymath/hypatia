@@ -1,0 +1,6 @@
+Run mix test
+Fetching release list
+##[error]API rate limit exceeded for installation ID 51234567.
+** (Mix) Could not fetch dependency list
+0 tests, 1 failure
+##[error]Process completed with exit code 1.

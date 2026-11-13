@@ -1,0 +1,48 @@
+2026-11-13T03:22:49.5638769Z   | select(.vulnerabilityAlerts.totalCount > 0)
+2026-11-13T03:22:49.5639158Z   | . as $r
+2026-11-13T03:22:49.5639463Z   | ($r.vulnerabilityAlerts.nodes
+2026-11-13T03:22:49.5639991Z       | map({"LOW":1,"MODERATE":2,"HIGH":3,"CRITICAL":4}[.securityVulnerability.severity] // 0)
+2026-11-13T03:22:49.5640722Z       | max) as $max_rank
+2026-11-13T03:22:49.5641073Z   | select($max_rank >= $floor)
+2026-11-13T03:22:49.5641394Z   | {
+2026-11-13T03:22:49.5641650Z       name,
+2026-11-13T03:22:49.5641993Z       alert_count: .vulnerabilityAlerts.totalCount,
+2026-11-13T03:22:49.5642437Z       top_severity: ($r.vulnerabilityAlerts.nodes
+2026-11-13T03:22:49.5642861Z         | map(.securityVulnerability.severity)
+2026-11-13T03:22:49.5643506Z         | unique
+2026-11-13T03:22:49.5643909Z         | sort_by({"LOW":1,"MODERATE":2,"HIGH":3,"CRITICAL":4}[.] // 0)
+2026-11-13T03:22:49.5644342Z         | reverse
+2026-11-13T03:22:49.5644644Z         | first),
+2026-11-13T03:22:49.5644991Z       alerts: ($r.vulnerabilityAlerts.nodes | map({
+2026-11-13T03:22:49.5645445Z         severity: .securityVulnerability.severity,
+2026-11-13T03:22:49.5645898Z         package: .securityVulnerability.package.name,
+2026-11-13T03:22:49.5646389Z         ecosystem: .securityVulnerability.package.ecosystem,
+2026-11-13T03:22:49.5646887Z         ghsa: .securityVulnerability.advisory.ghsaId,
+2026-11-13T03:22:49.5647387Z         range: .securityVulnerability.vulnerableVersionRange,
+2026-11-13T03:22:49.5647984Z         patched: (.securityVulnerability.firstPatchedVersion.identifier // null)
+2026-11-13T03:22:49.5648500Z       }))
+2026-11-13T03:22:49.5648763Z     }
+2026-11-13T03:22:49.5649065Z ' /tmp/repos.jsonl > /tmp/targets.jsonl
+2026-11-13T03:22:49.5649415Z 
+2026-11-13T03:22:49.5649696Z COUNT=$(wc -l < /tmp/targets.jsonl)
+2026-11-13T03:22:49.5650231Z echo "target_count=$COUNT" >> "$GITHUB_OUTPUT"
+2026-11-13T03:22:49.5650919Z echo "## Hypatia Remediation Sweep" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5651366Z echo "" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5651757Z echo "- Owner: \`$OWNER\`" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5652229Z echo "- Severity floor: \`$FLOOR\`" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5652710Z echo "- Target repos: **$COUNT**" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5653118Z if [[ "$COUNT" -gt 0 ]]; then
+2026-11-13T03:22:49.5653462Z   echo "" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5653883Z   echo "| Repo | Alerts | Top |" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5654325Z   echo "|---|---:|---|" >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5654821Z   jq -r '"| \(.name) | \(.alert_count) | \(.top_severity) |"' /tmp/targets.jsonl \
+2026-11-13T03:22:49.5655339Z     | sort -t'|' -k3 -nr >> "$GITHUB_STEP_SUMMARY"
+2026-11-13T03:22:49.5655698Z fi
+2026-11-13T03:22:49.5704842Z shell: /usr/bin/bash -e {0}
+2026-11-13T03:22:49.5705175Z env:
+2026-11-13T03:22:49.5705881Z   GH_TOKEN: ***
+2026-11-13T03:22:49.5706167Z   OWNER: hyperpolymath
+2026-11-13T03:22:49.5706463Z ##[endgroup]
+2026-11-13T03:23:00.5527927Z gh: HTTP 502
+2026-11-13T03:23:00.5569507Z ##[error]Process completed with exit code 1.
+2026-11-13T03:23:00.5677416Z ##[group]Run actions/upload-artifact@v7.0.2

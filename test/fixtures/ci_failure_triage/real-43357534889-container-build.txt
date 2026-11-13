@@ -1,0 +1,30 @@
+2026-11-13T03:14:15.9654188Z #31 [builder 21/21] RUN cargo build --release --package hypatia-cli
+2026-11-13T03:14:16.1345383Z #31 0.320    Compiling hypatia-cli v0.1.0 (/build/cli)
+2026-11-13T03:14:16.3391101Z #31 0.524 error: environment variable `TARGET` not defined at compile time
+2026-11-13T03:14:16.3391914Z #31 0.524    --> cli/src/main.rs:282:17
+2026-11-13T03:14:16.3392358Z #31 0.524     |
+2026-11-13T03:14:16.3392769Z #31 0.524 282 |         target: env!("TARGET"),
+2026-11-13T03:14:16.3393285Z #31 0.524     |                 ^^^^^^^^^^^^^^
+2026-11-13T03:14:16.4897662Z #31 0.524     |
+2026-11-13T03:14:16.4898600Z #31 0.525     = help: Cargo sets build script variables at run time. Use `std::env::var("TARGET")` instead
+2026-11-13T03:14:16.4899568Z #31 0.525 
+2026-11-13T03:14:16.7855488Z #31 0.971 error[E0658]: use of unstable library feature `atomic_try_update`
+2026-11-13T03:14:16.7856288Z #31 0.971   --> cli/src/app_state.rs:58:14
+2026-11-13T03:14:16.7856740Z #31 0.971    |
+2026-11-13T03:14:16.7858061Z #31 0.971 58 |             .try_update(Ordering::Relaxed, Ordering::Relaxed, |r| {
+2026-11-13T03:14:16.7859170Z #31 0.971    |              ^^^^^^^^^^
+2026-11-13T03:14:16.7859604Z #31 0.971    |
+2026-11-13T03:14:16.7860545Z #31 0.971    = note: see issue #135894 <https://github.com/rust-lang/rust/issues/135894> for more information
+2026-11-13T03:14:17.9232727Z #31 2.109 For more information about this error, try `rustc --explain E0658`.
+2026-11-13T03:14:17.9917545Z #31 2.125 error: could not compile `hypatia-cli` (bin "hyper") due to 2 previous errors
+2026-11-13T03:14:17.9919732Z #31 ERROR: process "/bin/sh -c cargo build --release --package hypatia-cli" did not complete successfully: exit code: 101
+2026-11-13T03:14:17.9933511Z Containerfile:58
+2026-11-13T03:14:17.9934241Z --------------------
+2026-11-13T03:14:17.9934877Z   56 |     
+2026-11-13T03:14:17.9937021Z   57 |     # Build the CLI
+2026-11-13T03:14:17.9937821Z   58 | >>> RUN cargo build --release --package hypatia-cli
+2026-11-13T03:14:17.9938788Z   59 |     
+2026-11-13T03:14:17.9941020Z   60 |     # ============================================================
+2026-11-13T03:14:17.9942175Z --------------------
+2026-11-13T03:14:17.9944016Z ERROR: failed to build: failed to solve: process "/bin/sh -c cargo build --release --package hypatia-cli" did not complete successfully: exit code: 101
+2026-11-13T03:14:18.1239415Z ##[error]buildx failed with: failed to build: failed to solve: process "/bin/sh -c cargo build --release --package hypatia-cli" did not complete successfully: exit code: 101

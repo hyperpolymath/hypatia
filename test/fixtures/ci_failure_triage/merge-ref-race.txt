@@ -1,0 +1,5 @@
+Fetching the repository
+/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/pull/1058/merge:refs/remotes/pull/1058/merge
+fatal: couldn't find remote ref refs/pull/1058/merge
+The process '/usr/bin/git' failed with exit code 128
+##[error]The process '/usr/bin/git' failed with exit code 128

@@ -96,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
+    always_after_cancel = check_always_after_cancel(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -135,7 +136,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           secret_history ++
           toolchain_input_missing ++
           broken_reusable_revisions ++
-          moved_reusable_calls,
+          moved_reusable_calls ++
+          always_after_cancel,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -162,6 +164,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       toolchain_input_missing_count: length(toolchain_input_missing),
       broken_reusable_revision_count: length(broken_reusable_revisions),
       moved_reusable_call_count: length(moved_reusable_calls),
+      always_after_cancel_count: length(always_after_cancel),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -4121,6 +4124,59 @@ defmodule Hypatia.Rules.WorkflowAudit do
       (Regex.match?(~r/^on:[ \t]*$/m, content) and
          Regex.match?(~r/^[ \t]+pull_request:/m, content) and
          Regex.match?(@d_burn_bare_push, content))
+  end
+
+  # ─── WF029: `if: always()` job that consumes upstream artifacts ───────
+  #
+  # `always()` also runs the job when the run was CANCELLED. A job that needs
+  # upstream jobs and downloads their artifacts then fails on artifacts the
+  # cancelled jobs never uploaded, and a cancelled run shows a red job.
+  # Seen in cicd-squabbler static-analysis-gate.yml "Deposit findings".
+  # `!cancelled()` keeps the run-even-if-a-need-failed behaviour without
+  # the cancel cascade. Rule id in A5 form:
+  # hypatia/ci_failure_triage/always_after_cancel (see CiFailureTriage).
+
+  @doc """
+  WF029: a job with `if: always()` (and no `cancelled()` guard) that has
+  `needs:` and downloads artifacts. Recipe: replace `always()` with
+  `!cancelled()`.
+  """
+  def check_always_after_cancel(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{jobs: jobs}} ->
+          for job <- jobs, always_after_cancel?(job) do
+            %{
+              rule: "WF029",
+              rule_id: "hypatia/ci_failure_triage/always_after_cancel",
+              type: :always_after_cancel,
+              file: filename,
+              line: job.line,
+              job: job.id,
+              severity: :medium,
+              reason:
+                "job `#{job.id}` runs with `if: always()`, needs upstream jobs and " <>
+                  "downloads their artifacts. On a cancelled run it still starts, finds " <>
+                  "no artifacts and turns red. Use `if: ${{ !cancelled() }}` instead.",
+              fix_recipe: :always_to_not_cancelled
+            }
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp always_after_cancel?(%Hypatia.Workflow.Job{} = job) do
+    cond_text = job.if || ""
+
+    Regex.match?(~r/\balways\(\)/, cond_text) and
+      not Regex.match?(~r/cancelled\(\)/, cond_text) and
+      Hypatia.Kyaml.get(job.node, "needs") != nil and
+      Enum.any?(job.steps, fn step ->
+        is_binary(step.uses) and String.starts_with?(step.uses, "actions/download-artifact@")
+      end)
   end
 
   # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─

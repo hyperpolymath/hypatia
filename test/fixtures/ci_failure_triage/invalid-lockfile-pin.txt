@@ -1,0 +1,5 @@
+Current runner version: '2.329.0'
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+##[error]invalid lockfile pin: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd resolves to ref de0fac2e4500dabe0009e67214ff5f5447ce83dd
