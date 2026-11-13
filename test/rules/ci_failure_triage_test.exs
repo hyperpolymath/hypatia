@@ -129,6 +129,19 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("api_server_error") in Enum.map(m, & &1.rule)
     end
 
+    test "git bad object from a test is not a scan-range miss" do
+      log =
+        "fatal: bad object 41901363fcd775bb9628acf571bbba93cca38420\n  1) test x\n5 tests, 1 failure\n"
+
+      %{matches: m} = T.classify(log)
+      refute T.id("scan_range_missing_commit") in Enum.map(m, & &1.rule)
+    end
+
+    test "gitleaks bad object is a scan-range miss" do
+      log = "ERR [git] fatal: bad object 41901363fcd775bb9628acf571bbba93cca38420\n"
+      assert T.classify(log).primary.rule == T.id("scan_range_missing_commit")
+    end
+
     test "gh api with HTTP 502 is a GitHub API outage" do
       %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
       assert p.rule == T.id("api_server_error")
@@ -227,6 +240,11 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   end
 
   describe "loop limit" do
+    test "a negative attempt count is refused" do
+      f = T.classify("gh: HTTP 502\n").primary
+      assert_raise ArgumentError, fn -> T.decide(f, -1) end
+    end
+
     test "a transient rule reruns within budget, then escalates as persistent" do
       %{primary: p} = T.classify(File.read!(Path.join(@dir, "rate-limit-setup-bun.txt")))
       assert %{action: :rerun, persistent: false} = T.decide(p, 0)

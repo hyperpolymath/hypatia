@@ -72,7 +72,12 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
 
     %{primary: primary, matches: matches} = T.classify(text, ctx)
 
-    case T.decide(primary, Keyword.get(opts, :attempts, 0)) do
+    attempts = Keyword.get(opts, :attempts, 0)
+
+    # A negative count would read as budget left and allow extra reruns.
+    if attempts < 0, do: die("--attempts must be 0 or more, got #{attempts}")
+
+    case T.decide(primary, attempts) do
       nil ->
         :ok
 

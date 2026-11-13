@@ -160,7 +160,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :platform,
       patterns: [
         ~r/fatal: ambiguous argument '[0-9a-f]{7,40}\^?\.\.[0-9a-f]{7,40}': unknown revision/,
-        ~r/fatal: bad object [0-9a-f]{40}/
+        # `bad object` alone is any git caller's (a test with a bad SHA); only
+        # a range scanner's prefix ties it to this cause.
+        ~r/(?:\[git\]|gitleaks|trufflehog)[^\n]*fatal: bad object [0-9a-f]{40}/i
       ],
       action: :rerun,
       retries: 1,
@@ -522,6 +524,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
   final `action`, and `persistent: true` once a transient budget is spent.
   """
   def decide(nil, _attempts), do: nil
+
+  # A negative count would read as budget left; refuse rather than allow
+  # extra reruns.
+  def decide(_finding, attempts) when is_integer(attempts) and attempts < 0,
+    do: raise(ArgumentError, "attempts must be 0 or more, got #{attempts}")
 
   def decide(%{action: :rerun, retries: budget} = finding, attempts)
       when is_integer(attempts) and attempts >= budget do
