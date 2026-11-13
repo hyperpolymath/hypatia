@@ -774,6 +774,11 @@ defmodule Hypatia.Rules.WorkflowHardening do
   WH007: A workflow that triggers on `pull_request` has no top-level
   `concurrency:` group. Pushing many commits to the same PR head in
   rapid succession queues N runs that mostly waste runner-minutes.
+
+  Defers to WF021 (owner ruling, 2026-11-13): it fires only where WF021's
+  safety gate holds, i.e. the workflow is read-only and not a publisher or
+  mutator. Cancelling an in-flight release, Pages deploy, mirror or push is
+  unsafe, so `cancel-in-progress: true` is never advised there.
   """
   def wh007_missing_concurrency(repo_path) do
     repo_path
@@ -788,7 +793,11 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       has_concurrency? = Regex.match?(~r/^[ \t]*concurrency:/m, content)
 
-      if pr_triggered? and not has_concurrency? do
+      # WF021 is the single safety gate for advising cancel-in-progress.
+      cancel_safe? =
+        Hypatia.Rules.WorkflowAudit.check_concurrency_missing_readonly(%{rel => content}) != []
+
+      if pr_triggered? and not has_concurrency? and cancel_safe? do
         [
           %{
             rule: "WH007",
