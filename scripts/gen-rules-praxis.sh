@@ -220,7 +220,12 @@ done
 # Named atom-typed ids: refuse to register one the code no longer has.
 while IFS=$'\t' read -r id f lit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($id)" >&2; exit 1; }
-  emit "$id" "$text" "" gate active "" "" "class excusable-at scope-form"
+  # The severity the code states in the 4 lines after the literal, if any
+  # (workflow_audit :low, cicd_rules :medium; actions_lock states none).
+  n=$(grep -nF -- "$lit" "$f" | head -1 | cut -d: -f1)
+  # `|| true`: no severity in the window is a valid answer, not a failure.
+  sev=$({ sed -n "${n},$((n + 4))p" "$f" | grep -oE 'severity: :(critical|high|medium|warn|low|info)' || true; } | head -1 | sed 's/.*: ://')
+  emit "$id" "$text" "$(sev_map "$sev")" gate active "" "" "class excusable-at scope-form"
 done <<<"$NAMED"
 
 # 5. supersession: point the old row at the new id; add the new row.

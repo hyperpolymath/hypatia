@@ -92,6 +92,8 @@ if row hypatia/code_scanning_alerts/CSA006 | grep -q ':severity medium'; then ok
 
 if row hypatia/pin_integrity/PI005 | grep -q ':class advisory' && row hypatia/disambiguation_rules/DR001 | grep -q ':class advisory'; then ok "rules the code calls advisory in words are class advisory"; else bad "PI005 or DR001 is not class advisory"; fi
 
+if row hypatia/workflow_audit/duplicate_workflow | grep -q ':severity minor' && row hypatia/cicd_rules/waste_duplicate_workflow | grep -q ':severity medium'; then ok "named atom rules carry the severity the code states"; else bad "duplicate_workflow rows lack their severity"; fi
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi

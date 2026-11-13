@@ -334,6 +334,7 @@
       :id "hypatia/cicd_rules/duplicate_workflow"
       :text "Superseded by hypatia/cicd_rules/waste_duplicate_workflow (same rule; this id stays valid and is not changed at its source). CI/CD waste: multiple workflows do the same thing."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :superseded-by "hypatia/cicd_rules/waste_duplicate_workflow"
@@ -343,6 +344,7 @@
       :id "hypatia/cicd_rules/waste_duplicate_workflow"
       :text "CI/CD waste: multiple workflows do the same thing."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :supersedes ("hypatia/cicd_rules/duplicate_workflow")
@@ -1577,6 +1579,7 @@
       :id "hypatia/workflow_audit/duplicate_workflow"
       :text "Two or more workflow files are byte-identical."
       :class gate
+      :severity minor
       :excusable-at repo
       :scope-form exact-paths
       :status active)
