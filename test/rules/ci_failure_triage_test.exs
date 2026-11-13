@@ -15,6 +15,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   # from the reported signature (the line that matters is the reported text).
   @corpus [
     {"rate-limit-setup-bun.txt", "api_rate_limit", :rerun},
+    {"rulesets-unreadable.txt", "github_state_unreadable", :rerun},
+    {"workflow-catalogue-unreadable.txt", "github_state_unreadable", :rerun},
+    {"callee-unreadable.txt", "github_state_unreadable", :rerun},
     {"mirror-ssh-key-empty.txt", "ssh_key_secret_empty", :owner},
     {"rate-limit-then-tests-red.txt", "api_rate_limit", :rerun},
     {"merge-ref-race.txt", "merge_ref_race", :report},
@@ -155,6 +158,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       %{primary: p, matches: m} = T.classify(log)
       assert p.layer == :code
       refute T.id("api_rate_limit") in Enum.map(m, & &1.rule)
+    end
+
+    test "an app test that names a GitHub read is not the gate refusing" do
+      log =
+        "  1) test rulesets\n     ** (RuntimeError) could not read branch rulesets\n" <>
+          "  2) test catalogue\n     Assertion failed: could not read the workflow catalogue\n" <>
+          "5 tests, 2 failures\n"
+
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.layer == :code
+      refute T.id("github_state_unreadable") in Enum.map(m, & &1.rule)
     end
 
     test "an unresolved service name under test is not an external host" do
