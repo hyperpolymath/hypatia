@@ -269,6 +269,13 @@ The manifest is evidence, not authority. For every row the actuator:
   statuses and check suites, so a `startup_failure` with no run is seen); an active ruleset has a
   bypass actor (conservative: the sweep cannot tell whether the token is one);
   or any of these lookups fails (`check_unavailable:*`).
+. For `auto_merge` rows, runs `pr_threads_ready` (same file; owner ruling R6,
+  2026-11-13) and skips the PR when any review thread is unresolved
+  (`unresolved_review_threads:<n>`), or when the GraphQL answer is unreadable
+  or has more than 100 threads (`check_unavailable:review_threads`). An open
+  bot finding is not a pass. This checks the PR when the merge is queued;
+  GitHub's native auto-merge waits for later threads only if the ruleset
+  requires conversation resolution, which is an owner setting.
 . Queues the merge with `--match-head-commit <sha>`, so GitHub itself refuses
   if the head moves after the re-derivation.
 
