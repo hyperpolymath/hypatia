@@ -4087,11 +4087,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
   @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
   # Guard signals that BLOCK or CONFIRM, never one that merely selects private
   # sources (`if: github.event.repository.private` is the opposite of a guard):
-  # a negated or compared repository.private, a repository.visibility test, an
+  # a negated repository.private (or `== false` / `!= true`; `== true` selects
+  # private sources and is not a guard), a repository.visibility test, an
   # explicit per-forge `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a
   # visibility read from an API (`.visibility`, `.private`, `isPrivate`) that is
   # not the event's own field. Comments are stripped before matching.
-  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*[!=]=|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
+  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*(?:==\s*['"]?false|!=\s*['"]?true)\b|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
 
   @doc """
   WF030: a job that force- or mirror-pushes to a forge, gated on a
@@ -4106,7 +4107,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       case Hypatia.Workflow.parse(content, filename) do
         {:ok, %Hypatia.Workflow{jobs: jobs}} when jobs != [] ->
-          texts = job_texts(content, jobs)
+          texts = job_texts(jobs)
 
           for job <- jobs,
               text = Map.fetch!(texts, job.id),
@@ -4138,38 +4139,73 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # A needed job's guard counts only when this job still requires that job to
+  # succeed: a status function in `if:` (always(), failure(), cancelled(),
+  # !cancelled()) lets the mirror run after the guard job fails.
   defp guarded?(job, texts) do
-    ids = [job.id | mirror_direct_needs(job)]
+    ids = if runs_after_failure?(job), do: [job.id], else: [job.id | mirror_direct_needs(job)]
     Enum.any?(ids, fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  end
+
+  defp runs_after_failure?(job) do
+    case Hypatia.Kyaml.get(job.node, "if") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{value: v} when is_binary(v) -> Regex.match?(~r/\b(always|failure|cancelled)\s*\(/, v)
+      _ -> false
+    end
   end
 
   defp mirror_direct_needs(job) do
     case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
-      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
-      %{value: v} when is_binary(v) -> [v]
-      _ -> []
+      %{kind: :seq, items: items} ->
+        for i <- items, %{value: v} <- [Hypatia.Kyaml.deref(i)], is_binary(v), do: v
+
+      %{value: v} when is_binary(v) ->
+        [v]
+
+      _ ->
+        []
     end
   end
 
-  # Each job's own source lines (from its key to the next job's key), with
-  # YAML comments stripped and shell continuations joined.
-  defp job_texts(content, jobs) do
-    lines = String.split(content, "\n")
-    sorted = Enum.sort_by(jobs, & &1.line)
-    ends = Enum.map(tl(sorted), &(&1.line - 1)) ++ [length(lines)]
-
-    sorted
-    |> Enum.zip(ends)
-    |> Map.new(fn {job, stop} ->
+  # Each job's own text: every key and scalar inside the job's parsed node, so
+  # nothing outside the job (a later top-level key, a sibling flow-style job)
+  # reaches it and YAML comments are already gone. Shell comments are then
+  # stripped quote-aware, line by line, and `\\`-continuations joined.
+  defp job_texts(jobs) do
+    Map.new(jobs, fn job ->
       text =
-        lines
-        |> Enum.slice((job.line - 1)..(stop - 1)//1)
-        |> Enum.join("\n")
-        |> then(&Regex.replace(~r/(^|[ \t])#[^\n]*/m, &1, "\\1"))
-        |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+        if Hypatia.Kyaml.within_budget?(job.node) do
+          job.node
+          |> node_strings([])
+          |> Enum.reverse()
+          |> Enum.join("\n")
+          |> String.split("\n")
+          |> Enum.map_join("\n", &wf_strip_comment/1)
+          |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+        else
+          ""
+        end
 
       {job.id, text}
     end)
+  end
+
+  defp node_strings(node, acc) do
+    case Hypatia.Kyaml.deref(node) do
+      %{kind: :map, entries: entries} ->
+        Enum.reduce(entries, acc, fn %{key: k, value: v}, a ->
+          node_strings(v, node_strings(k, a))
+        end)
+
+      %{kind: :seq, items: items} ->
+        Enum.reduce(items, acc, &node_strings/2)
+
+      %{value: v} when is_binary(v) ->
+        [v | acc]
+
+      _ ->
+        acc
+    end
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────

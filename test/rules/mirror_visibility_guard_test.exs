@@ -118,6 +118,116 @@ defmodule Hypatia.Rules.MirrorVisibilityGuardTest do
     assert WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => with_guard}) == []
   end
 
+  test "a needed guard job does not count when the mirror runs after it fails" do
+    with_guard = """
+    on: push
+    jobs:
+      visibility-guard:
+        runs-on: ubuntu-latest
+        steps:
+          - if: github.event.repository.private && vars.GITLAB_MIRROR_PRIVATE_CONFIRMED != 'true'
+            run: exit 1
+      gitlab:
+        needs: [visibility-guard]
+        if: always() && vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: git push --force gitlab main
+    """
+
+    assert [%{job: "gitlab"}] =
+             WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => with_guard})
+  end
+
+  test "repository.private == true or != false selects private sources, not a guard" do
+    for cond <- [
+          "github.event.repository.private == true",
+          "github.event.repository.private != false"
+        ] do
+      wf =
+        String.replace(
+          @mirror,
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true'",
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true' && #{cond}"
+        )
+
+      assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf}), cond
+    end
+  end
+
+  test "repository.private == false or != true is a guard" do
+    for cond <- [
+          "github.event.repository.private == false",
+          "github.event.repository.private != true"
+        ] do
+      wf =
+        String.replace(
+          @mirror,
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true'",
+          "if: vars.GITLAB_MIRROR_ENABLED == 'true' && #{cond}"
+        )
+
+      assert WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf}) == [], cond
+    end
+  end
+
+  test "a later top-level key does not lend a guard to the last job" do
+    wf = """
+    on: push
+    jobs:
+      gitlab:
+        if: vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: git push --force gitlab main
+    env:
+      SOURCE_VISIBILITY: ${{ github.event.repository.visibility }}
+    """
+
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
+  test "flow-style jobs on one line are judged separately" do
+    wf = """
+    on: push
+    jobs: {guard: {runs-on: x, steps: [{run: "echo ${{ github.event.repository.visibility }}"}]}, gitlab: {if: "vars.GITLAB_MIRROR_ENABLED == 'true'", runs-on: x, steps: [{run: "git push --force gitlab main"}]}}
+    """
+
+    assert [%{job: "gitlab"}] =
+             WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
+  test "a quoted hash in a script does not hide the force push after it" do
+    wf = """
+    on: push
+    jobs:
+      gitlab:
+        if: vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              printf ' # ready'; git push --force gitlab main
+    """
+
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
+  test "a shell comment in a script is still not a guard" do
+    wf = """
+    on: push
+    jobs:
+      gitlab:
+        if: vars.GITLAB_MIRROR_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              # TODO: check github.event.repository.visibility here
+              git push --force gitlab main
+    """
+
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"m.yml" => wf})
+  end
+
   test "a force push not gated on a mirror variable is not this rule" do
     plain = String.replace(@mirror, "vars.GITLAB_MIRROR_ENABLED == 'true'", "true")
     assert WorkflowAudit.check_mirror_without_visibility_guard(%{"x.yml" => plain}) == []
