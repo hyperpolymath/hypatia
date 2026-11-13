@@ -89,11 +89,14 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
     # Step 3: Fetch this PR's status-check rollup via GraphQL.
     rollup = fetch_pr_rollup(owner, repo, pr_number)
 
-    # Step 4: Call AM010 state checker.
+    # Step 4: Call AM010 state checker. `files` is required: AM010 is
+    # fail-closed about licence PRs, which are never admin-merge eligible
+    # (owner ruling 2026-11-13).
     pr_state = %{
       required_contexts: required_contexts,
       phantom_contexts: phantom_contexts,
-      rollup: rollup
+      rollup: rollup,
+      files: fetch_pr_files(owner, repo, pr_number)
     }
 
     case AdminMergeEligibility.am010_phantom_only_blocker?(pr_state) do
@@ -101,6 +104,14 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
         %{
           eligible: true,
           reason: "AM010",
+          phantom_contexts: phantom_contexts,
+          required_contexts: required_contexts
+        }
+
+      :licence_requires_owner ->
+        %{
+          eligible: false,
+          reason: "licence_requires_owner",
           phantom_contexts: phantom_contexts,
           required_contexts: required_contexts
         }
@@ -137,6 +148,24 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
       {err, _} ->
         IO.puts(:stderr, "Warning: could not fetch required status checks: #{String.trim(err)}")
         []
+    end
+  end
+
+  # The PR's changed paths. AM010 is fail-closed about licence PRs, so a
+  # failed or unreadable query must NOT look like "no licence files": it
+  # returns :error, which AM010 reads as unknown and refuses.
+  defp fetch_pr_files(owner, repo, pr_number) do
+    args = [
+      "api",
+      "--paginate",
+      "repos/#{owner}/#{repo}/pulls/#{pr_number}/files",
+      "--jq",
+      ".[].filename"
+    ]
+
+    case System.cmd("gh", args, stderr_to_stdout: true) do
+      {out, 0} -> String.split(out, "\n", trim: true)
+      _ -> :error
     end
   end
 

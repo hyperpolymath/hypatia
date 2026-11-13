@@ -188,10 +188,45 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   this PR. A truly phantom context has NO rollup entry; a sometimes-
   firing context has a non-terminal entry. The subtraction collapses
   the latter back into the "wait for it" path.
+
+  ## Licence PRs (owner ruling 2026-11-13)
+
+  Licence work is manual and owner-only, so no licence PR is ever
+  admin-merge eligible, whatever blocks it. AM010 is a STATE check, so the
+  title exclusion in `classify/1` does not cover it: a licence PR whose only
+  blocker is a phantom context would otherwise come back eligible here.
+
+  `pr_state` therefore carries `:files`, the PR's changed paths. Any licence
+  path (LICENSE*, LICENCE*, COPYING*, NOTICE*, LICENSES/, *.spdx, REUSE.toml)
+  returns `:licence_requires_owner`. The key is required and the check is
+  fail-closed: anything but a list (the key missing, or `:error` from a
+  failed query) is `:files_unknown`, never eligible, because a caller that
+  cannot say which files changed cannot show the PR is not a licence PR.
   """
   @spec am010_phantom_only_blocker?(map()) ::
-          {:eligible, String.t()} | :not_phantom_only
+          {:eligible, String.t()}
+          | :not_phantom_only
+          | :licence_requires_owner
+          | :files_unknown
   def am010_phantom_only_blocker?(pr_state) when is_map(pr_state) do
+    cond do
+      not is_list(Map.get(pr_state, :files)) -> :files_unknown
+      Enum.any?(List.wrap(pr_state.files), &licence_path?/1) -> :licence_requires_owner
+      true -> am010_state_check(pr_state)
+    end
+  end
+
+  # Mirrors PrAutomerge.licence_path?/1 and the estate-pr-automerge.sh
+  # touches_licence rule, so all three refuse the same set.
+  @licence_file ~r{(^|/)(LICEN[CS]E|COPYING|NOTICE)([.-][^/]*)?$|(^|/)LICENSES/|\.spdx$|(^|/)REUSE\.toml$}i
+
+  @doc false
+  def licence_path?(path) when is_binary(path), do: Regex.match?(@licence_file, path)
+  def licence_path?(%{"path" => path}), do: licence_path?(path)
+  def licence_path?(%{path: path}), do: licence_path?(path)
+  def licence_path?(_), do: false
+
+  defp am010_state_check(pr_state) do
     required = Map.get(pr_state, :required_contexts, [])
     phantoms = MapSet.new(Map.get(pr_state, :phantom_contexts, []))
     rollup = Map.get(pr_state, :rollup, [])
@@ -238,7 +273,7 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
     end
   end
 
-  def am010_phantom_only_blocker?(_), do: :not_phantom_only
+  def am010_phantom_only_blocker?(_), do: :files_unknown
 
   # ─── Stall detection (DBA001) ─────────────────────────────────────────
 
