@@ -1,0 +1,1 @@
+metadatastician/standards@d55304a0: the called workflow .github/workflows/secret-scanner-reusable.yml could not be read at d55304a0 (offline with no cache entry, or the API refused). An unread callee is NOT a closed closure
