@@ -39,6 +39,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"hypatia-cli-segfault.txt", "toolchain_segfault", :owner},
     {"hypatia-critical-findings.txt", "security_findings_reported", :owner},
     {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
+    {"lock-missing-pin.txt", "actions_lock_missing_ref", :fix},
     {"canon-lockstep-broken.txt", "canon_lockstep", :owner},
     {"canon-pin-needs-profile.txt", "canon_lockstep", :owner},
     {"repo-map-stale.txt", "repository_map_stale", :fix},

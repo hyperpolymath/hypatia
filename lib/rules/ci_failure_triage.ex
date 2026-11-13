@@ -210,7 +210,11 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "actions_lock_missing_ref",
       layer: :config,
-      patterns: [~r/refs missing from the lockfile/i],
+      patterns: [
+        ~r/refs missing from the lockfile/i,
+        # The runner's wording for the same gap (Protoctist.jl pages build).
+        ~r/lockfile missing pin for /
+      ],
       action: :fix,
       retries: 0,
       fix: "regenerate-actions-lock",
