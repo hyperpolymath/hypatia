@@ -670,6 +670,7 @@
       :id "hypatia/cicd_rules/banned_language_file"
       :text "A file in a banned language is in the repo."
       :class gate
+      :severity critical
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -688,6 +689,7 @@
       :id "hypatia/cicd_rules/missing_requirement"
       :text "A file the repo must have is missing."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -2025,6 +2027,7 @@
       :id "hypatia/honest_completion/inflated_completion"
       :text "The claimed completion is far above the evidence."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -2066,9 +2069,19 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/implementation_inside_canon/HYP-S009"
+      :text "An implementation manifest sits inside a local canonical spec home."
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/migration_rules/deprecated_api"
       :text "A deprecated API is in use."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -2770,6 +2783,7 @@
       :id "hypatia/security_errors/secret_detected"
       :text "A line holds what looks like a literal secret."
       :class gate
+      :severity critical
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -2934,11 +2948,12 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
-    ;; defaulted: class excusable-at scope-form
+    ;; defaulted: excusable-at scope-form
     (rule-def
       :id "hypatia/structured_format/SF001"
       :text "A regex rebuilds a workflow field that a structured reader should read."
-      :class gate
+      :class advisory
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -3280,15 +3295,6 @@
       :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
-      :id "hypatia/workflow_audit/always_after_cancel"
-      :text "hypatia/workflow_audit/always_after_cancel in lib/rules/workflow_audit.ex."
-      :class gate
-      :severity medium
-      :excusable-at repo
-      :scope-form exact-paths
-      :status active)
-    ;; defaulted: text class excusable-at scope-form
-    (rule-def
       :id "hypatia/workflow_audit/broad_permissions"
       :text "hypatia/workflow_audit/broad_permissions in lib/rules/workflow_audit.ex."
       :class gate
@@ -3499,6 +3505,7 @@
       :id "hypatia/workflow_audit/no_workflows_dir"
       :text "The repo has no .github/workflows directory."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -3785,6 +3792,15 @@
     (rule-def
       :id "hypatia/workflow_hardening/WH014"
       :text "a scanner or findings-count failure is masked in a workflow that"
+      :class gate
+      :severity high
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_hardening/invalid_actions_lock"
+      :text "hypatia/workflow_hardening/invalid_actions_lock in lib/rules/workflow_hardening.ex."
       :class gate
       :severity high
       :excusable-at repo

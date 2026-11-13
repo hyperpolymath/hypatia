@@ -126,6 +126,22 @@ for pair in $STALE; do
 done
 if [ -z "$stale_wrong" ]; then ok "the stale baseline names are in no code under lib/"; else bad "listed as stale but lib/ mentions:$stale_wrong"; fi
 
+# Coverage of the normalizers: every `rule_module: "m"` whose `type: "t"` is a
+# string literal a few lines below (cli.ex and the rule files) is in the registry.
+# A name a finding is moved off by a `rule_id` override is not (WF029 is emitted
+# under ci_failure_triage), and the module-owned names below are checked by hand.
+missing_pairs=""
+while read -r pair; do
+  [ -z "$pair" ] && continue
+  grep -qF -- "\"hypatia/$pair\"" "$deed" || missing_pairs="$missing_pairs $pair"
+done < <(awk '
+  /rule_module: "[a-z_]+"/ { match($0, /rule_module: "[a-z_]+"/); m = substr($0, RSTART + 14, RLENGTH - 15); left = 6; next }
+  left > 0 { left--; if (match($0, /type: "[A-Za-z0-9_]+"/)) { print m "/" substr($0, RSTART + 7, RLENGTH - 8); left = 0 } }
+' lib/hypatia/cli.ex lib/rules/*.ex | sort -u)
+if [ -z "$missing_pairs" ]; then ok "every literal rule_module/type pair in the code is in the registry"; else bad "pairs in the code but not the registry:$missing_pairs"; fi
+if ! grep -qF '"hypatia/workflow_audit/always_after_cancel"' "$deed" && grep -qF '"hypatia/ci_failure_triage/always_after_cancel"' "$deed"; then ok "a name moved by a rule_id override is registered under its real module only"; else bad "always_after_cancel is registered under workflow_audit, or missing under ci_failure_triage"; fi
+if row hypatia/structured_format/SF001 | grep -q ':class advisory' && row hypatia/cicd_rules/banned_language_file | grep -q ':severity critical' && row hypatia/implementation_inside_canon/HYP-S009 | grep -q ':status active' && row hypatia/workflow_hardening/invalid_actions_lock | grep -q ':status active'; then ok "fixed names carry the code's severity and advisory flag; HYP-S009 and invalid_actions_lock are registered"; else bad "a fixed-name row is wrong"; fi
+
 # Portability: gawk and mawk differ (a `\[` in a -v value is valid in one and a
 # fatal regex error in the other, and the awk then dies without a word inside a
 # process substitution). The output must not depend on which awk is installed, so

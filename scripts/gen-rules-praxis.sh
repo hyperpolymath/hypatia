@@ -329,35 +329,61 @@ while IFS=$'\037' read -r name sev txt; do
   emit_name content_patterns "$name" "${sev:-medium}" "$txt"
 done < <(entries lib/rules/cicd_rules.ex 'applies_to:' '^  @blocked_patterns [[]')
 
-for m in honest_completion green_web root_hygiene workflow_audit; do
-  f=lib/rules/$m.ex
-  names=$({ grep -ohE '^ *type: :[a-z][a-z0-9_]+' "$f" | sed 's/.*: ://'; } || true)
-  [ "$m" = workflow_audit ] && names="$names
-$({ grep -ohE '^ *rule: "[a-z][a-z0-9_]+"' "$f" | sed 's/.*: "//; s/"$//'; } || true)"
-  for name in $(printf '%s\n' "$names" | sort -u); do
+# A finding that declares `rule_id: "hypatia/<other>/<name>"` is emitted under
+# that module and name (cli.ex splits it), so the same name under the source
+# module is never emitted: WF029 `always_after_cancel` is ci_failure_triage's.
+moved() { grep -qE "rule_id: \"hypatia/[a-z_]+/$2\"" "$1" && ! grep -qE "rule_id: \"hypatia/$3/$2\"" "$1"; }
+
+# $1 module, $2 names (one per line), $3 hit regex builder: names read from `type:`
+# atoms or from lowercase `rule: "name"` strings.
+emit_found() { # <module> <names...>
+  local m=$1 f=lib/rules/$1.ex name sev adv desc; shift
+  for name in $(printf '%s\n' "$@" | sort -u); do
     [ -z "$name" ] && continue
+    moved "$f" "$name" "$m" && continue
     IFS=$'\037' read -r sev adv desc <<<"$(near "$f" "$name" "(type|rule): (:|\")$name([^a-z0-9_]|\$)")"
     emit_name "$m" "$name" "$sev" "$desc" "$adv"
   done
+}
+atoms() { { grep -ohE '^ *type: :[a-z][a-z0-9_]+' "$1" | sed 's/.*: ://'; } || true; }
+strs()  { { grep -ohE '^ *rule: "[a-z][a-z0-9_]+"' "$1" | sed 's/.*: "//; s/"$//'; } || true; }
+for m in honest_completion green_web root_hygiene; do
+  emit_found "$m" "$(atoms lib/rules/$m.ex)"
 done
+emit_found workflow_audit "$(atoms lib/rules/workflow_audit.ex)" "$(strs lib/rules/workflow_audit.ex)"
+# workflow_hardening emits `f.rule`: the WH codes (above) and one lowercase name.
+emit_found workflow_hardening "$(strs lib/rules/workflow_hardening.ex)"
 
 # Scorecard: one type per check category.
 for name in $({ grep -ohE 'category: "[A-Za-z]+"' lib/scorecard_ingestor.ex | sed 's/.*: "//; s/"$//'; } | sort -u); do
   emit_name scorecard "$name" "" "OpenSSF Scorecard check category $name."
 done
 
-# Fixed names, each proved by a literal in the code that emits it.
-while IFS=$'\t' read -r mod name f lit text; do
+# Fixed names: the literal that emits each, and the severity (and advisory flag)
+# the code states, each proved too. A severity proof in the same file must sit
+# within 3 lines of the emitting literal; one in another file must appear there.
+# `~` separates the columns: read collapses empty tab-separated fields.
+while IFS='~' read -r mod name f lit sev adv sf slit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($mod/$name)" >&2; exit 1; }
-  emit_name "$mod" "$name" "" "$text"
+  if [ "$sf" = "$f" ]; then  # same file: beside the literal (a trailing #any: anywhere in it)
+    n=$(grep -nF -- "$lit" "$f" | sed -n 1p | cut -d: -f1)
+    sed -n "$((n - 3)),$((n + 3))p" "$f" | grep -qF -- "$slit" ||
+      { echo "gen-rules-praxis: $f no longer states '$slit' beside '$lit' ($mod/$name)" >&2; exit 1; }
+  else
+    sf=${sf%#any}
+    grep -qF -- "$slit" "$sf" ||
+      { echo "gen-rules-praxis: $sf no longer has '$slit' ($mod/$name)" >&2; exit 1; }
+  fi
+  emit_name "$mod" "$name" "$sev" "$text" "$adv"
 done <<'EOF'
-cicd_rules	missing_requirement	lib/hypatia/cli.ex	type: "missing_requirement"	A file the repo must have is missing.
-cicd_rules	banned_language_file	lib/hypatia/cli.ex	type: "banned_language_file"	A file in a banned language is in the repo.
-workflow_audit	no_workflows_dir	lib/hypatia/cli.ex	type: "no_workflows_dir"	The repo has no .github/workflows directory.
-honest_completion	inflated_completion	lib/hypatia/cli.ex	type: "inflated_completion"	The claimed completion is far above the evidence.
-migration_rules	deprecated_api	lib/hypatia/cli.ex	type: "deprecated_api"	A deprecated API is in use.
-security_errors	secret_detected	lib/hypatia/cli.ex	rule_type = "secret_detected"	A line holds what looks like a literal secret.
-structured_format	SF001	lib/rules/structured_format.ex	type: "SF001"	A regex rebuilds a workflow field that a structured reader should read.
+cicd_rules~missing_requirement~lib/hypatia/cli.ex~type: "missing_requirement"~high~~lib/hypatia/cli.ex~severity: "high",~A file the repo must have is missing.
+cicd_rules~banned_language_file~lib/hypatia/cli.ex~type: "banned_language_file"~critical~~lib/rules/code_safety.ex~severity: :critical,~A file in a banned language is in the repo.
+workflow_audit~no_workflows_dir~lib/hypatia/cli.ex~type: "no_workflows_dir"~high~~lib/hypatia/cli.ex~severity: "high",~The repo has no .github/workflows directory.
+honest_completion~inflated_completion~lib/hypatia/cli.ex~type: "inflated_completion"~high~~lib/hypatia/cli.ex~severity: "high",~The claimed completion is far above the evidence.
+migration_rules~deprecated_api~lib/hypatia/cli.ex~type: "deprecated_api"~high~~lib/rules/migration_rules.ex~severity: :high,~A deprecated API is in use.
+security_errors~secret_detected~lib/hypatia/cli.ex~rule_type = "secret_detected"~critical~~lib/hypatia/scanner_suppression.ex~{"critical", "revoke_rotate_and_purge"~A line holds what looks like a literal secret.
+structured_format~SF001~lib/rules/structured_format.ex~type: "SF001"~medium~advisory~lib/rules/structured_format.ex~severity: "medium",~A regex rebuilds a workflow field that a structured reader should read.
+implementation_inside_canon~HYP-S009~lib/rules/implementation_inside_canon.ex~@rule_id "HYP-S009"~medium~~lib/rules/implementation_inside_canon.ex#any~rule.severity || :medium~An implementation manifest sits inside a local canonical spec home.
 EOF
 
 # A5 RL3/R08: no two rows share a text. Where the code gives one text to two
