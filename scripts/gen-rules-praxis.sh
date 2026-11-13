@@ -163,7 +163,7 @@ text_of() { # <file> <id>
     grep -m1 -E "─── $2( ·|:) " "$1" | sed -E "s/.*─── $2( ·|:) //; s/ *(─)+ *$//" || true
     grep -m1 -E "─── .* \($2\) (─)+" "$1" | sed -E "s/.*─── //; s/ \($2\) (─)+ *$//" || true
     grep -m1 -E "^ *(## |@doc \")?$2(:| $dash) [A-Za-z\`]" "$1" | sed -E "s/^ *(## |@doc \")?$2(:| $dash) //; s/\"$//" || true
-  } | head -1 | first_sentence | clean
+  } | sed -n 1p | first_sentence | clean
 }
 
 rows=$(mktemp)
@@ -247,9 +247,9 @@ while IFS=$'\t' read -r id f lit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($id)" >&2; exit 1; }
   # The severity the code states in the 4 lines after the literal, if any
   # (workflow_audit :low, cicd_rules :medium; actions_lock states none).
-  n=$(grep -nF -- "$lit" "$f" | head -1 | cut -d: -f1)
+  n=$(grep -nF -- "$lit" "$f" | sed -n 1p | cut -d: -f1)
   # `|| true`: no severity in the window is a valid answer, not a failure.
-  sev=$({ sed -n "${n},$((n + 4))p" "$f" | grep -oE 'severity: :(critical|high|medium|warn|low|info)' || true; } | head -1 | sed 's/.*: ://')
+  sev=$({ sed -n "${n},$((n + 4))p" "$f" | grep -oE 'severity: :(critical|high|medium|warn|low|info)' || true; } | sed -n 1p | sed 's/.*: ://')
   emit "$id" "$text" "$(sev_map "$sev")" gate active "" "" "class excusable-at scope-form"
 done <<<"$NAMED"
 

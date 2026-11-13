@@ -135,7 +135,10 @@ awkdir="$work/awk"; mkdir -p "$awkdir"
 for a in gawk mawk original-awk; do
   command -v "$a" >/dev/null 2>&1 || continue
   ln -sf "$(command -v "$a")" "$awkdir/awk"
-  if PATH="$awkdir:$PATH" bash scripts/gen-rules-praxis.sh --stdout 2>"$work/awk.err" | cmp -s - "$deed" && [ ! -s "$work/awk.err" ]; then
+  # SIGPIPE is ignored here, as it is for a step on the CI runner: a writer to a
+  # closed pipe then prints "Broken pipe" instead of dying silently, so an
+  # early-closing pipe (`head -1`) in the generator shows up on a dev machine too.
+  if PATH="$awkdir:$PATH" sh -c 'trap "" PIPE; exec bash scripts/gen-rules-praxis.sh --stdout' 2>"$work/awk.err" | cmp -s - "$deed" && [ ! -s "$work/awk.err" ]; then
     ok "the generator gives the committed registry under $a"
   else
     bad "the generator differs or warns under $a"; head -3 "$work/awk.err" >&2
