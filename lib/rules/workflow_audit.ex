@@ -4083,7 +4083,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @mirror_push ~r/git\s+push\b[^\n]*(--force\b|--mirror\b|\s-f\b)/
   @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
-  @visibility_guard ~r/repository\.(private|visibility)|\bvisibility\b|\bisPrivate\b|"private"\s*:/
+  # Real guard signals only (a comment that merely says "visibility" must not
+  # count): the event's repository.private/visibility, an explicit per-forge
+  # `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a visibility read
+  # from an API (`.visibility`, `.private`, `isPrivate`).
+  @visibility_guard ~r/repository\.(private|visibility)\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|\.(visibility|private)\b|\bisPrivate\b/
 
   @doc """
   WF030: a workflow that force- or mirror-pushes to a forge, gated on a

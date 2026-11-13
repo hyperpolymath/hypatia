@@ -41,6 +41,22 @@ defmodule Hypatia.Rules.MirrorVisibilityGuardTest do
     assert WorkflowAudit.check_mirror_without_visibility_guard(%{"mirror.yml" => guarded}) == []
   end
 
+  test "a per-forge *_MIRROR_PRIVATE_CONFIRMED gate is a guard (standards#1513)" do
+    guarded =
+      String.replace(
+        @mirror,
+        "if: vars.GITLAB_MIRROR_ENABLED == 'true'",
+        "if: vars.GITLAB_MIRROR_ENABLED == 'true' && (!github.event.repository.private || vars.GITLAB_MIRROR_PRIVATE_CONFIRMED == 'true')"
+      )
+
+    assert WorkflowAudit.check_mirror_without_visibility_guard(%{"mirror.yml" => guarded}) == []
+  end
+
+  test "a comment that only mentions visibility is not a guard" do
+    commented = "# TODO: add a visibility check\n" <> @mirror
+    assert [_] = WorkflowAudit.check_mirror_without_visibility_guard(%{"mirror.yml" => commented})
+  end
+
   test "a force push not gated on a mirror variable is not this rule" do
     plain = String.replace(@mirror, "vars.GITLAB_MIRROR_ENABLED == 'true'", "true")
     assert WorkflowAudit.check_mirror_without_visibility_guard(%{"x.yml" => plain}) == []
