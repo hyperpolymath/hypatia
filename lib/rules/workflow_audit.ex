@@ -96,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
+    mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -135,7 +136,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           secret_history ++
           toolchain_input_missing ++
           broken_reusable_revisions ++
-          moved_reusable_calls,
+          moved_reusable_calls ++
+          mirror_visibility,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -4061,6 +4063,52 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 "cancel-in-progress: true}`. Skipped for publishers/mutators where " <>
                 "cancelling is unsafe.",
             fix_recipe: :add_workflow_concurrency
+          }
+        ]
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── WF030: forge mirror without a source-visibility guard ─────────────
+  #
+  # The estate's mirror workflow force-pushes to every forge whose
+  # `*_MIRROR_ENABLED` variable is true, on every push to main. With no check
+  # of the source repo's visibility, a private repo can be pushed to a forge
+  # copy that is public. Owner ruling 2026-11-13 ("add a guard"): refuse, or
+  # skip loudly with an error, when the source is private and the forge copy
+  # is not confirmed private; escalate if the forge's visibility cannot be
+  # read. A referral, never an autofix: the guard is a security decision.
+
+  @mirror_push ~r/git\s+push\b[^\n]*(--force\b|--mirror\b|\s-f\b)/
+  @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
+  @visibility_guard ~r/repository\.(private|visibility)|\bvisibility\b|\bisPrivate\b|"private"\s*:/
+
+  @doc """
+  WF030: a workflow that force- or mirror-pushes to a forge, gated on a
+  `*_MIRROR_ENABLED` variable, with no check of the source repo's visibility
+  (`github.event.repository.private`, `repository.visibility`, or a forge
+  visibility read). High severity, referral only.
+  """
+  def check_mirror_without_visibility_guard(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if Regex.match?(@mirror_push, content) and Regex.match?(@mirror_gate, content) and
+           not Regex.match?(@visibility_guard, content) do
+        [
+          %{
+            rule: "WF030",
+            rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
+            type: :mirror_without_visibility_guard,
+            file: filename,
+            severity: :high,
+            action: :report,
+            reason:
+              "#{filename} force-pushes to forges gated on *_MIRROR_ENABLED but never " <>
+                "checks the source repo's visibility, so a private repo can be mirrored " <>
+                "to a public forge copy. Add a guard that refuses (or skips with an " <>
+                "error) when the source is private and the forge copy is not confirmed " <>
+                "private; escalate when the forge's visibility cannot be read."
           }
         ]
       else
