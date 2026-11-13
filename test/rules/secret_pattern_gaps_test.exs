@@ -61,6 +61,41 @@ defmodule Hypatia.Rules.SecretPatternGapsTest do
       end
     end
 
+    test "dotted references are not literal tokens" do
+      for line <- [
+            "const DEPLOY_TOKEN = process.env.DEPLOY_TOKEN_V2_FOR_PROD",
+            "api_TOKEN = 1; NPM_TOKEN = var.npm_token_value_2026_prod",
+            "SONAR_TOKEN: secrets.SONAR_TOKEN_FOR_ESTATE_2026",
+            "GH_TOKEN = os.environ.get_token_value_2026_x"
+          ] do
+        refute "Token assignment" in SecurityErrors.detect_secrets(line), line
+      end
+    end
+
+    test "a quoted key (YAML or JSON) is still an assignment" do
+      line = ~s("SONAR_TOKEN": "#{@value}")
+      assert "Token assignment" in SecurityErrors.detect_secrets(line)
+    end
+
+    test "a value may start with base64 punctuation" do
+      for lead <- ["/", "+", "-", "_"] do
+        line = "DEPLOY_TOKEN=" <> lead <> @value
+        assert "Token assignment" in SecurityErrors.detect_secrets(line), lead
+      end
+    end
+
+    test "a specific credential match is not reported a second time as a token assignment" do
+      pat = "ghp_" <> String.duplicate("a1B2c3D4e5", 3) <> "a1B2c3"
+      labels = SecurityErrors.detect_secrets("GITHUB_TOKEN=" <> pat)
+      assert "GitHub PAT" in labels
+      refute "Token assignment" in labels
+    end
+
+    test "a commented-out example is documentation, not a finding" do
+      line = "# DEPLOY_TOKEN=" <> @value
+      assert Hypatia.ScannerSuppression.comment_masked_secret_label?("Token assignment", line, 5)
+    end
+
     test "a lowercase variable is not in scope (shell convention for secrets is UPPER)" do
       refute "Token assignment" in SecurityErrors.detect_secrets("my_token=#{@value}")
     end
