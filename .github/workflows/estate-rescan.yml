@@ -127,7 +127,10 @@ jobs:
     env:
       # Pinned, not HEAD: this job runs whatever it builds over the whole
       # estate. Bump deliberately, after reviewing panic-attack's changes.
-      PA_SHA: ac68bbaeaeca515700bb400f1a0703a37b59a48f
+      # Kept equal to the standards Hypatia lane (hypatia-scan-reusable.yml
+      # panic-ref) and every other lane; owner ruling 2026-11-13. Check with
+      # `mix hypatia.ci_triage pins` (scanner_pin_drift, hypatia#1064).
+      PA_SHA: 410a8f821ea8297833162565b50a298f787815da
 
     steps:
       - name: Cache built panic-attack
