@@ -13,3 +13,9 @@ Not yet ingested: the full CodeQL, Sonar and Semgrep rule lists, and per-rule li
 
 Numbers over the 94 assessed rows: 24% detected, 22% partial, 39% have a recipe or autofix.
 Gap reasons: 45 symbolic, 12 need a person, 11 are owned by the tool itself, 1 is neural (Codex review quality).
+
+== Route (ADR 0003, cicd-squabbler#154)
+Each row has a `route`: `first-line` (squabbler autofix, via Tsunami-breaker), `referral`
+(Hypatia answers with a Bustfile, via Extended Hypatia) or `owner-only`. The value is a
+heuristic from fix status and gap reason, not a ruling: owner-only = needs a person;
+referral = fix needs escalation or judgement; first-line = otherwise. `unrouted` = not yet assessed.

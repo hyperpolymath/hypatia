@@ -10,7 +10,8 @@
   "gap": "-",
   "evidence": "lib/rules/actions_lock.ex; scripts/ci-health/detect.sh B-LOCKFILE",
   "url": "https://github.com/github/actions-lockfile",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -23,7 +24,8 @@
   "gap": "-",
   "evidence": "lib/rules/sha_bump_propagation.ex; pin_integrity.ex PI*",
   "url": "",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -36,7 +38,8 @@
   "gap": "symbolic",
   "evidence": "workflow_audit.ex, ci_changed.ex, detect.sh B-STARTUPFAIL (cause unclassified)",
   "url": "https://docs.github.com/en/actions/sharing-automations/reusing-workflows",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -49,7 +52,8 @@
   "gap": "symbolic",
   "evidence": "no hits in lib/ or scripts/ (rate_limiter.ex is dispatch-only)",
   "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -62,7 +66,8 @@
   "gap": "symbolic",
   "evidence": "git_state.ex / workflow_hardening.ex mention refs/pull (verify)",
   "url": "https://docs.github.com/en/rest/pulls/pulls",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -75,7 +80,8 @@
   "gap": "person",
   "evidence": "branch_protection.ex BP008; admin_merge_eligibility.ex",
   "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks",
-  "seed": 1
+  "seed": 1,
+  "route": "owner-only"
  },
  {
   "source": "actions-annotation",
@@ -88,7 +94,8 @@
   "gap": "symbolic",
   "evidence": "workflow_hardening.ex (concurrency); kin/gate.ex (verify cancelled handling)",
   "url": "https://docs.github.com/en/actions/using-jobs/using-concurrency",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -101,7 +108,8 @@
   "gap": "person",
   "evidence": "workflow_audit.ex, supply_chain.ex (usage, not availability)",
   "url": "https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions",
-  "seed": 1
+  "seed": 1,
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -114,7 +122,8 @@
   "gap": "symbolic",
   "evidence": "no hits",
   "url": "",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -127,7 +136,8 @@
   "gap": "symbolic",
   "evidence": "baseline_health.ex mentions outage only generically",
   "url": "https://www.githubstatus.com/",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -140,7 +150,8 @@
   "gap": "person",
   "evidence": "no hits (only unrelated tooling)",
   "url": "https://docs.coderabbit.ai",
-  "seed": 1
+  "seed": 1,
+  "route": "owner-only"
  },
  {
   "source": "codex",
@@ -153,7 +164,8 @@
   "gap": "person",
   "evidence": "no hits",
   "url": "https://developers.openai.com/codex",
-  "seed": 1
+  "seed": 1,
+  "route": "owner-only"
  },
  {
   "source": "sonarcloud",
@@ -166,7 +178,8 @@
   "gap": "symbolic",
   "evidence": "secret scanner in security_errors.ex covers literals, not Sonar key-name heuristic",
   "url": "https://rules.sonarsource.com/yaml/RSPEC-2068/",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "sonarcloud",
@@ -179,7 +192,8 @@
   "gap": "symbolic",
   "evidence": "no hits; per-language AST needed",
   "url": "https://rules.sonarsource.com/",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "dependabot",
@@ -192,7 +206,8 @@
   "gap": "-",
   "evidence": "pr_automerge.ex; pr-automerge-policy.json",
   "url": "https://docs.github.com/en/code-security/dependabot",
-  "seed": 1
+  "seed": 1,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -205,7 +220,8 @@
   "gap": "person",
   "evidence": "detect.sh A-BILLING/B-ALLOWLIST/B-STARTUPFAIL; API hides reason",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "github-actions",
@@ -218,7 +234,8 @@
   "gap": "symbolic",
   "evidence": "workflow_audit.ex (subset); actionlint not run by hypatia",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -231,7 +248,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -244,7 +262,8 @@
   "gap": "symbolic",
   "evidence": "no node-version rule found",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -257,7 +276,8 @@
   "gap": "symbolic",
   "evidence": "security_errors.ex/fix-unpinned-actions.sh mention artifact (verify)",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -270,7 +290,8 @@
   "gap": "symbolic",
   "evidence": "no hits",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -283,7 +304,8 @@
   "gap": "-",
   "evidence": "detect.sh D-BURN + remediate.sh",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -296,7 +318,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex, scorecard_compliance.ex",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -309,7 +332,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -322,7 +346,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex WH*",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -335,7 +360,8 @@
   "gap": "person",
   "evidence": "none (no ruleset changes allowed in scope)",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "github-actions",
@@ -348,7 +374,8 @@
   "gap": "symbolic",
   "evidence": "see seed",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -361,7 +388,8 @@
   "gap": "person",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "github-actions",
@@ -374,7 +402,8 @@
   "gap": "symbolic",
   "evidence": "actionlint popular-action-inputs not run",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -387,7 +416,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -400,7 +430,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -413,7 +444,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "secret-scanning",
@@ -426,7 +458,8 @@
   "gap": "person",
   "evidence": "secret_scanning_alerts.ex SSA001-SSA004",
   "url": "https://docs.github.com/en/code-security/secret-scanning",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "secret-scanning",
@@ -439,7 +472,8 @@
   "gap": "symbolic",
   "evidence": "no rule reads push-protection bypass events",
   "url": "https://docs.github.com/en/code-security/secret-scanning/introduction/about-push-protection",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "secret-scanning",
@@ -452,7 +486,8 @@
   "gap": "symbolic",
   "evidence": "validity not used for tiering",
   "url": "https://docs.github.com/en/code-security/secret-scanning/managing-alerts-from-secret-scanning/evaluating-alerts",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "code-scanning",
@@ -465,7 +500,8 @@
   "gap": "symbolic",
   "evidence": "code_scanning_alerts.ex (ingest only; no per-query fix map)",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "referral"
  },
  {
   "source": "codeql",
@@ -478,7 +514,8 @@
   "gap": "symbolic",
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -491,7 +528,8 @@
   "gap": "symbolic",
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -504,7 +542,8 @@
   "gap": "symbolic",
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -517,7 +556,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -530,7 +570,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -543,7 +584,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -556,7 +598,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -569,7 +612,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codeql",
@@ -582,7 +626,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "dependabot",
@@ -595,7 +640,8 @@
   "gap": "-",
   "evidence": "dependabot_alerts.ex",
   "url": "https://docs.github.com/en/code-security/dependabot/dependabot-alerts",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "dependabot",
@@ -608,7 +654,8 @@
   "gap": "symbolic",
   "evidence": "no schema check",
   "url": "https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "dependabot",
@@ -621,7 +668,8 @@
   "gap": "symbolic",
   "evidence": "scorecard_compliance.ex dependency_update_tool (presence only)",
   "url": "https://docs.github.com/en/code-security/dependabot",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "dependency-review",
@@ -634,7 +682,8 @@
   "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "rulesets",
@@ -647,7 +696,8 @@
   "gap": "person",
   "evidence": "branch_protection.ex BP001-009",
   "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "scorecard",
@@ -660,7 +710,8 @@
   "gap": "symbolic",
   "evidence": "root_hygiene.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -673,7 +724,8 @@
   "gap": "-",
   "evidence": "branch_protection.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -686,7 +738,8 @@
   "gap": "symbolic",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -699,7 +752,8 @@
   "gap": "person",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "scorecard",
@@ -712,7 +766,8 @@
   "gap": "-",
   "evidence": "scorecard CSA005/6",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -725,7 +780,8 @@
   "gap": "person",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "scorecard",
@@ -738,7 +794,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -751,7 +808,8 @@
   "gap": "-",
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -764,7 +822,8 @@
   "gap": "symbolic",
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -777,7 +836,8 @@
   "gap": "symbolic",
   "evidence": "rsr_conformance.ex (no licence edits in scope)",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -790,7 +850,8 @@
   "gap": "-",
   "evidence": "CSA005",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -803,7 +864,8 @@
   "gap": "symbolic",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -816,7 +878,8 @@
   "gap": "-",
   "evidence": "pin_integrity.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -829,7 +892,8 @@
   "gap": "-",
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -842,7 +906,8 @@
   "gap": "-",
   "evidence": "rsr_conformance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -855,7 +920,8 @@
   "gap": "symbolic",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -868,7 +934,8 @@
   "gap": "-",
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -881,7 +948,8 @@
   "gap": "-",
   "evidence": "dependabot_alerts.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "scorecard",
@@ -894,7 +962,8 @@
   "gap": "symbolic",
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "sonarcloud",
@@ -907,7 +976,8 @@
   "gap": "symbolic",
   "evidence": "none; sonar only via scorecard ingestion",
   "url": "https://docs.sonarsource.com/sonarqube-cloud/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "sonarcloud",
@@ -920,7 +990,8 @@
   "gap": "symbolic",
   "evidence": "none; catalogue not yet ingested (licence: record id/title/severity/URL only)",
   "url": "https://rules.sonarsource.com/",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codecov",
@@ -933,7 +1004,8 @@
   "gap": "person",
   "evidence": "none",
   "url": "https://docs.codecov.com",
-  "seed": 0
+  "seed": 0,
+  "route": "owner-only"
  },
  {
   "source": "coderabbit",
@@ -946,7 +1018,8 @@
   "gap": "symbolic",
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -959,7 +1032,8 @@
   "gap": "symbolic",
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -972,7 +1046,8 @@
   "gap": "symbolic",
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -985,7 +1060,8 @@
   "gap": "symbolic",
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -998,7 +1074,8 @@
   "gap": "symbolic",
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "codex",
@@ -1011,7 +1088,8 @@
   "gap": "neural",
   "evidence": "needs judgement of suggestion quality; record only",
   "url": "https://developers.openai.com/codex",
-  "seed": 0
+  "seed": 0,
+  "route": "referral"
  },
  {
   "source": "renovate",
@@ -1024,7 +1102,8 @@
   "gap": "symbolic",
   "evidence": "pr_automerge.ex keyed to dependabot",
   "url": "https://docs.renovatebot.com",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1037,7 +1116,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1050,7 +1130,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1063,7 +1144,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1076,7 +1158,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1089,7 +1172,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1102,7 +1186,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1115,7 +1200,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1128,7 +1214,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1141,7 +1228,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1154,7 +1242,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1167,7 +1256,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1180,7 +1270,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1193,7 +1284,8 @@
   "gap": "-",
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1206,7 +1298,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "actionlint",
@@ -1219,7 +1312,8 @@
   "gap": "tool-owned",
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
-  "seed": 0
+  "seed": 0,
+  "route": "first-line"
  },
  {
   "source": "zizmor",
@@ -1232,7 +1326,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.zizmor.sh/audits/",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "shellcheck",
@@ -1245,7 +1340,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://www.shellcheck.net/wiki/",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "gitleaks",
@@ -1258,7 +1354,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/gitleaks/gitleaks",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "semgrep",
@@ -1271,7 +1368,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://semgrep.dev/r",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "osv",
@@ -1284,7 +1382,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://osv.dev",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "hadolint",
@@ -1297,7 +1396,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/hadolint/hadolint",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "yamllint",
@@ -1310,7 +1410,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://yamllint.readthedocs.io",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "markdownlint",
@@ -1323,7 +1424,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/DavidAnson/markdownlint",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "credo",
@@ -1336,7 +1438,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://hexdocs.pm/credo",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "clippy",
@@ -1349,7 +1452,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://rust-lang.github.io/rust-clippy/",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "cargo-deny",
@@ -1362,7 +1466,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://embarkstudios.github.io/cargo-deny",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "cargo-audit",
@@ -1375,7 +1480,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://rustsec.org",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "zig",
@@ -1388,7 +1494,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://ziglang.org",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "julia",
@@ -1401,7 +1508,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.julialang.org",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "idris2",
@@ -1414,7 +1522,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://idris2.readthedocs.io",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "agda",
@@ -1427,7 +1536,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://agda.readthedocs.io",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "ocaml",
@@ -1440,7 +1550,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://ocaml.org",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "deno-lint",
@@ -1453,7 +1564,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.deno.com/lint/",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "bun",
@@ -1466,7 +1578,8 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://bun.sh/docs",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  },
  {
   "source": "nickel",
@@ -1479,6 +1592,7 @@
   "gap": "-",
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://nickel-lang.org",
-  "seed": 0
+  "seed": 0,
+  "route": "unrouted"
  }
 ]
