@@ -122,6 +122,18 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute T.id("runner_cancelled") in Enum.map(m, & &1.rule)
     end
 
+    test "a bare HTTP 502 from an application is not a GitHub API outage" do
+      log = "  1) test proxy\n     ** (RuntimeError) HTTP 502: Bad Gateway\n5 tests, 1 failure\n"
+      %{primary: p, matches: m} = T.classify(log)
+      assert p.layer == :code
+      refute T.id("api_server_error") in Enum.map(m, & &1.rule)
+    end
+
+    test "gh api with HTTP 502 is a GitHub API outage" do
+      %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
+      assert p.rule == T.id("api_server_error")
+    end
+
     test "git 401/403 is a refused credential, not an unreachable host" do
       log =
         "fatal: unable to access 'https://github.com/acme/private/': The requested URL returned error: 403\n"
@@ -196,8 +208,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   describe "context" do
     test "a merge-ref race is never a rerun: noise when merged, a referral when open" do
       log = File.read!(Path.join(@dir, "merge-ref-race.txt"))
-      assert T.classify(log, %{pr_state: :merged}).primary.action == :none
-      assert T.classify(log, %{pr_state: :open}).primary.action == :report
+      merged = T.classify(log, %{pr_state: :merged}).primary
+      assert merged.action == :none
+      assert merged.route == "noise"
+      open = T.classify(log, %{pr_state: :open}).primary
+      assert open.action == :report
+      assert open.route == "referral"
     end
 
     test "conclusion cancelled is authoritative with an empty log" do
@@ -272,6 +288,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert length(found) == 2
       assert Enum.all?(found, &(&1.pinned == Enum.sort([@a, @b])))
       assert Enum.all?(found, &(&1.action == :owner))
+    end
+
+    test "a quoted pin key is still a pin" do
+      contents = %{
+        "a.yml" => "env:\n  \"PA_SHA\": #{@a}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
     end
 
     test "one commit everywhere is not drift" do
@@ -365,6 +390,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert f.rule == "WF029"
       assert f.rule_id == "hypatia/ci_failure_triage/always_after_cancel"
       assert f.job == "deposit"
+      assert f.action == :fix
+    end
+
+    test "the action identity is matched case-insensitively" do
+      upper = String.replace(@deposit, "actions/download-artifact", "Actions/Download-Artifact")
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => upper})
     end
 
     test "!cancelled() is the fix and does not fire" do

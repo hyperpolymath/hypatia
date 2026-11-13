@@ -141,7 +141,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :platform,
       patterns: [
         ~r/\bgh: HTTP 50[234]\b/,
-        ~r/\bHTTP 50[234]: /,
+        # A bare `HTTP 502: ...` is any client's; only the `gh` CLI and the
+        # api.github.com host tie it to the GitHub API.
+        ~r/\bgh(?: api)?\b[^\n]*\bHTTP 50[234]: /,
+        ~r/api\.github\.com[^\n]*\b50[234]\b/,
         ~r/Server Error \(HTTP 50[234]\)/
       ],
       action: :rerun,
@@ -568,12 +571,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
     end
   end
 
-  @scanner_pin ~r/^\s*(PANIC_ATTACK_SHA|PA_SHA|panic[-_]attack[-_]sha)\s*:\s*["']?([0-9a-f]{40})/im
+  @scanner_pin ~r/^\s*["']?(PANIC_ATTACK_SHA|PA_SHA|panic[-_]attack[-_]sha)["']?\s*:\s*["']?([0-9a-f]{40})/im
   # A reusable workflow's input (`panic-ref`, `panic-rev`, `panic-attack-sha`)
   # whose `default:` is the pin.
   # Every line between the key and `default:` must be indented deeper than
   # the key, so the match cannot cross into a sibling input's block.
-  @scanner_input ~r/^([ \t]*)(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))[ \t]*:[ \t]*\n(?:\1[ \t]+(?!default:)[^\n]*\n){0,6}?\1[ \t]+default:[ \t]*["']?([0-9a-f]{40})/im
+  @scanner_input ~r/^([ \t]*)["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?[ \t]*:[ \t]*\n(?:\1[ \t]+(?!default:)[^\n]*\n){0,6}?\1[ \t]+default:[ \t]*["']?([0-9a-f]{40})/im
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -662,7 +665,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
     # run, not a failure.
     Enum.map(matches, fn
       %{rule: ^race} = f when is_map_key(ctx, :pr_state) ->
-        if ctx.pr_state in [:merged, :closed], do: %{f | action: :none, retries: 0}, else: f
+        if ctx.pr_state in [:merged, :closed],
+          do: %{f | action: :none, retries: 0, route: route(:none)},
+          else: f
 
       f ->
         f

@@ -4183,7 +4183,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 "job `#{job.id}` runs with `if: always()`, needs upstream jobs and " <>
                   "downloads their artifacts. On a cancelled run it still starts, finds " <>
                   "no artifacts and turns red. Use `if: ${{ !cancelled() }}` instead.",
-              fix_recipe: :always_to_not_cancelled
+              fix_recipe: :always_to_not_cancelled,
+              action: :fix
             }
           end
 
@@ -4210,7 +4211,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # A download with a `run-id` naming ANOTHER run reads that run's
         # artifact, which cancelling this run's needs does not remove.
         # `${{ github.run_id }}` is this run, so it still counts.
-        is_binary(step.uses) and String.starts_with?(step.uses, "actions/download-artifact@") and
+        is_binary(step.uses) and
+          String.starts_with?(String.downcase(step.uses), "actions/download-artifact@") and
           current_run_download?(Hypatia.Workflow.input(step, "run-id"))
       end)
   end
