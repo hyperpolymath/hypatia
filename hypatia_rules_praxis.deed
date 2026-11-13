@@ -331,6 +331,342 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/ci_failure_triage/actions_lock_invalid_pin"
+      :text "The Actions runner refused an actions.lock leaf at `Set up job`."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/actions_lock_missing_ref"
+      :text "A workflow uses an action ref that actions.lock does not record (the lock-sync gate)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/actions_lock_unresolvable_pin"
+      :text "actions.lock pins an action to a commit GitHub cannot resolve (a stale or deleted pin; DEBT-REGISTER CI-1)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/always_after_cancel"
+      :text "if: always() job that downloads its needs' artifacts (WorkflowAudit WF029)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/api_rate_limit"
+      :text "GitHub API rate limit (often in a setup step such as setup-bun fetching a release list)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/api_server_error"
+      :text "The GitHub API answered 502/503/504."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/app_key_wrong_format"
+      :text "The GitHub App private key is not a PEM key the App token action can read (an OpenSSH key was pasted)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/bench_regression"
+      :text "A benchmark exceeded its baseline."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/canon_lockstep"
+      :text "The repo is out of lockstep with the canon standards publishes."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/codeql_no_source"
+      :text "Code scanning default setup lists a language the repo has no code in."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/codeql_setup_conflict"
+      :text "CodeQL default setup and an advanced codeql.yml both run."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/compile_error"
+      :text "The code did not compile."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/dependabot_ecosystem_mismatch"
+      :text "Dependabot is configured for npm on a directory that uses bun (MetaManifold-WebUI#330)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/dependency_advisory"
+      :text "A dependency has a published advisory (cargo audit)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/external_host_unreachable"
+      :text "A git or download host outside the repo did not answer (for example git.sr.ht in an Idris2 pack build, exit 128)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/format_diff"
+      :text "A formatter check found unformatted code."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/generated_file_stale"
+      :text "A committed generated file no longer matches its source."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/kyaml_format"
+      :text "A YAML file is not in KYAML form (quintessence compose.yaml)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/merge_ref_race"
+      :text "The PR's merge ref was gone when checkout ran."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/pages_not_enabled"
+      :text "GitHub Pages is not enabled for the repository (configure-pages cannot find a site)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/process_segfault"
+      :text "A process crashed with SIGSEGV (exit 139) and the log does not name a known runtime or compiler, so treat it as the program's own crash and report it."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/repository_map_stale"
+      :text "REPOSITORY-MAP.adoc no longer matches the tree (dictask)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/required_check_never_reported"
+      :text "A required check never reported (check_gate/2)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/review_quota_exhausted"
+      :text "The Codex paying account has no credits, so no Codex review runs."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/review_rate_limited"
+      :text "CodeRabbit is out of reviews for now."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/rollup_cascade"
+      :text "A status rollup is red because jobs it waits on are red or missing."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/ruleset_blocks_push"
+      :text "A repository ruleset refused a push from the workflow (Apodeixis.jl badge branch: 'Code coverage checks require a pull request', HTTP 409)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/runner_cancelled"
+      :text "The run was cancelled (a newer push, concurrency, or a person)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/runtime_exception"
+      :text "A program raised or panicked."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/scan_range_missing_commit"
+      :text "A diff-range scan (gitleaks, trufflehog) named a commit that is not in the checkout: the base moved (rebase, force-push, base update) or the clone is too shallow."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/scanner_pin_drift"
+      :text "panic-attack pinned at different commits (check_scanner_pin_drift/1)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/secret_or_variable_missing"
+      :text "A required App id or key reached the step empty."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/security_findings_reported"
+      :text "A security scan reported findings at gate severity."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/sonar_not_authorized"
+      :text "The Sonar scanner's token or project binding is not valid for this organization (lithoglyph)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/ssh_key_secret_empty"
+      :text "An SSH key secret (webfactory/ssh-agent `ssh-private-key`) reached the step empty."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/test_failure"
+      :text "Tests failed."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/token_invalid"
+      :text "The token the job uses was refused (HTTP 401): expired, revoked or wrong."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/toolchain_segfault"
+      :text "A tool crashed with SIGSEGV (exit 139), not a test verdict."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/unrecognized_failure"
+      :text "The job exited nonzero and no known signature matched."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/upstream_artifact_missing"
+      :text "An artifact a job expects was never uploaded: the job that makes it failed, crashed (for example a scanner SIGSEGV) or was cancelled."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/uuid_conformance"
+      :text "An identifier is not ESTATE-UUID-V8 (Apodeixis.jl Project.toml)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/ci_failure_triage/workflow_startup_failure"
+      :text "The workflow failed before any job started, so there is no log."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/cicd_rules/duplicate_workflow"
       :text "Superseded by hypatia/cicd_rules/waste_duplicate_workflow (same rule; this id stays valid and is not changed at its source). CI/CD waste: multiple workflows do the same thing."
       :class gate
@@ -1564,6 +1900,15 @@
       :text "Reusable-workflow call into a moved repository"
       :class advisory
       :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/WF029"
+      :text "`if: always()` job that consumes upstream artifacts"
+      :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
