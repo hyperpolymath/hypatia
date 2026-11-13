@@ -16,14 +16,14 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   @corpus [
     {"rate-limit-setup-bun.txt", "api_rate_limit", :rerun},
     {"rate-limit-then-tests-red.txt", "api_rate_limit", :rerun},
-    {"merge-ref-race.txt", "merge_ref_race", :rerun},
+    {"merge-ref-race.txt", "merge_ref_race", :report},
     {"invalid-lockfile-pin.txt", "actions_lock_invalid_pin", :fix},
     {"cancelled-deposit.txt", "runner_cancelled", :none},
     {"app-id-empty.txt", "secret_or_variable_missing", :owner},
     {"app-key-openssh.txt", "app_key_wrong_format", :owner},
     {"rsr-score-segfault.txt", "toolchain_segfault", :owner},
     {"srht-outage.txt", "external_host_unreachable", :rerun},
-    {"canon-lockstep.txt", "canon_lockstep", :fix},
+    {"canon-lockstep.txt", "canon_lockstep", :owner},
     {"bench-regression.txt", "bench_regression", :owner},
     {"exunit-failure.txt", "test_failure", :report},
     # Doctrine 16 sweep, 2026-11-13: Pages off (xmlpull-zig, sholes), bench over
@@ -168,10 +168,10 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
   end
 
   describe "context" do
-    test "a merge-ref race on a merged PR is a stale run, not a rerun" do
+    test "a merge-ref race is never a rerun: noise when merged, a referral when open" do
       log = File.read!(Path.join(@dir, "merge-ref-race.txt"))
       assert T.classify(log, %{pr_state: :merged}).primary.action == :none
-      assert T.classify(log, %{pr_state: :open}).primary.action == :rerun
+      assert T.classify(log, %{pr_state: :open}).primary.action == :report
     end
 
     test "conclusion cancelled is authoritative with an empty log" do

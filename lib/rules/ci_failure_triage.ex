@@ -108,14 +108,17 @@ defmodule Hypatia.Rules.CiFailureTriage do
       name: "merge_ref_race",
       layer: :platform,
       patterns: [~r/couldn't find remote ref refs\/pull\/\d+\/merge/],
-      action: :rerun,
-      retries: 1,
+      # Agreed with cicd-squabbler (SQ-NOI-02): a merged or closed PR is a
+      # stale run (noise); an OPEN PR with no merge ref has a conflict or a
+      # deleted ref, which is referred, never rerun.
+      action: :report,
+      retries: 0,
       fix: nil,
       escalation: :owner,
       reason:
-        "The PR's merge ref was gone when checkout ran, usually because the PR " <>
-          "merged or closed mid-run. For a merged or closed PR the run is stale: " <>
-          "nothing to do. For an open PR, rerun once (the ref is rebuilt)."
+        "The PR's merge ref was gone when checkout ran. For a merged or closed PR " <>
+          "the run is stale: nothing to do (SQ-NOI-02). For an open PR the merge " <>
+          "ref is missing because of a conflict or a deleted ref: refer, do not rerun."
     },
     %{
       name: "external_host_unreachable",
@@ -269,13 +272,18 @@ defmodule Hypatia.Rules.CiFailureTriage do
         ~r/the canon and the spine are not in lockstep/i,
         ~r/canon[^\n]{0,40}lockstep[^\n]{0,40}(FAIL|mismatch)/i
       ],
-      action: :fix,
+      # Split by cause with cicd-squabbler: an old INLINE copy of the
+      # lockstep job is SQ-CANON-01 (first-line, adopt-canon-lockstep.sh); a
+      # pin that must change is the owner's, since A2ML and canon pins are
+      # never edited automatically.
+      action: :owner,
       retries: 0,
-      fix: "bump-canon-pin-to-published",
+      fix: nil,
       escalation: :owner,
       reason:
-        "The repo is pinned to an older canon than standards publishes. Bump the " <>
-          "canon pin to the published version. Never loosen the spine gate to pass."
+        "The repo is out of lockstep with the canon standards publishes. If the " <>
+          "job is an old inline copy, that is SQ-CANON-01 (first-line). If the pin " <>
+          "itself must change, the owner bumps it. Never loosen the spine gate to pass."
     },
     %{
       name: "toolchain_segfault",
