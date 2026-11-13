@@ -97,16 +97,25 @@ near() { # <file> <id>
       # every literal is advisory (`advisory: true` or `severity: :advisory`).
       best = ""; advn = 0
       for (h = 1; h <= n; h++) {
-        isadv = 0
-        for (i = hits[h] - 3; i <= hits[h] + 12; i++) {
+        isadv = 0; lit = ""; act = ""
+        for (i = hits[h] - 3; i <= hits[h] + 30; i++) {
           if (i < 1 || !(i in line)) continue
           if (i > hits[h] && line[i] ~ /^ *(rule|id): "[A-Z]/ && line[i] !~ ("\"" id "\"")) break
+          # AuditPrevention derives severity from the record action
+          # (action_severity/1 in lib/rules/audit_prevention.ex, guarded below).
+          if (i > hits[h] && match(line[i], /^ *action: "[a-z_]+"/)) { act = substr(line[i], RSTART, RLENGTH); sub(/^ *action: "/, "", act); sub(/"$/, "", act) }
+          if (i > hits[h] + 12) continue
           if (match(line[i], /severity: "?:?(critical|high|medium|warn|low|info)/)) {
             sv = substr(line[i], RSTART, RLENGTH); sub(/.*[:"]/, "", sv)
+            lit = sv
             if (rank(sv) > rank(best)) best = sv
           }
           if (line[i] ~ /advisory: true/ || line[i] ~ /severity: :advisory/) isadv = 1
           if (desc == "" && match(line[i], /description: "[^"]+"/)) desc = substr(line[i], RSTART + 14, RLENGTH - 15)
+        }
+        if (lit == "" && act != "") {
+          sv = (act == "block_merge_with_escalation") ? "critical" : (act == "block_commit" || act == "block_merge" || act == "block_release") ? "high" : (act == "warn_and_log") ? "low" : "medium"
+          if (rank(sv) > rank(best)) best = sv
         }
         advn += isadv
       }
@@ -193,6 +202,15 @@ grep -oE '"[A-Za-z]+" => "PA[0-9]{3}"' lib/pattern_registry.ex | while IFS='"' r
   emit "hypatia/pattern_registry/$id" "panic-attack weak-point category $cat." "" gate active "" "" "class excusable-at scope-form"
 done
 
+# The action to severity mapping near() copies (AuditPrevention): refuse to
+# generate when the code no longer has it, so the copy cannot go stale quietly.
+for l in 'defp action_severity("block_merge_with_escalation"), do: :critical' \
+  'when action in ["block_commit", "block_merge", "block_release"],' \
+  'defp action_severity("warn_and_log"), do: :low' 'defp action_severity(_action), do: :medium'; do
+  grep -qF -- "$l" lib/rules/audit_prevention.ex ||
+    { echo "gen-rules-praxis: lib/rules/audit_prevention.ex no longer has '$l'; update near()" >&2; exit 1; }
+done
+
 # Named atom-typed ids: refuse to register one the code no longer has.
 while IFS=$'\t' read -r id f lit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($id)" >&2; exit 1; }
@@ -217,6 +235,11 @@ while IFS=$'\t' read -r old new newtext; do
   awk -F'\t' -v OFS='\t' -v o="$old" -v n="$new" '$1 == o { $2 = "Superseded by " n " (same rule; this id stays valid and is not changed at its source). " $2 } { print }' "$rows" >"$rows.t"
   mv "$rows.t" "$rows"
 done <<<"$SUPERSEDE"
+
+# A5 RL3/R08: no two rows share a text. Where the code gives one text to two
+# modules (CSA002/SSA002 "Severity summary"), qualify each with its module.
+awk -F'\t' -v OFS='\t' 'NR == FNR { c[$2]++; next } c[$2] > 1 { split($1, p, "/"); $2 = $2 " (" p[2] ")" } { print }' "$rows" "$rows" >"$rows.t"
+mv "$rows.t" "$rows"
 
 render() {
   echo ';; SPDX-License-Identifier: MPL-2.0'

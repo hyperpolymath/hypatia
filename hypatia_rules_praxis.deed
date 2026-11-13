@@ -46,6 +46,7 @@
       :id "hypatia/audit_prevention/AP001"
       :text "a parser crate whose sources state no input-size limit."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -54,6 +55,7 @@
       :id "hypatia/audit_prevention/AP002"
       :text "a WASM crate whose sources state no memory limit."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -62,6 +64,7 @@
       :id "hypatia/audit_prevention/AP003"
       :text "a Rust repo with no `cargo audit` in any supplied workflow."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -70,6 +73,7 @@
       :id "hypatia/audit_prevention/AP004"
       :text "a Cargo workspace with a known-vulnerable member."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -78,6 +82,7 @@
       :id "hypatia/audit_prevention/AP005"
       :text "source code with no test workflow."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -86,6 +91,7 @@
       :id "hypatia/audit_prevention/AP006"
       :text "a multi-language repo with no CodeQL workflow."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -94,6 +100,7 @@
       :id "hypatia/audit_prevention/AP007"
       :text "dynamic property access from request input with no allowlist"
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -102,6 +109,7 @@
       :id "hypatia/audit_prevention/AP008"
       :text "Flag files with unused variables for cleanup"
       :class gate
+      :severity minor
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -110,6 +118,7 @@
       :id "hypatia/audit_prevention/AP009"
       :text "a cryptography-tagged repo whose required approving-review"
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -118,6 +127,7 @@
       :id "hypatia/audit_prevention/AP010"
       :text "a cryptography-tagged repo with no `fuzz/` tree."
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -126,6 +136,7 @@
       :id "hypatia/audit_prevention/AP011"
       :text "Crypto code must not panic"
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -134,6 +145,7 @@
       :id "hypatia/audit_prevention/AP012"
       :text "RSR tooling repos must pass all RSR checks"
       :class gate
+      :severity critical
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -142,6 +154,7 @@
       :id "hypatia/audit_prevention/AP013"
       :text "a tooling-purpose repo scoring below 8 on Scorecard."
       :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -150,6 +163,7 @@
       :id "hypatia/audit_prevention/AP014"
       :text "Reject workflows without permissions declaration"
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -158,6 +172,7 @@
       :id "hypatia/audit_prevention/AP015"
       :text "Reject workflows with unpinned actions"
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -343,7 +358,7 @@
     ;; defaulted: class excusable-at scope-form
     (rule-def
       :id "hypatia/code_scanning_alerts/CSA002"
-      :text "Severity summary"
+      :text "Severity summary (code_scanning_alerts)"
       :class gate
       :severity critical
       :excusable-at repo
@@ -352,7 +367,7 @@
     ;; defaulted: class excusable-at scope-form
     (rule-def
       :id "hypatia/code_scanning_alerts/CSA003"
-      :text "Stale open alerts"
+      :text "Stale open alerts (code_scanning_alerts)"
       :class gate
       :severity high
       :excusable-at repo
@@ -1074,7 +1089,7 @@
     ;; defaulted: class excusable-at scope-form
     (rule-def
       :id "hypatia/secret_scanning_alerts/SSA002"
-      :text "Severity summary"
+      :text "Severity summary (secret_scanning_alerts)"
       :class gate
       :severity critical
       :excusable-at repo
@@ -1083,7 +1098,7 @@
     ;; defaulted: class excusable-at scope-form
     (rule-def
       :id "hypatia/secret_scanning_alerts/SSA003"
-      :text "Stale open alerts"
+      :text "Stale open alerts (secret_scanning_alerts)"
       :class gate
       :severity critical
       :excusable-at repo

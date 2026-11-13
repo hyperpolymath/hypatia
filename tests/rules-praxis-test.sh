@@ -27,6 +27,8 @@ invariants() {
   grep -F '*' "$work/ids" | sed 's/^/wildcard id: /' || true
   grep -vE '^hypatia/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' "$work/ids" | sed 's/^/bad id: /' || true
   awk 'length > 200 { print "id over 200 characters: " $0 }' "$work/ids"
+  # A5 RL3/R08: no two rows share a text.
+  grep -E '^ *:text "' "$f" | sort | uniq -d | sed 's/^ */duplicate text: /' 
   # Supersession pointers resolve, and each pair points both ways.
   awk '
     /^ *:id "/ { id = $0; sub(/^ *:id "/, "", id); sub(/"$/, "", id) }
@@ -69,6 +71,10 @@ first=$(grep -m1 -oE ':id "[^"]*"' "$deed")
 second=$(grep -oE ':id "[^"]*"' "$deed" | sed -n 2p)
 sed "s|$second|$first|" "$deed" >"$work/dup.deed"
 expect_broken "a duplicated id is refused" "$work/dup.deed" "duplicate id:"
+grep -m1 -E '^ *:text "' "$deed" >"$work/t1"
+t1=$(sed -E 's/^ *//' "$work/t1")
+awk -v t="$t1" 'BEGIN{n=0} /^ *:text "/ { n++; if (n == 2) { print "      " t; next } } { print }' "$deed" >"$work/duptext.deed"
+expect_broken "a shared text is refused" "$work/duptext.deed" "duplicate text:"
 sed "0,\\|$first|s|$first|:id \"hypatia/code_safety/*\"|" "$deed" >"$work/wild.deed"
 expect_broken "a wildcard id is refused" "$work/wild.deed" "wildcard id:"
 sed '0,/:superseded-by "/s/:superseded-by "/:superseded-by "hypatia\/gone\//' "$deed" >"$work/dangle.deed"
