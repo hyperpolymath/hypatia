@@ -76,6 +76,14 @@ expect_broken "a dangling :superseded-by is refused" "$work/dangle.deed" "supers
 awk '/:id "hypatia\/structural_drift\/SD012"/ { f = 1 } f && /:status retired\)/ { sub(/retired/, "active"); f = 0 } { print }' "$deed" >"$work/tomb.deed"
 expect_broken "an un-retired tombstone is refused" "$work/tomb.deed" "tombstone not retired: hypatia/structural_drift/SD012"
 
+# Facts the code states, read back from the registry (review of #1070): a
+# provenance table is not a severity table, `severity: :advisory` is advisory,
+# and a rule that fires at several severities keeps the highest.
+row() { awk -v t="\"$1\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
+if row hypatia/branch_protection/BP001 | grep -q ':severity high' && row hypatia/supply_chain/SC001 | grep -q ':status active'; then ok "opt-in scanner rules are registered"; else bad "BP001/SC001 missing or wrong"; fi
+if row hypatia/git_state/GS007 | grep -q ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
+if row hypatia/code_scanning_alerts/CSA006 | grep -q ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi
