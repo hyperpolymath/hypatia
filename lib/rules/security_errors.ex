@@ -602,7 +602,16 @@ defmodule Hypatia.Rules.SecurityErrors do
     {~r/xoxb-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+/, "Slack Bot Token"},
     {~r/xoxp-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+/, "Slack User Token"},
     {~r/pypi-AgE[a-zA-Z0-9\-_]{50,}/, "PyPI API Token"},
-    {~r/-----BEGIN [A-Z]+ PRIVATE KEY-----/, "Private Key"},
+    # Any PEM/OpenSSH private-key header, including the untyped PKCS#8
+    # `BEGIN PRIVATE KEY` header (a GitHub App key) and PGP's
+    # `PRIVATE KEY BLOCK`. The old `[A-Z]+ ` form required a type word and
+    # missed PKCS#8 entirely.
+    {~r/-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/, "Private Key"},
+    # A literal value assigned to a *_TOKEN name (shell, env, YAML). Values
+    # that start with `$`, `{` or `<` are references or placeholders, not
+    # tokens; a digit is required so an UPPER_SNAKE variable name is not a hit.
+    {~r/\b[A-Z][A-Z0-9_]*_TOKEN[ \t]*[=:][ \t]*["']?(?![$\{<])(?=[A-Za-z0-9_\-.\/+=]*[0-9])[A-Za-z0-9][A-Za-z0-9_\-.\/+=]{19,}/,
+     "Token assignment"},
     {~r/sk-[a-zA-Z0-9]{48}/, "OpenAI API Key"},
     {~r/sk-proj-[a-zA-Z0-9]{48}/, "OpenAI Project Key"},
     {~r/sk-ant-api[0-9]{2}-[a-zA-Z0-9\-_]{86}/, "Anthropic API Key"},
