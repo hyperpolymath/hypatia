@@ -4482,8 +4482,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @pr_events ["pull_request", "pull_request_target"]
   @gitleaks ~r/\bgitleaks\b/
-  @all_history ~r/--log-opts[= ]?["']?[^\n"']*--all\b/
-  @push_only ~r/github\.event_name\s*==\s*['"]push['"]/
+  # The value of --log-opts only: a quoted string, or an unquoted word.
+  @log_opts ~r/--log-opts(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s"';]+))/
 
   @doc """
   WF031: a workflow triggered by `pull_request` runs gitleaks over all
@@ -4502,8 +4502,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
             for job <- jobs,
                 text = Map.fetch!(texts, job.id),
                 Regex.match?(@gitleaks, text),
-                Regex.match?(@all_history, text),
-                not Regex.match?(@push_only, job.if || "") do
+                all_history_log_opts?(text),
+                not push_only?(job.if || "") do
               %{
                 rule: "WF031",
                 rule_id: "hypatia/workflow_audit/gitleaks_full_history_on_pr",
@@ -4528,6 +4528,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
           []
       end
     end)
+  end
+
+  defp all_history_log_opts?(text) do
+    @log_opts
+    |> Regex.scan(text, capture: :all_but_first)
+    |> Enum.any?(fn groups -> groups |> Enum.join(" ") |> String.match?(~r/(^|\s)--all\b/) end)
+  end
+
+  # Push-only when one `&&` conjunct is exactly `github.event_name == 'push'`
+  # and no `||` can bypass it.
+  defp push_only?(cond_text) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+
+    not String.contains?(expr, "||") and
+      expr
+      |> String.split("&&")
+      |> Enum.any?(&Regex.match?(~r/^\s*github\.event_name\s*==\s*['"]push['"]\s*$/, &1))
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────

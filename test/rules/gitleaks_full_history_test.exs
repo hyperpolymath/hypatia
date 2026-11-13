@@ -43,6 +43,29 @@ defmodule Hypatia.Rules.GitleaksFullHistoryTest do
     assert check(wf) == []
   end
 
+  test "a later --all in another command is not the scan range" do
+    wf =
+      String.replace(
+        @wf,
+        ~s(gitleaks detect --source . --log-opts="--all" --redact),
+        "gitleaks detect --log-opts=base..head --redact; git fetch --all"
+      )
+
+    assert check(wf) == []
+  end
+
+  test "a push OR pull_request condition does not exempt the job" do
+    wf =
+      String.replace(
+        @wf,
+        "    runs-on: ubuntu-latest",
+        "    if: github.event_name == 'push' || github.event_name == 'pull_request'\n    runs-on: ubuntu-latest"
+      )
+
+    assert wf != @wf
+    assert [_] = check(wf)
+  end
+
   test "a push-only workflow may scan all history" do
     wf = String.replace(@wf, "  pull_request:\n", "")
     assert check(wf) == []
