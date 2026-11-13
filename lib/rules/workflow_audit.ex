@@ -4292,6 +4292,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # unnamed download reads every artifact; a name built from an expression
   # cannot be resolved statically, so both count when any needed job uploads.
   defp produced_by_needed?(name, needed) do
+    # A needed job that calls a reusable workflow (`uses:` at job level) has
+    # no local steps but may upload into this run: treat it as a possible
+    # producer of any name.
+    opaque? = Enum.any?(needed, &is_binary(&1.uses))
+
     uploads =
       for j <- needed,
           s <- j.steps,
@@ -4300,6 +4305,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           do: Hypatia.Workflow.input(s, "name") || "artifact"
 
     cond do
+      opaque? -> true
       uploads == [] -> false
       name in [nil, ""] or String.contains?(name, "${{") -> true
       true -> Enum.any?(uploads, &(&1 == name or String.contains?(&1, "${{")))

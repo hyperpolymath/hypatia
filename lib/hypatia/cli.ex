@@ -565,8 +565,17 @@ defmodule Hypatia.CLI do
                   Map.get(f, :rule) ||
                   :unknown
 
+              # A finding that declares an A5 `rule_id` keeps it: WF029 is
+              # advertised as hypatia/ci_failure_triage/always_after_cancel,
+              # and SARIF builds `hypatia/<rule_module>/<type>`.
+              {rule_module, type} =
+                case String.split(to_string(Map.get(f, :rule_id, "")), "/") do
+                  ["hypatia", mod, t] -> {mod, t}
+                  _ -> {"workflow_audit", type}
+                end
+
               %{
-                rule_module: "workflow_audit",
+                rule_module: rule_module,
                 severity: to_string(Map.get(f, :severity, :medium)),
                 type: to_string(type),
                 # WorkflowAudit keys findings by bare basename (`ci.yml`) so

@@ -129,7 +129,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       patterns: [
         ~r/fatal: unable to access '[^']+': (Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Recv failure|gnutls_handshake|The requested URL returned error: 5\d\d)/,
         ~r/Could not resolve host:\s*(\S+)/,
-        ~r/Failed to connect to (\S+) port \d+/
+        # Not the app under test: a loopback probe that fails is a code failure.
+        ~r/Failed to connect to (?!localhost\b|127\.|0\.0\.0\.0\b|\[?::1\]?\b)(\S+) port \d+/
       ],
       action: :rerun,
       retries: 1,
@@ -824,10 +825,14 @@ defmodule Hypatia.Rules.CiFailureTriage do
   Returns one finding per pin site when more than one commit is pinned, and
   `[]` otherwise. Which commit is canonical is the owner's call.
   """
+  # YAML flow forms: `env: {PA_SHA: <sha>}` and `panic-ref: {default: <sha>}`.
+  @scanner_pin_flow ~r/[{,]\s*["']?(PANIC_ATTACK_SHA|PA_SHA|panic[-_]attack[-_]sha)["']?\s*:\s*["']?([0-9a-f]{40})/i
+  @scanner_input_flow ~r/["']?(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))["']?\s*:\s*\{[^}]*\bdefault\s*:\s*["']?([0-9a-f]{40})/i
+
   def check_scanner_pin_drift(contents) when is_map(contents) do
     sites =
       for {label, content} <- contents,
-          re <- [@scanner_pin, @scanner_input],
+          re <- [@scanner_pin, @scanner_input, @scanner_pin_flow, @scanner_input_flow],
           match <- Regex.scan(re, content),
           [key, sha] = Enum.take(match, -2) do
         %{file: label, key: key, sha: String.downcase(sha)}

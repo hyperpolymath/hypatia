@@ -209,6 +209,16 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert p.route == "owner-only"
     end
 
+    test "a loopback connection failure is the app under test, not a host outage" do
+      log =
+        "curl: (7) Failed to connect to localhost port 3000\n  1) test x\n5 tests, 1 failure\n"
+
+      assert T.classify(log).primary.layer == :code
+
+      assert T.classify("curl: (7) Failed to connect to git.sr.ht port 443\n").primary.rule ==
+               T.id("external_host_unreachable")
+    end
+
     test "gh api with HTTP 502 is a GitHub API outage" do
       %{primary: p} = T.classify("gh api graphql: HTTP 502: Bad Gateway\n")
       assert p.rule == T.id("api_server_error")
@@ -391,6 +401,16 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       contents = %{
         "a.yml" => "env:\n  \"PA_SHA\": #{@a}\n",
         "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "YAML flow-mapping pins are read" do
+      contents = %{
+        "a.yml" => "env: {PA_SHA: #{@a}}\n",
+        "b.yml" =>
+          "on:\n  workflow_call:\n    inputs:\n      panic-ref: {type: string, default: #{@b}}\n"
       }
 
       assert length(T.check_scanner_pin_drift(contents)) == 2
@@ -604,6 +624,18 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       # Guard the fixture edits themselves: deposit now needs only mid.
       assert chain =~ "needs: [mid]\n    if: always()"
       assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => chain})
+    end
+
+    test "a needed reusable-workflow job is a possible producer" do
+      reusable =
+        String.replace(
+          @deposit,
+          "  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo scan\n      - uses: actions/upload-artifact@v7.0.0\n        with:\n          name: findings\n",
+          "  scan:\n    uses: org/repo/.github/workflows/scan.yml@v1\n"
+        )
+
+      assert reusable =~ "uses: org/repo/.github/workflows/scan.yml@v1"
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => reusable})
     end
 
     test "a download step guarded by !cancelled() does not fire" do

@@ -880,6 +880,40 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert Enum.any?(found, &(&1.rule == "actions_lock_stale"))
     end
 
+    test "the CLI keeps WF029's advertised A5 rule id" do
+      dir = Path.join(System.tmp_dir!(), "wf029-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".github/workflows"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(dir, ".github/workflows/gate.yml"), """
+      on: pull_request
+      permissions:
+        contents: read
+      jobs:
+        scan:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/upload-artifact@v7.0.0
+              with:
+                name: findings
+        deposit:
+          runs-on: ubuntu-latest
+          needs: [scan]
+          if: always()
+          steps:
+            - uses: actions/download-artifact@v8.0.2
+              with:
+                name: findings
+      """)
+
+      [f] =
+        dir
+        |> Hypatia.CLI.collect_findings([:workflow_audit])
+        |> Enum.filter(&(&1[:type] == "always_after_cancel"))
+
+      assert f.rule_module == "ci_failure_triage"
+    end
+
     test "the combined CLI scan reports a stale lock once, not also as WH004" do
       dir = Path.join(System.tmp_dir!(), "stale-lock-#{System.unique_integer([:positive])}")
       wf_dir = Path.join(dir, ".github/workflows")
