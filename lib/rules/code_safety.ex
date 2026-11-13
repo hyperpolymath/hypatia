@@ -108,7 +108,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # `unsafe`. A bare `from_raw` also matched safe APIs such as
       # `rustix::process::Pid::from_raw(i32)` (gitbot-fleet#673).
       pattern:
-        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)(?:(?:::)?<(?:[^<>\n]|<(?:[^<>\n]|<[^<>\n]*>)*>)*>)?>?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
+        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull|Waker)(?:(?:::)?<(?:[^<>\n]|<(?:[^<>\n]|<[^<>\n]*>)*>)*>)?>?::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
       cwe: "CWE-676",
       description: "from_raw constructs types from raw pointers without safety checks"
     },
@@ -1003,10 +1003,14 @@ defmodule Hypatia.Rules.CodeSafety do
 
   defp skip_blanks_and_attributes([]), do: []
 
-  # `//`, `/*`, a block-comment continuation (`*` then space, `/` or end of
-  # line: `*boxed = 1;` is code), or a line closing a block comment.
+  # `//`, `/*` (with no code after a closing `*/`), a block-comment
+  # continuation (`*` then space, `/` or end of line: `*boxed = 1;` is code),
+  # or a line closing a block comment.
   defp comment_line?(line) do
-    String.starts_with?(line, ["//", "/*"]) or Regex.match?(~r{^\*(\s|/|$)}, line) or
+    String.starts_with?(line, "//") or
+      (String.starts_with?(line, "/*") and
+         (String.ends_with?(line, "*/") or not String.contains?(line, "*/"))) or
+      Regex.match?(~r{^\*(\s|/|$)}, line) or
       (String.ends_with?(line, "*/") and not String.contains?(line, "/*"))
   end
 
@@ -1321,9 +1325,12 @@ defmodule Hypatia.Rules.CodeSafety do
 
   # `/* ... */` blocks occupying whole lines (start-of-line through
   # end-of-line, possibly spanning lines). Inline blocks after code are
-  # left alone, same conservative posture as above.
+  # left alone, same conservative posture as above. The newlines inside a
+  # block are kept, so line numbers after it stay correct.
   defp strip_rust_whole_line_block_comments(content) do
-    Regex.replace(~r{^[ \t]*/\*.*?\*/[ \t]*$}sm, content, "")
+    Regex.replace(~r{^[ \t]*/\*.*?\*/[ \t]*$}sm, content, fn block ->
+      String.duplicate("\n", length(:binary.matches(block, "\n")))
+    end)
   end
 
   # Idris2 `|||` doc-comments (one or more on consecutive lines) AND

@@ -743,6 +743,41 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert unsafe_lines(code) == [3]
     end
 
+    test "code after a leading block comment ends the SAFETY search (Codex P2)" do
+      code = """
+      // SAFETY: about something else.
+      /* explanation */ let x = 1;
+      unsafe { op() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "a multi-line /* SAFETY: */ block above excuses the block (Codex P2)" do
+      code = """
+      fn f(p: *const u8) -> u8 {
+          /*
+           * SAFETY: pointer is valid.
+           */
+          unsafe { ptr::read(p) }
+      }
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a multi-line block comment does not shift later line numbers (Codex P2)" do
+      code = """
+      /*
+       * Module notes.
+       */
+      fn f() {}
+      let v = unsafe { ptr::read(addr) };
+      """
+
+      assert unsafe_lines(code) == [5]
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end
@@ -766,7 +801,8 @@ defmodule Hypatia.Rules.CodeSafetyTest do
             "let w = unsafe { Box::<Vec<u8>>::from_raw(p) };",
             "let r = unsafe { Box::<[u8; 4]>::from_raw(p) };",
             "let s = unsafe { std::slice::from_raw_parts(p, n) };",
-            "let f = unsafe { File::from_raw_fd(fd) };"
+            "let f = unsafe { File::from_raw_fd(fd) };",
+            "let k = unsafe { Waker::from_raw(raw) };"
           ] do
         assert from_raw?(code <> "\n"), code
       end
