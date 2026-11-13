@@ -2,10 +2,10 @@
 
 defmodule Hypatia.Rules.PinSitesCompileGuardTest do
   @moduledoc """
-  OTP 28.0-28.3 miscompile `PinSites.walk/4` (OTP-19951) and the VM segfaults
-  in garbage collection: estate scans and the RSR oracle exited 139 on callers
-  pinned to OTP 28.3. The module turns the faulty pass off. A segfault cannot
-  be asserted from inside the VM it kills, so this guards the switch itself.
+  OTP 28 (seen on 28.3 and 28.5.0.8) miscompiles `PinSites.walk/4` and the VM
+  segfaults in garbage collection: estate scans and the RSR oracle exited 139.
+  The module turns the faulty pass off. A segfault cannot be asserted from
+  inside the VM it kills, so this guards the switch itself.
   """
   use ExUnit.Case, async: true
 

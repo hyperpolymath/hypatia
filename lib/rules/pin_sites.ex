@@ -31,13 +31,16 @@ defmodule Hypatia.Rules.PinSites do
   given: the mask keeps the line's bytes where they were.
   """
 
-  # OTP 28.0-28.3 miscompile `walk/4`: its `seen <> <<c>>` accumulator gets an
+  # OTP 28 miscompiles `walk/4` (seen on 28.3 and 28.5.0.8; OTP 27 is fine):
+  # the destructive-update pass turns its `seen <> <<c>>` accumulator into an
   # in-place append (private_append) although `seen` is still referenced, and
   # the VM then segfaults in garbage collection (exit 139). That killed the
-  # estate scan and `mix hypatia.rsr_score` on callers pinned to OTP 28.3.
-  # Compiler bug OTP-19951, fixed in OTP 28.4 (compiler 9.0.5). Turning the
-  # pass off for this module only costs a copy per appended byte on one line.
-  # Remove when no caller runs OTP 28 below 28.4.
+  # estate scan and `mix hypatia.rsr_score`. Which input crashes depends on
+  # memory layout: zig-dnssec fa8d500 on 28.3, rsr-template-repo af8665c on
+  # 28.5.0.8. The OTP 28.4 fix for OTP-19951 (same pass) does not cover it.
+  # Turning the pass off for this module only costs a copy per appended byte
+  # on one line. Remove only after both reproductions pass on the OTP 28
+  # release the estate runs, with this line deleted.
   @compile :no_ssa_opt_destructive_update
 
   # One `uses:` site anywhere on a line, bounded on the left so `reuses:` is
