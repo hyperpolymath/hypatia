@@ -47,13 +47,13 @@
   "sev": "error",
   "problem": "'API rate limit exceeded' / secondary rate limit 403 in setup steps (gh, actions/checkout, setup-*)",
   "fix": "pass github.token via env; retry with backoff; reduce parallelism",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "none",
   "gap": "symbolic",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_rate_limit",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_rate_limit [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
   "seed": 1,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "actions-annotation",
@@ -61,13 +61,13 @@
   "sev": "error",
   "problem": "couldn't find remote ref refs/pull/N/merge: PR merge ref not yet (or no longer) built",
   "fix": "re-run after mergeability computed; rebase/resolve conflict if mergeable=false",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "symbolic",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/merge_ref_race (action none when PR merged/closed)",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/merge_ref_race (action none when PR merged/closed) [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/rest/pulls/pulls",
   "seed": 1,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "actions-annotation",
@@ -75,13 +75,13 @@
   "sev": "error",
   "problem": "required status context never emitted (path filter, renamed job, skipped matrix) so PR blocked forever",
   "fix": "emit check unconditionally or fix ruleset context name (owner owns ruleset)",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "escalate",
   "gap": "person",
-  "evidence": "branch_protection.ex BP008; hypatia#1064 (draft) hypatia/ci_failure_triage/required_check_never_reported via check_gate",
+  "evidence": "branch_protection.ex BP008; hypatia#1064 (draft) hypatia/ci_failure_triage/required_check_never_reported via check_gate [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks",
   "seed": 1,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "actions-annotation",
@@ -89,13 +89,13 @@
   "sev": "error",
   "problem": "cancel-in-progress cancels a job and a dependent/required job shows failed; or 'operation was canceled'",
   "fix": "scope concurrency cancel to PR refs; treat cancelled != failed in gates",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "symbolic",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/runner_cancelled + static WF029 always_after_cancel",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/runner_cancelled + static WF029 always_after_cancel [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/actions/using-jobs/using-concurrency",
   "seed": 1,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "actions-annotation",
@@ -103,13 +103,13 @@
   "sev": "error",
   "problem": "empty secret/var expansion; secret unavailable to fork PR or reusable workflow without `secrets: inherit`",
   "fix": "declare secrets in workflow_call; set in repo/org settings (owner)",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "escalate",
   "gap": "person",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/secret_or_variable_missing, app_key_wrong_format",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/secret_or_variable_missing, app_key_wrong_format [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions",
   "seed": 1,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -117,13 +117,13 @@
   "sev": "error",
   "problem": "exit 139 / 'Segmentation fault' in a tool step",
   "fix": "retry once; pin tool version; escalate with tool+version",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "none",
   "gap": "person",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/toolchain_segfault; owner-only: estate case is deterministic OTP 28 miscompile (#1062), rerun/autofix cannot help",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/toolchain_segfault; owner-only: estate case is deterministic OTP 28 miscompile (#1062), rerun/autofix cannot help [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 1,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -131,13 +131,13 @@
   "sev": "error",
   "problem": "5xx / 'Could not resolve host' / 'RPC failed' from a git host or registry",
   "fix": "classify as infra, retry with backoff, never open a code fix",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "none",
   "gap": "symbolic",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/external_host_unreachable",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/external_host_unreachable [DRAFT: module not in this tree; unverified]",
   "url": "https://www.githubstatus.com/",
   "seed": 1,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "coderabbit",
@@ -299,10 +299,10 @@
   "sev": "warning",
   "problem": "missing/wrong concurrency group; duplicate runs (push+pull_request)",
   "fix": "scope triggers, add group",
-  "detect": "detected",
+  "detect": "partial",
   "fixst": "autofix",
   "gap": "-",
-  "evidence": "detect.sh D-BURN + remediate.sh",
+  "evidence": "detect.sh D-BURN matches only inline `on: [push, pull_request]`; wh007 stops once any concurrency: key exists (ineffective groups unflagged)",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
   "route": "first-line"
@@ -311,7 +311,7 @@
   "source": "github-actions",
   "id": "permissions-missing",
   "sev": "warning",
-  "problem": "no `permissions:` so token has default write",
+  "problem": "no `permissions:` block: token relies on the repo/org default, which may be write or read",
   "fix": "add least-privilege block",
   "detect": "detected",
   "fixst": "recipe",
@@ -720,12 +720,12 @@
   "problem": "OpenSSF Scorecard check Branch-Protection",
   "fix": "enable protection",
   "detect": "detected",
-  "fixst": "recipe",
-  "gap": "-",
-  "evidence": "branch_protection.ex",
+  "fixst": "escalate",
+  "gap": "person",
+  "evidence": "branch_protection.ex (BP rules are owner-side advisory, admin scope; not bot-fixable)",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
-  "route": "first-line"
+  "route": "owner-only"
  },
  {
   "source": "scorecard",
@@ -803,10 +803,10 @@
   "sev": "varies",
   "problem": "OpenSSF Scorecard check Dependency-Update-Tool",
   "fix": "add dependabot",
-  "detect": "detected",
+  "detect": "partial",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "scorecard_compliance.ex",
+  "evidence": "scorecard_compliance.ex recognises dependabot.yml/.yaml only, not Renovate",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
   "route": "first-line"
@@ -873,10 +873,10 @@
   "sev": "varies",
   "problem": "OpenSSF Scorecard check Pinned-Dependencies",
   "fix": "pin by hash",
-  "detect": "detected",
+  "detect": "partial",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "pin_integrity.ex",
+  "evidence": "pin_integrity.ex covers Actions uses: sites only; Dockerfile/shell pins not detected",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
   "route": "first-line"
@@ -887,10 +887,10 @@
   "sev": "varies",
   "problem": "OpenSSF Scorecard check SAST",
   "fix": "add CodeQL/Sonar",
-  "detect": "detected",
+  "detect": "none",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "scorecard_compliance.ex",
+  "evidence": "scorecard_compliance.ex check_vulnerability_scanning only looks for secret scanners, not CodeQL/Sonar",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
   "route": "first-line"
@@ -1601,13 +1601,13 @@
   "sev": "error",
   "problem": "HTTP 401 dead PAT (estate-rescan, ci-health runs)",
   "fix": "owner rotates token",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "person",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/token_invalid",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/token_invalid [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1615,13 +1615,13 @@
   "sev": "error",
   "problem": "gh HTTP 502 from the API",
   "fix": "retry with backoff",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_server_error",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_server_error [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1629,13 +1629,13 @@
   "sev": "error",
   "problem": "'lockfile verification did not produce a result'",
   "fix": "regenerate in a checkout",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/actions_lock_unresolvable_pin",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/actions_lock_unresolvable_pin [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1643,13 +1643,13 @@
   "sev": "error",
   "problem": "gitleaks 'ambiguous argument sha^..sha'",
   "fix": "fetch depth / full scan",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scan_range_missing_commit",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scan_range_missing_commit [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1657,13 +1657,13 @@
   "sev": "error",
   "problem": "one failure fans out into many red aggregate checks",
   "fix": "fix the root job only",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/rollup_cascade",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/rollup_cascade [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1671,13 +1671,13 @@
   "sev": "error",
   "problem": "panic-attack pinned at 4 different commits",
   "fix": "align pins",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scanner_pin_drift",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scanner_pin_drift [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1685,13 +1685,13 @@
   "sev": "error",
   "problem": "actions.lock behind a Dependabot bump (EpistemicTypes.jl, ResidualEvidenceTypes.jl, this-ssg)",
   "fix": "regenerate lock; never inline SHA pin",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 hypatia/workflow_audit/actions_lock_stale (replaces :unpinned_action misfire)",
+  "evidence": "hypatia#1064 hypatia/workflow_audit/actions_lock_stale (replaces :unpinned_action misfire) [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "first-line"
+  "route": "unrouted"
  },
  {
   "source": "github-actions",
@@ -1699,13 +1699,13 @@
   "sev": "error",
   "problem": "'Get Pages site failed' (xmlpull-zig, sholes): Pages not enabled",
   "fix": "owner enables Pages (repo setting)",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "escalate",
   "gap": "person",
-  "evidence": "hypatia#1064 pages_not_enabled",
+  "evidence": "hypatia#1064 pages_not_enabled [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/pages",
   "seed": 0,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "ci-log",
@@ -1713,10 +1713,10 @@
   "sev": "error",
   "problem": "findings artifact missing after a scanner SIGSEGV (bactrian, quintessence)",
   "fix": "triage the job that should have produced it",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "none",
   "gap": "symbolic",
-  "evidence": "hypatia#1064 upstream_artifact_missing",
+  "evidence": "hypatia#1064 upstream_artifact_missing [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
   "route": "upstream"
@@ -1727,13 +1727,13 @@
   "sev": "error",
   "problem": "benchmark 'Nx against a 2.0x limit' (unified-api-adapter 2.285x)",
   "fix": "investigate regression",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "none",
   "gap": "person",
-  "evidence": "hypatia#1064 bench_regression",
+  "evidence": "hypatia#1064 bench_regression [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "hypatia",
@@ -1741,13 +1741,13 @@
   "sev": "critical",
   "problem": "Hypatia critical (puggle) / Sonar security rating C (occupancy-types): triage set forbids close/baseline, so owner-only by construction",
   "fix": "owner decision",
-  "detect": "detected",
+  "detect": "unassessed",
   "fixst": "escalate",
   "gap": "person",
-  "evidence": "hypatia#1064 triage rule set",
+  "evidence": "hypatia#1064 triage rule set [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "owner-only"
+  "route": "unrouted"
  },
  {
   "source": "standards",

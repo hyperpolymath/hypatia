@@ -17,9 +17,9 @@ Numbers: see `matrix.json` (regenerate counts from it; they change as rules land
 Each row has a `route`: `first-line` (squabbler autofix, via Tsunami-breaker), `referral`
 (Hypatia answers with a Bustfile, via Extended Hypatia) or `owner-only`. The value is a
 heuristic from fix status and gap reason, not a ruling: owner-only = needs a person;
-referral = fix needs escalation or judgement; first-line = otherwise. `unrouted` = not yet assessed.
+referral = fix needs escalation or judgement; first-line = otherwise. `upstream` = triage the job that should have produced the missing input (row `upstream_artifact_missing`); `unrouted` = not yet assessed.
 
-Rows marked from hypatia#1064/#1065 are drafts reported by the reconciliation thread and not yet verified by this thread.
+Rows whose evidence cites hypatia#1064/#1065 are set to `unassessed` until their detector exists in this tree and is verified; the thread reports them as detected.
 
 == Owner ruling needed
 Two rules disagree: the dictask canon-lockstep gate demands `rsr-profile.a2ml`, while the estate no-new-A2ML policy forbids it (row `standards/rsr-profile.a2ml vs no-new-A2ML`).
