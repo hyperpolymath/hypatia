@@ -67,9 +67,13 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
     {~r/^docs: record tech-debt audit findings/, "AM008"}
   ]
 
+  # AM009 used to match licence-migration titles too
+  # (`license/migrate-to-mpl-2.0`, `chore: migrate … MPL-2.0`). Removed by
+  # owner ruling 2026-11-13: licence work is manual and owner-only, so a
+  # licence PR is never admin-merge eligible and always falls through to
+  # `:requires_review`. AM009 now covers linguist excludes only.
   @bounded_chore_patterns [
-    {~r/^chore\(linguist\): exclude /, "AM009"},
-    {~r/^license\/migrate-to-mpl-2\.0|^chore: migrate.*MPL-2\.0/, "AM009"}
+    {~r/^chore\(linguist\): exclude /, "AM009"}
   ]
 
   @all_patterns @workflow_wrapper_patterns ++ @additive_doc_patterns ++ @bounded_chore_patterns
@@ -129,7 +133,7 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
       "AM006" => "language-CI (rust/elixir) reusable-wrapper replacement",
       "AM007" => "CHANGELOG.md seed in Keep-a-Changelog format",
       "AM008" => "docs-template / README / tech-debt-audit doc",
-      "AM009" => "linguist gitattributes / license-header migration",
+      "AM009" => "linguist gitattributes exclude (licence migrations removed 2026-11-13)",
       "AM010" => "phantom required check is the only blocker (paired with BP008)"
     }
   end
@@ -184,10 +188,57 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   this PR. A truly phantom context has NO rollup entry; a sometimes-
   firing context has a non-terminal entry. The subtraction collapses
   the latter back into the "wait for it" path.
+
+  ## Licence PRs (owner ruling 2026-11-13)
+
+  Licence work is manual and owner-only, so no licence PR is ever
+  admin-merge eligible, whatever blocks it. AM010 is a STATE check, so the
+  title exclusion in `classify/1` does not cover it: a licence PR whose only
+  blocker is a phantom context would otherwise come back eligible here.
+
+  `pr_state` therefore carries `:files`, the PR's changed paths. Any licence
+  path (the `PrAutomerge.licence_path?/1` set, plus REUSE.toml) returns
+  `:licence_requires_owner`. A rename counts on both its old and new path. The key is required and the check is
+  fail-closed: anything but a list (the key missing, or `:error` from a
+  failed query) is `:files_unknown`, never eligible, because a caller that
+  cannot say which files changed cannot show the PR is not a licence PR.
   """
   @spec am010_phantom_only_blocker?(map()) ::
-          {:eligible, String.t()} | :not_phantom_only
+          {:eligible, String.t()}
+          | :not_phantom_only
+          | :licence_requires_owner
+          | :files_unknown
   def am010_phantom_only_blocker?(pr_state) when is_map(pr_state) do
+    cond do
+      not is_list(Map.get(pr_state, :files)) -> :files_unknown
+      Enum.any?(List.wrap(pr_state.files), &licence_path?/1) -> :licence_requires_owner
+      true -> am010_state_check(pr_state)
+    end
+  end
+
+  def am010_phantom_only_blocker?(_), do: :files_unknown
+
+  # The veto set is PrAutomerge.licence_path?/1 (any basename starting
+  # LICENSE/LICENCE/COPYING/NOTICE, any name containing SPDX, LICENSES/),
+  # delegated rather than copied so the two cannot drift, plus any basename
+  # CONTAINING LICENSE/LICENCE (THIRD_PARTY_LICENSES, which the PrAutomerge
+  # prefix test misses), REUSE.toml, and a LICENSES/ directory anywhere in
+  # the tree. Wider is safe for a veto.
+  @doc false
+  def licence_path?(path) when is_binary(path) do
+    base = path |> Path.basename() |> String.upcase()
+
+    Hypatia.Rules.PrAutomerge.licence_path?(path) or
+      String.contains?(base, ["LICENSE", "LICENCE"]) or
+      base == "REUSE.TOML" or
+      String.contains?(path, "/LICENSES/")
+  end
+
+  def licence_path?(%{"path" => path}), do: licence_path?(path)
+  def licence_path?(%{path: path}), do: licence_path?(path)
+  def licence_path?(_), do: false
+
+  defp am010_state_check(pr_state) do
     required = Map.get(pr_state, :required_contexts, [])
     phantoms = MapSet.new(Map.get(pr_state, :phantom_contexts, []))
     rollup = Map.get(pr_state, :rollup, [])
@@ -233,8 +284,6 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
         :not_phantom_only
     end
   end
-
-  def am010_phantom_only_blocker?(_), do: :not_phantom_only
 
   # ─── Stall detection (DBA001) ─────────────────────────────────────────
 
