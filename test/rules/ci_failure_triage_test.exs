@@ -41,7 +41,14 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
     {"canon-lockstep-broken.txt", "canon_lockstep", :owner},
     {"canon-pin-needs-profile.txt", "canon_lockstep", :owner},
-    {"repo-map-stale.txt", "generated_file_stale", :fix},
+    {"repo-map-stale.txt", "repository_map_stale", :fix},
+    # Batch 2 (cases from 8 sessions): CodeQL, Dependabot, cargo audit, bots.
+    {"codeql-no-python.txt", "codeql_no_source", :owner},
+    {"codeql-config-error.txt", "codeql_setup_conflict", :owner},
+    {"dependabot-bun.txt", "dependabot_ecosystem_mismatch", :fix},
+    {"real-131888629871-cargo-audit.txt", "dependency_advisory", :report},
+    {"coderabbit-review-limit.txt", "review_rate_limited", :none},
+    {"codex-credits.txt", "review_quota_exhausted", :owner},
     {"deed-cancelled.txt", "runner_cancelled", :none},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},
@@ -242,6 +249,18 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
     test "conclusion cancelled is authoritative with an empty log" do
       assert T.classify("", %{conclusion: "cancelled"}).primary.rule == T.id("runner_cancelled")
+    end
+
+    test "startup_failure with no log is a referral, never a rerun" do
+      %{primary: p} = T.classify("", %{conclusion: "startup_failure"})
+      assert p.rule == T.id("workflow_startup_failure")
+      assert p.action == :report
+    end
+
+    test "a generated file other than REPOSITORY-MAP is referred, not run" do
+      %{primary: p} = T.classify("FAIL: committed docs/INDEX.adoc is stale — run: just index\n")
+      assert p.rule == T.id("generated_file_stale")
+      assert p.action == :report
     end
 
     test "exit code 139 with no log line is a crash, attributed to the program" do

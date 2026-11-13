@@ -221,17 +221,86 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "ref; never hand-write a leaf."
     },
     %{
-      name: "generated_file_stale",
+      name: "repository_map_stale",
       layer: :config,
-      patterns: [~r/committed \S+ is stale\s*[—-]+\s*run: \S/],
+      patterns: [~r/committed REPOSITORY-MAP\.adoc is stale/],
       action: :fix,
       retries: 0,
-      fix: "run-named-regenerator",
+      # cicd-squabbler SQ-GEN-01: the generator is named in the rule, never
+      # read from the log.
+      fix: "bash scripts/gen-repo-map.sh . && commit (SQ-GEN-01)",
       escalation: :owner,
       reason:
-        "A committed generated file no longer matches its source (e.g. " <>
-          "REPOSITORY-MAP.adoc, `just repo-map`). Run the command the gate names and " <>
-          "commit the result."
+        "REPOSITORY-MAP.adoc no longer matches the tree (dictask). Regenerate it " <>
+          "with the repo's generator and commit the result."
+    },
+    %{
+      name: "generated_file_stale",
+      layer: :config,
+      patterns: [~r/committed (?!REPOSITORY-MAP\.adoc)\S+ is stale\s*[—-]+\s*run: \S/],
+      # Referral: a bot must not run a command it read from a log. Each new
+      # generated file becomes its own first-line rule, generator named.
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "A committed generated file no longer matches its source. Its generator " <>
+          "is not yet a named first-line rule; refer, and add a rule for it."
+    },
+    %{
+      name: "workflow_startup_failure",
+      layer: :config,
+      patterns: [
+        ~r/conclusion: startup_failure/,
+        ~r/This run likely failed because of a workflow file issue/
+      ],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "The workflow failed before any job started, so there is no log. Seen " <>
+          "causes: an actions.lock record with a stale owner_id after a repo " <>
+          "transfer, a stale cross-repo workflow_call caller, an Actions policy " <>
+          "that does not allow the called reusable. Read the run page's banner; " <>
+          "never rerun blind."
+    },
+    %{
+      name: "dependabot_ecosystem_mismatch",
+      layer: :config,
+      patterns: [~r/has a bun\.lock file but no package-lock\.json/],
+      action: :fix,
+      retries: 0,
+      fix: "dependabot.yml: package-ecosystem npm -> bun for that directory",
+      escalation: :owner,
+      reason:
+        "Dependabot is configured for npm on a directory that uses bun " <>
+          "(MetaManifold-WebUI#330)."
+    },
+    %{
+      name: "codeql_no_source",
+      layer: :config,
+      patterns: [~r/CodeQL did not detect any code written in languages supported/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "Code scanning default setup lists a language the repo has no code in. " <>
+          "Removing it is a security setting: the owner changes it."
+    },
+    %{
+      name: "codeql_setup_conflict",
+      layer: :config,
+      patterns: [~r/CodeQL job status was configuration error/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "CodeQL default setup and an advanced codeql.yml both run. Only the owner " <>
+          "can turn default setup off."
     },
     %{
       name: "actions_lock_unresolvable_pin",
@@ -294,6 +363,45 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason:
         "A security scan reported findings at gate severity. The owner decides; " <>
           "never autofix, close or baseline a security finding to turn the check green."
+    },
+    %{
+      name: "dependency_advisory",
+      layer: :code,
+      patterns: [~r/\bRUSTSEC-\d{4}-\d{4}\b/, ~r/error: \d+ vulnerabilit(y|ies) found/],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "A dependency has a published advisory (cargo audit). A person bumps or " <>
+          "replaces it; never ignore the advisory to pass."
+    },
+    %{
+      name: "review_rate_limited",
+      layer: :platform,
+      patterns: [~r/Review limit reached/],
+      action: :none,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "CodeRabbit is out of reviews for now. Wait; the minutes count changes " <>
+          "on every edit, so key on the marker."
+    },
+    %{
+      name: "review_quota_exhausted",
+      layer: :platform,
+      patterns: [
+        ~r/exhausted its Codex allowance/,
+        ~r/reached your Codex usage limits/
+      ],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "The Codex paying account has no credits; no review will run until the " <>
+          "owner tops it up or switches Codex off."
     },
     %{
       name: "pages_not_enabled",
@@ -707,6 +815,18 @@ defmodule Hypatia.Rules.CiFailureTriage do
     else
       rule = Enum.find(@rules, &(&1.name == "runner_cancelled"))
       [finding(rule, "conclusion: cancelled", 0) | matches]
+    end
+  end
+
+  defp add_conclusion(matches, %{conclusion: c})
+       when c in ["startup_failure", :startup_failure] do
+    startup = id("workflow_startup_failure")
+
+    if Enum.any?(matches, &(&1.rule == startup)) do
+      matches
+    else
+      rule = Enum.find(@rules, &(&1.name == "workflow_startup_failure"))
+      [finding(rule, "conclusion: startup_failure", 0) | matches]
     end
   end
 

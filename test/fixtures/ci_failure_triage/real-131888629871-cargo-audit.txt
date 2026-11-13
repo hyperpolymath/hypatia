@@ -1,0 +1,5 @@
+Crate:     quinn-udp
+Version:   0.5.14
+ID:        RUSTSEC-2026-0538
+Solution:  Upgrade to >=0.5.16, <0.6.0 OR >=0.6.3
+error: 1 vulnerability found!

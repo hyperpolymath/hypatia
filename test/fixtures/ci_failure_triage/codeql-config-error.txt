@@ -1,0 +1,1 @@
+##[error]CodeQL job status was configuration error.
