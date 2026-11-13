@@ -602,7 +602,19 @@ defmodule Hypatia.Rules.SecurityErrors do
     {~r/xoxb-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+/, "Slack Bot Token"},
     {~r/xoxp-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+/, "Slack User Token"},
     {~r/pypi-AgE[a-zA-Z0-9\-_]{50,}/, "PyPI API Token"},
-    {~r/-----BEGIN [A-Z]+ PRIVATE KEY-----/, "Private Key"},
+    # Any PEM/OpenSSH private-key header, including the untyped PKCS#8
+    # `BEGIN PRIVATE KEY` header (a GitHub App key) and PGP's
+    # `PRIVATE KEY BLOCK`. The old `[A-Z]+ ` form required a type word and
+    # missed PKCS#8 entirely.
+    {~r/-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/, "Private Key"},
+    # A literal value assigned to a *_TOKEN name (shell, env, YAML, JSON; the
+    # key may be quoted). Not a token when the value starts with `$`, `{` or
+    # `<` (a reference or placeholder) or is a dotted reference such as
+    # `process.env.X`, `var.x`, `secrets.X`, `os.environ...`. A digit is
+    # required so an UPPER_SNAKE variable name is not a hit. The first value
+    # character may be base64 punctuation (`/`, `+`, `-`, `_`).
+    {~r/\b[A-Z][A-Z0-9_]*_TOKEN["']?[ \t]*[=:][ \t]*["']?(?![$\{<])(?!(?:process\.env|import\.meta\.env|os\.environ|vars?|secrets|env|locals?|data|module|self|config|settings|inputs|steps|needs|github)\.)(?=[A-Za-z0-9_\-.\/+=]*[0-9])[A-Za-z0-9_\-\/+][A-Za-z0-9_\-.\/+=]{19,}/,
+     "Token assignment"},
     {~r/sk-[a-zA-Z0-9]{48}/, "OpenAI API Key"},
     {~r/sk-proj-[a-zA-Z0-9]{48}/, "OpenAI Project Key"},
     {~r/sk-ant-api[0-9]{2}-[a-zA-Z0-9\-_]{86}/, "Anthropic API Key"},
@@ -612,10 +624,23 @@ defmodule Hypatia.Rules.SecurityErrors do
     {~r/AIza[0-9A-Za-z\-_]{35}/, "Google API Key"}
   ]
 
+  @form_only_labels ["Generic API key", "Generic secret", "Password", "Token assignment"]
+
   def detect_secrets(content) do
-    Enum.flat_map(@secret_patterns, fn {regex, label} ->
-      if Regex.match?(regex, content), do: [label], else: []
-    end)
+    labels =
+      Enum.flat_map(@secret_patterns, fn {regex, label} ->
+        if Regex.match?(regex, content), do: [label], else: []
+      end)
+
+    # "Token assignment" is a form-only fallback. When a specific credential
+    # matcher (GitHub PAT, npm token, ...) already named the value, the
+    # generic hit would report the same secret twice.
+    if labels != ["Token assignment"] and "Token assignment" in labels and
+         Enum.any?(labels, &(&1 not in @form_only_labels)) do
+      List.delete(labels, "Token assignment")
+    else
+      labels
+    end
   end
 
   # ---------------------------------------------------------------------------
