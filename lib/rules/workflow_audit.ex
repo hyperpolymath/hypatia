@@ -4193,6 +4193,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  defp current_run_download?(run_id) when run_id in [nil, ""], do: true
+
+  defp current_run_download?(run_id) when is_binary(run_id),
+    do: Regex.match?(~r/^\$\{\{\s*github\.run_id\s*\}\}$/, String.trim(run_id))
+
+  defp current_run_download?(_), do: false
+
   defp always_after_cancel?(%Hypatia.Workflow.Job{} = job) do
     cond_text = job.if || ""
 
@@ -4200,10 +4207,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       not Regex.match?(~r/cancelled\(\)/, cond_text) and
       Hypatia.Kyaml.get(job.node, "needs") != nil and
       Enum.any?(job.steps, fn step ->
-        # A download with `run-id` reads another run's artifact, which a
-        # cancellation of this run's needs does not remove.
+        # A download with a `run-id` naming ANOTHER run reads that run's
+        # artifact, which cancelling this run's needs does not remove.
+        # `${{ github.run_id }}` is this run, so it still counts.
         is_binary(step.uses) and String.starts_with?(step.uses, "actions/download-artifact@") and
-          Hypatia.Workflow.input(step, "run-id") in [nil, ""]
+          current_run_download?(Hypatia.Workflow.input(step, "run-id"))
       end)
   end
 

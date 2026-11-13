@@ -155,6 +155,32 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.classify(log).primary.rule == T.id("toolchain_segfault")
     end
 
+    test "a rate-limit header on a successful response is not a rate-limit failure" do
+      log = "< x-ratelimit-remaining: 0\n200 OK\n5 tests, 1 failure\n"
+      assert T.classify(log).primary.rule == T.id("test_failure")
+    end
+
+    test "a 5xx from the application under test is not an external outage" do
+      log = "curl: (22) The requested URL returned error: 500\n5 tests, 1 failure\n"
+      refute T.id("external_host_unreachable") in Enum.map(T.classify(log).matches, & &1.rule)
+    end
+
+    test "a crash of the hypatia binary itself is the program's, not the toolchain's" do
+      log = "/tmp/run.sh: line 2: 7 Segmentation fault      ./hypatia scan .\n"
+      assert T.classify(log).primary.rule == T.id("process_segfault")
+    end
+
+    test "a panic input with no default does not borrow a sibling's default" do
+      contents = %{
+        "r.yml" =>
+          "on:\n  workflow_call:\n    inputs:\n      panic-ref:\n        type: string\n" <>
+            "      pons-ref:\n        type: string\n        default: bca1ea289a4f8a86bac6212731e6f8ec15c67ad4\n",
+        "s.yml" => "  PA_SHA: 410a8f821ea8297833162565b50a298f787815da\n"
+      }
+
+      assert T.check_scanner_pin_drift(contents) == []
+    end
+
     test "scanner pins differing only in case are the same commit" do
       sha = "410a8f821ea8297833162565b50a298f787815da"
 
@@ -188,7 +214,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "a transient rule reruns within budget, then escalates as persistent" do
       %{primary: p} = T.classify(File.read!(Path.join(@dir, "rate-limit-setup-bun.txt")))
       assert %{action: :rerun, persistent: false} = T.decide(p, 0)
-      assert %{action: :owner, persistent: true} = T.decide(p, 1)
+      assert %{action: :owner, persistent: true, route: "owner-only"} = T.decide(p, 1)
       assert %{action: :owner, persistent: true} = T.decide(p, 50)
     end
 
@@ -285,6 +311,27 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       end
     end
 
+    @tag :tmp_dir
+    test "a standalone hardening scan keeps a stale ref, with the regenerate remedy", %{
+      tmp_dir: dir
+    } do
+      wf_dir = Path.join([dir, ".github", "workflows"])
+      File.mkdir_p!(wf_dir)
+      File.write!(Path.join(wf_dir, "actions.lock"), @lock)
+
+      File.write!(
+        Path.join(wf_dir, "ci.yml"),
+        "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7.0.2\n"
+      )
+
+      [f] = Hypatia.Rules.WorkflowHardening.wh004_unpinned_uses(dir)
+      assert f.rule == "WH004"
+      assert f.action == :regenerate_actions_lock
+      assert f.detail.kind == :actions_lock_stale
+      assert f.detail.locked_ref == "actions/checkout@v7.0.1"
+      refute f.reason =~ "40-char commit SHA"
+    end
+
     test "the locked ref itself is still pinned" do
       wf = %{
         "ci.yml" =>
@@ -334,6 +381,17 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         )
 
       assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => cross}) == []
+    end
+
+    test "run-id set to this run still counts as a current-run download" do
+      this_run =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n        with:\n          name: findings\n",
+          "      - uses: actions/download-artifact@v8.0.2\n        with:\n          name: findings\n          run-id: ${{ github.run_id }}\n"
+        )
+
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => this_run})
     end
 
     test "an always() job with no artifact download (a status rollup) does not fire" do

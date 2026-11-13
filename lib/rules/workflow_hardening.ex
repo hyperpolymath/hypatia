@@ -591,13 +591,35 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       wh004_scan_content(rel, content)
       |> Enum.reject(fn finding ->
-        # A locked ref is pinned. A ref the lock holds at another version is a
-        # stale lock, reported once by workflow_audit (actions_lock_stale) with
-        # the safe remedy; WH004's inline-SHA advice would drop it from the lock.
-        Hypatia.Rules.ActionsLock.pinned?(lock, rel, finding.detail.uses) or
-          Hypatia.Rules.ActionsLock.stale_ref(lock, rel, finding.detail.uses) != nil
+        Hypatia.Rules.ActionsLock.pinned?(lock, rel, finding.detail.uses)
+      end)
+      |> Enum.map(fn finding ->
+        # A ref the lock holds at another version is a stale lock. Keep the
+        # finding (a standalone hardening scan must still see it) but give it
+        # the safe remedy: WH004's inline-SHA advice would drop the action
+        # from the lock. Same remedy as workflow_audit's actions_lock_stale.
+        case Hypatia.Rules.ActionsLock.stale_ref(lock, rel, finding.detail.uses) do
+          nil -> finding
+          locked -> stale_lock_finding(finding, locked)
+        end
       end)
     end)
+  end
+
+  defp stale_lock_finding(finding, locked) do
+    %{
+      finding
+      | reason:
+          "#{finding.file} uses `#{finding.detail.uses}` but actions.lock pins " <>
+            "`#{locked}` for this workflow, so the job fails at Set up job. " <>
+            "Regenerate the lock (`gh actions-lock`); do not SHA-pin inline.",
+        action: :regenerate_actions_lock,
+        detail:
+          finding.detail
+          |> Map.put(:kind, :actions_lock_stale)
+          |> Map.put(:locked_ref, locked)
+          |> Map.put(:fix, "Regenerate actions.lock in the same PR as the bump.")
+    }
   end
 
   defp invalid_actions_lock_finding(reason) do

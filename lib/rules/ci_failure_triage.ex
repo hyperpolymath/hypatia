@@ -92,8 +92,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: :platform,
       patterns: [
         ~r/API rate limit exceeded/i,
-        ~r/exceeded a secondary rate limit/i,
-        ~r/x-ratelimit-remaining:\s*0\b/i
+        ~r/exceeded a secondary rate limit/i
       ],
       action: :rerun,
       retries: 1,
@@ -126,8 +125,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       patterns: [
         ~r/fatal: unable to access '[^']+': (Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Recv failure|gnutls_handshake|The requested URL returned error: 5\d\d)/,
         ~r/Could not resolve host:\s*(\S+)/,
-        ~r/Failed to connect to (\S+) port \d+/,
-        ~r/The requested URL returned error: 5\d\d/
+        ~r/Failed to connect to (\S+) port \d+/
       ],
       action: :rerun,
       retries: 1,
@@ -292,7 +290,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       # segfault in a program the change built is a code failure
       # (`process_segfault`).
       patterns: [
-        ~r/Segmentation fault[^\n]*\b(mix|elixir|erl|beam\.smp|rustc|cargo|ghc|idris2|zig|pack|hypatia)\b/,
+        ~r/Segmentation fault[^\n]*\b(mix|elixir|erl|beam\.smp|rustc|cargo|ghc|idris2|zig|pack)\b/,
         ~r/\b(beam\.smp|rustc|idris2|ghc)\b[^\n]*\b(SIGSEGV|signal 11)\b/
       ],
       action: :owner,
@@ -525,6 +523,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   def decide(%{action: :rerun, retries: budget} = finding, attempts)
       when is_integer(attempts) and attempts >= budget do
     %{finding | action: finding.escalation}
+    |> Map.put(:route, route(finding.escalation))
     |> Map.put(:persistent, true)
   end
 
@@ -572,7 +571,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
   @scanner_pin ~r/^\s*(PANIC_ATTACK_SHA|PA_SHA|panic[-_]attack[-_]sha)\s*:\s*["']?([0-9a-f]{40})/im
   # A reusable workflow's input (`panic-ref`, `panic-rev`, `panic-attack-sha`)
   # whose `default:` is the pin.
-  @scanner_input ~r/^[ \t]*(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))[ \t]*:[ \t]*\n(?:[ \t]+(?!default:)[^\n]*\n){0,6}?[ \t]+default:[ \t]*["']?([0-9a-f]{40})/im
+  # Every line between the key and `default:` must be indented deeper than
+  # the key, so the match cannot cross into a sibling input's block.
+  @scanner_input ~r/^([ \t]*)(panic(?:[-_]attack)?[-_](?:sha|ref|rev|commit))[ \t]*:[ \t]*\n(?:\1[ \t]+(?!default:)[^\n]*\n){0,6}?\1[ \t]+default:[ \t]*["']?([0-9a-f]{40})/im
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -584,7 +585,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
     sites =
       for {label, content} <- contents,
           re <- [@scanner_pin, @scanner_input],
-          [_, key, sha] <- Regex.scan(re, content) do
+          match <- Regex.scan(re, content),
+          [key, sha] = Enum.take(match, -2) do
         %{file: label, key: key, sha: String.downcase(sha)}
       end
       |> Enum.uniq()
