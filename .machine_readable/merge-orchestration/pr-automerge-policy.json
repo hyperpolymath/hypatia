@@ -657,7 +657,7 @@
       ]
     },
     "chore_meta_only": {
-      "description": "Non-code chore: docs, licence headers, linguist exclusions, CODEOWNERS, issue templates, .gitattributes. No runtime path.",
+      "description": "Non-code chore: docs, linguist exclusions, CODEOWNERS, issue templates, .gitattributes. No runtime path.",
       "route": "rhodibot",
       "method": "squash",
       "pool": "P3",
