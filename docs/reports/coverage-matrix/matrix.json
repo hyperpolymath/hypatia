@@ -1660,10 +1660,10 @@
   "detect": "unassessed",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/rollup_cascade [DRAFT: module not in this tree; unverified]",
+  "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/rollup_cascade [DRAFT: module not in this tree; unverified]; Integration Status rollup (\"3 of 3 integration jobs did not report success\") is classified upstream: never triage alone",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "route": "upstream"
  },
  {
   "source": "ci-log",
@@ -1762,5 +1762,47 @@
   "url": "",
   "seed": 0,
   "route": "owner-only"
+ },
+ {
+  "source": "ci-log",
+  "id": "container_build_toolchain_drift",
+  "sev": "error",
+  "problem": "container image build fails (cargo exit 101: env!(TARGET) at cli/src/main.rs:282, E0658 atomic_try_update at cli/src/app_state.rs:58) where the host-toolchain CI build succeeds: Containerfile Rust older than the crate",
+  "fix": "align the Containerfile toolchain with the crate (own PR)",
+  "detect": "none",
+  "fixst": "recipe",
+  "gap": "symbolic",
+  "evidence": "seen on hypatia#1063 job 131883124996; reported red on main runs 43357534889 and 43264284438 (reconciliation thread); no rule yet",
+  "url": "",
+  "seed": 0,
+  "route": "first-line"
+ },
+ {
+  "source": "cargo-audit",
+  "id": "RUSTSEC-2026-0538 (quinn-udp 0.5.14)",
+  "sev": "error",
+  "problem": "cargo audit finds a vulnerability in Cargo.lock; fix quinn-udp >=0.5.16 (<0.6.0) or >=0.6.3; plus 4 allowed warnings",
+  "fix": "cargo update -p quinn-udp (own PR)",
+  "detect": "none",
+  "fixst": "escalate",
+  "gap": "person",
+  "evidence": "seen on hypatia#1063; reported red on main and on all four reconciliation PRs; not caused by them",
+  "url": "https://rustsec.org/advisories/RUSTSEC-2026-0538",
+  "seed": 0,
+  "route": "owner-only"
+ },
+ {
+  "source": "ci-log",
+  "id": "process_segfault",
+  "sev": "error",
+  "problem": "unqualified segfault line with no known runtime/compiler named: treated as a code failure, not infra",
+  "fix": "investigate code",
+  "detect": "unassessed",
+  "fixst": "none",
+  "gap": "symbolic",
+  "evidence": "split of sigsegv-in-ci per hypatia#1064 (draft): toolchain_segfault needs a known runtime or compiler in the line; Hypatia/mix/beam segfault is owner-only",
+  "url": "",
+  "seed": 0,
+  "route": "unrouted"
  }
 ]
