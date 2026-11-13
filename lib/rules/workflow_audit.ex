@@ -4194,12 +4194,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  # An `if:` that is false once the run is cancelled: `!cancelled()` or
-  # `success()`. A bare `cancelled()` (e.g. `always() || cancelled()`) is
-  # still true after a cancel, so it does not count as a guard.
+  # An `if:` that is false once the run is cancelled: a conjunction that
+  # contains `!cancelled()` or `success()`. Any `||` can make the whole
+  # expression true after a cancel (`always() || !cancelled()`), so an
+  # expression with `||` is never treated as a guard. Conservative: a
+  # false "not guarded" only costs a finding a person can dismiss.
   defp excludes_cancellation?(cond_text) do
-    Regex.match?(~r/!\s*cancelled\(\)/, cond_text) or
-      Regex.match?(~r/\bsuccess\(\)/, cond_text)
+    not String.contains?(cond_text, "||") and
+      (Regex.match?(~r/!\s*cancelled\(\)/, cond_text) or
+         Regex.match?(~r/\bsuccess\(\)/, cond_text))
   end
 
   defp current_run_download?(run_id) when run_id in [nil, ""], do: true

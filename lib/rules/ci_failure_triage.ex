@@ -413,6 +413,56 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "reviews are advisory (owner ruling R7): nothing waits on it."
     },
     %{
+      name: "ruleset_blocks_push",
+      layer: :config,
+      patterns: [~r/Repository rule violations found/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "A repository ruleset refused a push from the workflow (Apodeixis.jl badge " <>
+          "branch: 'Code coverage checks require a pull request', HTTP 409). A rerun " <>
+          "cannot pass; rulesets are the owner's. No bot edits or bypasses them."
+    },
+    %{
+      name: "uuid_conformance",
+      layer: :config,
+      patterns: [~r/non-v8 UUID literal/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "An identifier is not ESTATE-UUID-V8 (Apodeixis.jl Project.toml). Existing " <>
+          "ids are not re-minted (A7); a Julia package UUID needs the owner's call."
+    },
+    %{
+      name: "kyaml_format",
+      layer: :config,
+      patterns: [~r/kyaml-format: \S+ is not KYAML/],
+      action: :fix,
+      retries: 0,
+      # Named generator, never a command read from the log.
+      fix: "scripts/kyaml-format.sh <file> with Go yq (mikefarah), then commit",
+      escalation: :owner,
+      reason:
+        "A YAML file is not in KYAML form (quintessence compose.yaml). Reformat " <>
+          "with the repo's kyaml-format.sh using Go yq; Python yq corrupts it."
+    },
+    %{
+      name: "sonar_not_authorized",
+      layer: :config,
+      patterns: [~r/Not authorized or organization not found/],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "The Sonar scanner's token or project binding is not valid for this " <>
+          "organization (lithoglyph). The owner fixes the setting."
+    },
+    %{
       name: "pages_not_enabled",
       layer: :config,
       patterns: [

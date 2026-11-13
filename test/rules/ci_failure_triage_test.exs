@@ -45,6 +45,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"repo-map-stale.txt", "repository_map_stale", :fix},
     # Batch 2 (cases from 8 sessions): CodeQL, Dependabot, cargo audit, bots.
     {"codeql-no-python.txt", "codeql_no_source", :owner},
+    # Case-12 excerpts (rule-16 sweep session, all red on the base).
+    {"ruleset-blocks-push.txt", "ruleset_blocks_push", :owner},
+    {"uuid-non-v8.txt", "uuid_conformance", :owner},
+    {"kyaml-format.txt", "kyaml_format", :fix},
+    {"sonar-not-authorized.txt", "sonar_not_authorized", :owner},
+    {"capnp-generated-e0451.txt", "compile_error", :report},
     {"codeql-config-error.txt", "codeql_setup_conflict", :owner},
     {"dependabot-bun.txt", "dependabot_ecosystem_mismatch", :fix},
     {"real-131888629871-cargo-audit.txt", "dependency_advisory", :report},
@@ -445,6 +451,27 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "always() || cancelled() is not a guard and still fires" do
       pos = String.replace(@deposit, "if: always()", "if: ${{ always() || cancelled() }}")
       assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => pos})
+    end
+
+    test "always() || !cancelled() on the job is not a guard" do
+      pos = String.replace(@deposit, "if: always()", "if: ${{ always() || !cancelled() }}")
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => pos})
+    end
+
+    test "always() && !cancelled() on the job is a guard" do
+      g = String.replace(@deposit, "if: always()", "if: ${{ always() && !cancelled() }}")
+      assert WorkflowAudit.check_always_after_cancel(%{"gate.yml" => g}) == []
+    end
+
+    test "a step guarded by always() || !cancelled() still counts" do
+      step =
+        String.replace(
+          @deposit,
+          "      - uses: actions/download-artifact@v8.0.2\n",
+          "      - if: ${{ always() || !cancelled() }}\n        uses: actions/download-artifact@v8.0.2\n"
+        )
+
+      assert [_] = WorkflowAudit.check_always_after_cancel(%{"gate.yml" => step})
     end
 
     test "a download step guarded by !cancelled() does not fire" do
