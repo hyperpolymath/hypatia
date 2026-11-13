@@ -67,9 +67,13 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
     {~r/^docs: record tech-debt audit findings/, "AM008"}
   ]
 
+  # AM009 used to match licence-migration titles too
+  # (`license/migrate-to-mpl-2.0`, `chore: migrate … MPL-2.0`). Removed by
+  # owner ruling 2026-11-13: licence work is manual and owner-only, so a
+  # licence PR is never admin-merge eligible and always falls through to
+  # `:requires_review`. AM009 now covers linguist excludes only.
   @bounded_chore_patterns [
-    {~r/^chore\(linguist\): exclude /, "AM009"},
-    {~r/^license\/migrate-to-mpl-2\.0|^chore: migrate.*MPL-2\.0/, "AM009"}
+    {~r/^chore\(linguist\): exclude /, "AM009"}
   ]
 
   @all_patterns @workflow_wrapper_patterns ++ @additive_doc_patterns ++ @bounded_chore_patterns
@@ -129,7 +133,7 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
       "AM006" => "language-CI (rust/elixir) reusable-wrapper replacement",
       "AM007" => "CHANGELOG.md seed in Keep-a-Changelog format",
       "AM008" => "docs-template / README / tech-debt-audit doc",
-      "AM009" => "linguist gitattributes / license-header migration",
+      "AM009" => "linguist gitattributes exclude (licence migrations removed 2026-11-13)",
       "AM010" => "phantom required check is the only blocker (paired with BP008)"
     }
   end

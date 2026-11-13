@@ -184,4 +184,29 @@ defmodule Hypatia.Rules.AdminMergeEligibilityTest do
       assert catalog["AM010"] =~ "phantom"
     end
   end
+
+  # Owner ruling 2026-11-13: licence work is manual and owner-only, so no
+  # licence PR is ever admin-merge eligible, whatever its title.
+  describe "licence PRs are never admin-merge eligible" do
+    for title <- [
+          "license/migrate-to-mpl-2.0",
+          "chore: migrate to MPL-2.0",
+          "chore: migrate licence headers to MPL-2.0"
+        ] do
+      test "#{title} requires review" do
+        assert AM.classify(unquote(title)) == :requires_review
+
+        assert AM.eligible?(%{
+                 title: unquote(title),
+                 isDraft: false,
+                 mergeable: "MERGEABLE",
+                 mergeStateStatus: "BLOCKED"
+               }) == :requires_review
+      end
+    end
+
+    test "AM009 still covers linguist excludes" do
+      assert AM.classify("chore(linguist): exclude vendored fixtures") == {:eligible, "AM009"}
+    end
+  end
 end
