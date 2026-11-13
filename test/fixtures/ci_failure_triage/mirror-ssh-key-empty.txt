@@ -1,0 +1,6 @@
+2026-11-13T12:26:18.6900993Z ##[error]The ssh-private-key argument is empty. Maybe the secret has not been configured, or you are using a wrong secret name in your workflow file.
+2026-11-13T12:26:18.7045872Z Post job cleanup.
+2026-11-13T12:26:18.7443804Z Stopping SSH agent
+2026-11-13T12:26:18.8263290Z SSH_AGENT_PID not set, cannot kill agent
+2026-11-13T12:26:18.8451233Z Command failed: ssh-agent -k
+2026-11-13T12:26:18.8498607Z Error stopping the SSH agent, proceeding anyway

@@ -1,0 +1,1 @@
+FAIL .github/workflows/release.yml: refs missing from the lockfile: slsa-framework/slsa-github-generator@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a

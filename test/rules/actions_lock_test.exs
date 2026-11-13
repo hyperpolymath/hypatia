@@ -336,13 +336,13 @@ defmodule Hypatia.Rules.ActionsLockTest do
   test "rejects a leaf whose ref repeats its own SHA (invalid lockfile pin)" do
     assert {:error,
             {:self_sha_leaf_ref, ["actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}} =
-             ActionsLock.parse(@self_sha_leaf)
+             ActionsLock.parse(@self_sha_leaf, reusable_callers: MapSet.new())
 
     # The same record with a symbolic ref is the repaired form and parses.
     assert {:ok, _} =
              @self_sha_leaf
              |> String.replace("ref: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'", "ref: 'v7.0.1'")
-             |> ActionsLock.parse()
+             |> ActionsLock.parse(reusable_callers: MapSet.new())
   end
 
   test "a reusable-workflow edge may record its SHA as its ref" do
@@ -366,7 +366,224 @@ defmodule Hypatia.Rules.ActionsLockTest do
                 - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     """
 
-    assert {:ok, _} = ActionsLock.parse(edge)
+    callers =
+      MapSet.new(["metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc"])
+
+    assert {:ok, _} = ActionsLock.parse(edge, reusable_callers: callers)
+  end
+
+  @sha_c "cccccccccccccccccccccccccccccccccccccccc"
+  @self_sha_with_uses """
+  version: 'v0.0.2'
+  workflows:
+      '.github/workflows/gov.yml':
+          - 'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc'
+  dependencies:
+      'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa':
+          ref: 'v7.0.1'
+          commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          owner_id: 44036562
+          repo_id: 197814629
+      'metadatastician/standards@cccccccccccccccccccccccccccccccccccccccc':
+          ref: 'cccccccccccccccccccccccccccccccccccccccc'
+          commit: 'sha1-cccccccccccccccccccccccccccccccccccccccc'
+          owner_id: 297579217
+          repo_id: 1116521501
+          uses:
+              - 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  """
+
+  test "a composite action pinned by bare SHA with nested uses is flagged" do
+    # Step-level use only: no workflow calls it as a reusable workflow.
+    callers =
+      ActionsLock.reusable_callers([
+        "jobs:\n  a:\n    steps:\n      - uses: metadatastician/standards@#{@sha_c}\n"
+      ])
+
+    assert callers == MapSet.new()
+
+    assert {:error, {:self_sha_leaf_ref, ["metadatastician/standards@" <> @sha_c]}} ==
+             ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+
+    # An empty set is not "unknown": it flags too.
+    assert {:error, {:self_sha_leaf_ref, _}} =
+             ActionsLock.parse(@self_sha_with_uses, reusable_callers: MapSet.new())
+  end
+
+  test "a job-level reusable workflow edge with ref == SHA is not flagged" do
+    workflow = """
+    jobs:
+      gov:
+        uses: Metadatastician/Standards/.github/workflows/gov.yml@#{@sha_c}
+    """
+
+    callers = ActionsLock.reusable_callers([{"gov.yml", workflow}])
+    assert callers == MapSet.new(["metadatastician/standards@" <> @sha_c])
+
+    assert {:ok, _} = ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+  end
+
+  @call "metadatastician/standards/.github/workflows/gov.yml@" <> @sha_c
+
+  test "reusable_callers lowercases owner/repo and a SHA ref, keeps a symbolic ref" do
+    upper = String.upcase(@sha_c)
+
+    callers =
+      ActionsLock.reusable_callers([
+        "jobs:\n  gov:\n    uses: Metadatastician/Standards/.github/workflows/gov.yml@#{upper}\n" <>
+          "  other:\n    uses: Owner/Repo/.github/workflows/x.yml@Main\n"
+      ])
+
+    assert callers == MapSet.new(["metadatastician/standards@" <> @sha_c, "owner/repo@Main"])
+    assert {:ok, _} = ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+  end
+
+  test "reusable_callers reads a quoted key and a flow-style job" do
+    quoted = "jobs:\n  gov:\n    \"uses\": \"#{@call}\"\n"
+    flow = "jobs:\n  gov: { uses: #{@call} }\n"
+    expected = MapSet.new(["metadatastician/standards@" <> @sha_c])
+
+    assert ActionsLock.reusable_callers([quoted]) == expected
+    assert ActionsLock.reusable_callers([flow]) == expected
+  end
+
+  test "reusable_callers ignores uses text inside run and env block scalars" do
+    workflow = """
+    jobs:
+      a:
+        env:
+          NOTE: |
+            uses: #{@call}
+        steps:
+          - run: |
+              echo hi
+              uses: #{@call}
+    """
+
+    assert ActionsLock.reusable_callers([workflow]) == MapSet.new()
+  end
+
+  test "a key also used as a step action keeps no exemption" do
+    workflow = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        steps:
+          - uses: metadatastician/standards@#{@sha_c}
+    """
+
+    callers = ActionsLock.reusable_callers([workflow])
+    assert callers == MapSet.new()
+
+    assert {:error, {:self_sha_leaf_ref, ["metadatastician/standards@" <> @sha_c]}} ==
+             ActionsLock.parse(@self_sha_with_uses, reusable_callers: callers)
+  end
+
+  test "a flow-style matrix row does not remove the exemption, a flow-style step does" do
+    matrix = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        strategy:
+          matrix:
+            include:
+              - { uses: metadatastician/standards@#{@sha_c} }
+        steps:
+          - run: echo
+    """
+
+    expected = MapSet.new(["metadatastician/standards@" <> @sha_c])
+    assert ActionsLock.reusable_callers([matrix]) == expected
+
+    flow_matrix = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        strategy: { matrix: { include: [ { uses: metadatastician/standards@#{@sha_c} } ] } }
+        steps:
+          - run: echo
+    """
+
+    assert ActionsLock.reusable_callers([flow_matrix]) == expected
+
+    flow_step = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        steps:
+          - { uses: metadatastician/standards@#{@sha_c} }
+    """
+
+    assert ActionsLock.reusable_callers([flow_step]) == MapSet.new()
+
+    flow_steps_seq = """
+    jobs:
+      gov:
+        uses: #{@call}
+      build:
+        steps: [ { uses: metadatastician/standards@#{@sha_c} } ]
+    """
+
+    assert ActionsLock.reusable_callers([flow_steps_seq]) == MapSet.new()
+  end
+
+  test "a single-file scan skips the self-SHA check and says the context is incomplete" do
+    alias Hypatia.Rules.WorkflowAudit
+
+    caller_only_elsewhere = "jobs:\n  b:\n    steps:\n      - run: echo\n"
+
+    partial =
+      WorkflowAudit.check_unpinned_actions(%{"ci.yml" => caller_only_elsewhere},
+        actions_lock: @self_sha_with_uses,
+        workflows_complete?: false
+      )
+
+    refute Enum.any?(partial, &(&1.type == :invalid_actions_lock))
+    assert [%{type: :actions_lock_context_incomplete}] = partial
+
+    # The whole set, with the call in another file, is accepted with no marker.
+    whole =
+      WorkflowAudit.check_unpinned_actions(
+        %{"ci.yml" => caller_only_elsewhere, "gov.yml" => "jobs:\n  g:\n    uses: #{@call}\n"},
+        actions_lock: @self_sha_with_uses
+      )
+
+    assert whole == []
+
+    # The whole set without any call is refused.
+    assert [%{type: :invalid_actions_lock}] =
+             WorkflowAudit.check_unpinned_actions(%{"ci.yml" => caller_only_elsewhere},
+               actions_lock: @self_sha_with_uses
+             )
+  end
+
+  test "Rules.scan_workflow on one file reports the incomplete context, not an invalid lock" do
+    findings =
+      Rules.scan_workflow("permissions:\n  contents: read\njobs: {}\n",
+        filename: "ci.yml",
+        actions_lock: @self_sha_with_uses
+      )
+
+    assert Enum.any?(findings, &(&1.rule == "actions_lock_context_incomplete"))
+    refute Enum.any?(findings, &(&1.rule == "invalid_actions_lock"))
+  end
+
+  test "reusable_callers ignores local, step-level and non-workflow uses" do
+    workflow = """
+    jobs:
+      a:
+        uses: ./.github/workflows/local.yml
+      b:
+        steps:
+          - uses: actions/checkout@#{@sha_c}
+          - uses: owner/repo/subdir@#{@sha_c}
+    """
+
+    assert ActionsLock.reusable_callers([workflow]) == MapSet.new()
   end
 
   test "requires each positive repository identity exactly once" do

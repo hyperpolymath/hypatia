@@ -1,0 +1,8 @@
+  BRANCH: governance-badges
+  DEST: badges/k9.json
+gh: Repository rule violations found
+
+Code coverage checks require a pull request.
+
+ (HTTP 409)
+##[error]Process completed with exit code 1.

@@ -565,8 +565,17 @@ defmodule Hypatia.CLI do
                   Map.get(f, :rule) ||
                   :unknown
 
+              # A finding that declares an A5 `rule_id` keeps it: WF029 is
+              # advertised as hypatia/ci_failure_triage/always_after_cancel,
+              # and SARIF builds `hypatia/<rule_module>/<type>`.
+              {rule_module, type} =
+                case String.split(to_string(Map.get(f, :rule_id, "")), "/") do
+                  ["hypatia", mod, t] -> {mod, t}
+                  _ -> {"workflow_audit", type}
+                end
+
               %{
-                rule_module: "workflow_audit",
+                rule_module: rule_module,
                 severity: to_string(Map.get(f, :severity, :medium)),
                 type: to_string(type),
                 # WorkflowAudit keys findings by bare basename (`ci.yml`) so
@@ -750,6 +759,46 @@ defmodule Hypatia.CLI do
       if :workflow_hardening in rules do
         case Hypatia.Rules.WorkflowHardening.scan(repo_path) do
           %{findings: findings} ->
+            # A stale actions.lock ref is reported by workflow_audit as
+            # `actions_lock_stale` when that family also runs; WH004 keeps it
+            # only for standalone hardening scans, so drop the duplicate here.
+            # workflow_audit's unpinned-action check is built on WH004
+            # (wh004_scan_content/2) and reports the lockfile itself, so when
+            # both families run WH004 and its lockfile findings would repeat
+            # every unpinned, exempt or stale ref. Standalone hardening scans
+            # keep them.
+            # The lockfile finding is dropped only when workflow_audit itself
+            # reported it: an unreadable lock (a directory, :eacces) reaches
+            # workflow_audit as nil and only hardening reports it.
+            audit_reported_lock? =
+              Enum.any?(
+                results,
+                &(Map.get(&1, :rule_module) == "workflow_audit" and
+                    Map.get(&1, :type) == "invalid_actions_lock")
+              )
+
+            # WH002 "absent" repeats workflow_audit's missing_permissions for the
+            # same file; keep WH002's write-all forms, which say more.
+            audit_missing_perms =
+              for r <- results,
+                  Map.get(r, :rule_module) == "workflow_audit",
+                  Map.get(r, :type) == "missing_permissions",
+                  into: MapSet.new(),
+                  do: Path.basename(to_string(Map.get(r, :file, "")))
+
+            findings =
+              if :workflow_audit in rules do
+                Enum.reject(
+                  findings,
+                  &(&1.rule == "WH004" or
+                      (&1.rule == "invalid_actions_lock" and audit_reported_lock?) or
+                      (&1.rule == "WH002" and &1.reason =~ "absent" and
+                         MapSet.member?(audit_missing_perms, Path.basename(to_string(&1.file)))))
+                )
+              else
+                findings
+              end
+
             normalized =
               Enum.map(findings, fn f ->
                 %{
@@ -1760,7 +1809,7 @@ defmodule Hypatia.CLI do
         help                             Show this help
 
     pr-eligibility OUTPUT (JSON on stdout):
-        {"eligible":true|false,"reason":"AM010"|null,
+        {"eligible":true|false,"reason":"AM010"|"licence_requires_owner"|null,
          "phantom_contexts":[...],"required_contexts":[...]}
 
     OPTIONS:
