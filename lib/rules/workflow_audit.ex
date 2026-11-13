@@ -4081,43 +4081,94 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # is not confirmed private; escalate if the forge's visibility cannot be
   # read. A referral, never an autofix: the guard is a security decision.
 
+  # A force/mirror push. Shell line continuations are joined first, so
+  # `git push \\` + `--force …` on the next line still matches.
   @mirror_push ~r/git\s+push\b[^\n]*(--force\b|--mirror\b|\s-f\b)/
   @mirror_gate ~r/[A-Z0-9_]+_MIRROR_ENABLED/
-  # Real guard signals only (a comment that merely says "visibility" must not
-  # count): the event's repository.private/visibility, an explicit per-forge
-  # `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a visibility read
-  # from an API (`.visibility`, `.private`, `isPrivate`).
-  @visibility_guard ~r/repository\.(private|visibility)\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|\.(visibility|private)\b|\bisPrivate\b/
+  # Guard signals that BLOCK or CONFIRM, never one that merely selects private
+  # sources (`if: github.event.repository.private` is the opposite of a guard):
+  # a negated or compared repository.private, a repository.visibility test, an
+  # explicit per-forge `*_MIRROR_PRIVATE_CONFIRMED` gate (standards#1513), or a
+  # visibility read from an API (`.visibility`, `.private`, `isPrivate`) that is
+  # not the event's own field. Comments are stripped before matching.
+  @visibility_guard ~r/!\s*\(?\s*github\.event\.repository\.private|repository\.private\s*[!=]=|repository\.visibility\b|[A-Z0-9_]+_MIRROR_PRIVATE_CONFIRMED|(?<!repository)\.(visibility|private)\b|\bisPrivate\b/
 
   @doc """
-  WF030: a workflow that force- or mirror-pushes to a forge, gated on a
-  `*_MIRROR_ENABLED` variable, with no check of the source repo's visibility
-  (`github.event.repository.private`, `repository.visibility`, or a forge
-  visibility read). High severity, referral only.
+  WF030: a job that force- or mirror-pushes to a forge, gated on a
+  `*_MIRROR_ENABLED` variable, where neither the job nor a job it needs
+  blocks or confirms a private source (a negated `repository.private`, a
+  `repository.visibility` test, a `*_MIRROR_PRIVATE_CONFIRMED` gate, or a
+  forge visibility read). Scoped per job, so an unrelated force push or gate
+  elsewhere in the file neither makes nor hides a finding. High severity,
+  referral only.
   """
   def check_mirror_without_visibility_guard(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      if Regex.match?(@mirror_push, content) and Regex.match?(@mirror_gate, content) and
-           not Regex.match?(@visibility_guard, content) do
-        [
-          %{
-            rule: "WF030",
-            rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
-            type: :mirror_without_visibility_guard,
-            file: filename,
-            severity: :high,
-            action: :report,
-            reason:
-              "#{filename} force-pushes to forges gated on *_MIRROR_ENABLED but never " <>
-                "checks the source repo's visibility, so a private repo can be mirrored " <>
-                "to a public forge copy. Add a guard that refuses (or skips with an " <>
-                "error) when the source is private and the forge copy is not confirmed " <>
-                "private; escalate when the forge's visibility cannot be read."
-          }
-        ]
-      else
-        []
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{jobs: jobs}} when jobs != [] ->
+          texts = job_texts(content, jobs)
+
+          for job <- jobs,
+              text = Map.fetch!(texts, job.id),
+              Regex.match?(@mirror_push, text),
+              Regex.match?(@mirror_gate, text),
+              not guarded?(job, texts) do
+            %{
+              rule: "WF030",
+              rule_id: "hypatia/workflow_audit/mirror_without_visibility_guard",
+              type: :mirror_without_visibility_guard,
+              file: filename,
+              line: job.line,
+              job: job.id,
+              severity: :high,
+              action: :report,
+              reason:
+                "#{filename} job `#{job.id}` force-pushes to a forge gated on " <>
+                  "*_MIRROR_ENABLED but nothing blocks a private source, so a private " <>
+                  "repo can be mirrored to a public forge copy. Add a guard that refuses " <>
+                  "(or skips with an error) when the source is private and the forge " <>
+                  "copy is not confirmed private; escalate when the forge's visibility " <>
+                  "cannot be read."
+            }
+          end
+
+        _ ->
+          []
       end
+    end)
+  end
+
+  defp guarded?(job, texts) do
+    ids = [job.id | mirror_direct_needs(job)]
+    Enum.any?(ids, fn id -> Regex.match?(@visibility_guard, Map.get(texts, id, "")) end)
+  end
+
+  defp mirror_direct_needs(job) do
+    case Hypatia.Kyaml.get(job.node, "needs") |> then(&(&1 && Hypatia.Kyaml.deref(&1))) do
+      %{kind: :seq, items: items} -> for i <- items, is_binary(i.value), do: i.value
+      %{value: v} when is_binary(v) -> [v]
+      _ -> []
+    end
+  end
+
+  # Each job's own source lines (from its key to the next job's key), with
+  # YAML comments stripped and shell continuations joined.
+  defp job_texts(content, jobs) do
+    lines = String.split(content, "\n")
+    sorted = Enum.sort_by(jobs, & &1.line)
+    ends = Enum.map(tl(sorted), &(&1.line - 1)) ++ [length(lines)]
+
+    sorted
+    |> Enum.zip(ends)
+    |> Map.new(fn {job, stop} ->
+      text =
+        lines
+        |> Enum.slice((job.line - 1)..(stop - 1)//1)
+        |> Enum.join("\n")
+        |> then(&Regex.replace(~r/(^|[ \t])#[^\n]*/m, &1, "\\1"))
+        |> then(&Regex.replace(~r/\\\n[ \t]*/, &1, " "))
+
+      {job.id, text}
     end)
   end
 
