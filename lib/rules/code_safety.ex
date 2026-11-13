@@ -953,11 +953,13 @@ defmodule Hypatia.Rules.CodeSafety do
 
   # An odd number of unescaped double quotes before the match means it is
   # inside a string on this line. Character literals ('"', '\\"') are removed
-  # first so they do not count as string delimiters.
+  # first so they do not count as string delimiters. Escape pairs (`\x`) are
+  # then removed left to right, so `"\\"` still ends with a real quote.
+  # Multi-line and raw (`r#"..."#`) strings are not tracked.
   defp inside_string?(prefix) do
     prefix
     |> String.replace(~r/'(?:\\.|[^'\\])'/, "")
-    |> String.replace("\\\"", "")
+    |> String.replace(~r/\\./, "")
     |> String.graphemes()
     |> Enum.count(&(&1 == "\""))
     |> rem(2) == 1
@@ -974,7 +976,7 @@ defmodule Hypatia.Rules.CodeSafety do
       |> Enum.reverse()
       |> Enum.map(&String.trim/1)
       |> skip_blanks_and_attributes()
-      |> Enum.take_while(&comment_line?/1)
+      |> collect_comment_block()
 
     # A ` * ...` continuation line counts only inside a real /* block.
     block_ok =
@@ -988,7 +990,10 @@ defmodule Hypatia.Rules.CodeSafety do
   # ends with `]` on a line that does not start with `#[`; skip up to its `#[`.
   defp skip_blanks_and_attributes(["" | rest]), do: skip_blanks_and_attributes(rest)
 
-  defp skip_blanks_and_attributes(["#[" <> _ | rest]), do: skip_blanks_and_attributes(rest)
+  # A one-line attribute with code after its `]` is a boundary, not skipped.
+  defp skip_blanks_and_attributes(["#[" <> _ = line | rest] = lines) do
+    if String.ends_with?(line, "]"), do: skip_blanks_and_attributes(rest), else: lines
+  end
 
   defp skip_blanks_and_attributes([line | rest] = lines) do
     if String.ends_with?(line, "]") do
@@ -1002,6 +1007,30 @@ defmodule Hypatia.Rules.CodeSafety do
   end
 
   defp skip_blanks_and_attributes([]), do: []
+
+  # Lines are in reverse order (nearest first). A line that closes a block
+  # comment takes every line back to the line that opens it, so unstarred
+  # continuation lines count. A block opened after code ends the search.
+  defp collect_comment_block([line | rest]) do
+    cond do
+      String.ends_with?(line, "*/") and not String.contains?(line, "/*") ->
+        case Enum.split_while(rest, &(not String.contains?(&1, "/*"))) do
+          {inner, ["/*" <> _ = open | more]} ->
+            [line | inner] ++ [open | collect_comment_block(more)]
+
+          _ ->
+            []
+        end
+
+      comment_line?(line) ->
+        [line | collect_comment_block(rest)]
+
+      true ->
+        []
+    end
+  end
+
+  defp collect_comment_block([]), do: []
 
   # `//`, `/*` (with no code after a closing `*/`), a block-comment
   # continuation (`*` then space, `/` or end of line: `*boxed = 1;` is code),

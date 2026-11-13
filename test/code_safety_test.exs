@@ -778,6 +778,31 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert unsafe_lines(code) == [5]
     end
 
+    test "unstarred lines inside a /* SAFETY: */ block are comment text (CodeRabbit)" do
+      code = """
+      /* SAFETY: p is valid.
+         The allocation remains alive.
+      */
+      unsafe { ptr::read(p) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "an attribute line that also holds code ends the SAFETY search (CodeRabbit)" do
+      code = """
+      // SAFETY: justification for the first block.
+      #[allow(unused_unsafe)] unsafe { first() };
+      unsafe { second() };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "an escaped backslash closes the string before a real block (CodeRabbit)" do
+      assert unsafe_lines(~S|let s = "\\"; unsafe { op() };| <> "\n") == [1]
+    end
+
     test "unsafe { inside a string literal is not a block" do
       assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
     end
