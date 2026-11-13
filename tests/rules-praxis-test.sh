@@ -94,6 +94,12 @@ if row hypatia/pin_integrity/PI005 | grep -q ':class advisory' && row hypatia/di
 
 if row hypatia/workflow_audit/duplicate_workflow | grep -q ':severity minor' && row hypatia/cicd_rules/waste_duplicate_workflow | grep -q ':severity medium'; then ok "named atom rules carry the severity the code states"; else bad "duplicate_workflow rows lack their severity"; fi
 
+# Severities the code computes (an if expression, a helper): the highest branch.
+# A severity read from run-time alert data (CSA001) has none to record.
+if row hypatia/supply_chain/SC012 | grep -q ':severity high' && row hypatia/structural_drift/SD008 | grep -q ':severity critical' \
+  && row hypatia/research_extensions/RE001 | grep -q ':severity high' && ! row hypatia/code_scanning_alerts/CSA001 | grep -q ':severity'; then
+  ok "computed severities are read; run-time severities stay empty"; else bad "computed severity rows are wrong"; fi
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi

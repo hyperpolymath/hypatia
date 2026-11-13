@@ -976,7 +976,7 @@
       :id "hypatia/research_extensions/RE001"
       :text "secret-bearing job neither hardened nor declared"
       :class gate
-      :severity medium
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1183,6 +1183,7 @@
       :id "hypatia/structural_drift/SD008"
       :text "Unsound formal verification patterns"
       :class gate
+      :severity critical
       :excusable-at repo
       :scope-form exact-paths
       :status active)
@@ -1379,6 +1380,7 @@
       :id "hypatia/supply_chain/SC012"
       :text "Dependabot update fan-out"
       :class gate
+      :severity high
       :excusable-at repo
       :scope-form exact-paths
       :status active)

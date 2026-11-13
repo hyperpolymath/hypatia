@@ -86,8 +86,17 @@ first_sentence() { sed -E 's/^(([^.]|[.][^ ])*[.])  ?[A-Z].*/\1/'; }
 # IFS would merge empty tab fields); a field is empty when the code is silent.
 near() { # <file> <id>
   awk -v id="$2" '
+    function comp(l,   t, w) {
+      t = l
+      while (match(t, /:(critical|high|medium|warn|low|info)/)) {
+        w = substr(t, RSTART + 1, RLENGTH - 1); t = substr(t, RSTART + RLENGTH)
+        if (rank(w) > rank(best)) best = w
+      }
+    }
     function rank(w) { return (w == "critical") ? 5 : (w == "high") ? 4 : (w == "medium" || w == "warn") ? 3 : (w == "low") ? 2 : (w == "info") ? 1 : 0 }
     { line[NR] = $0 }
+    # A one-line severity helper: defp re001_severity(job), do: if(..., do: :high, else: :warn)
+    match($0, /defp [a-z0-9_]*severity[a-z0-9_]*\(/) { nm = substr($0, RSTART + 5, RLENGTH - 6); helper[nm] = $0 }
     $0 ~ ("(rule|id): \"" id "\"") || $0 ~ ("(rule|id): \"" id "[^0-9]") { hits[++n] = NR }
     END {
       if (!n) { printf "\037\037\n"; exit }
@@ -98,6 +107,16 @@ near() { # <file> <id>
       best = ""; advn = 0
       for (h = 1; h <= n; h++) {
         isadv = 0; lit = ""; act = ""
+        # A severity computed in code from literals, one line:
+        #   severity = if projected > 10, do: :high, else: :warn
+        #   severity: if(count > 3, do: :critical, else: severity)
+        # takes the highest atom on the line. Up to 10 lines back, not past
+        # the previous rule literal. A severity read from run-time data
+        # (the alert level itself) has no atom and stays empty.
+        for (j = hits[h] - 1; j >= hits[h] - 10 && j >= 1; j--) {
+          if (line[j] ~ /(rule|id): "[A-Z]/) break
+          if (line[j] ~ /severity[: =].*[( ]if[( ]/) comp(line[j])
+        }
         for (i = hits[h] - 3; i <= hits[h] + 30; i++) {
           if (i < 1 || !(i in line)) continue
           if (i > hits[h] && line[i] ~ /^ *(rule|id): "[A-Z]/ && line[i] !~ ("\"" id "\"")) break
@@ -105,6 +124,8 @@ near() { # <file> <id>
           # (action_severity/1 in lib/rules/audit_prevention.ex, guarded below).
           if (i > hits[h] && match(line[i], /^ *action: "[a-z_]+"/)) { act = substr(line[i], RSTART, RLENGTH); sub(/^ *action: "/, "", act); sub(/"$/, "", act) }
           if (i > hits[h] + 12) continue
+          if (line[i] ~ /severity[: =].*[( ]if[( ]/) comp(line[i])
+          if (match(line[i], /severity: [a-z0-9_]+\(/)) { nm = substr(line[i], RSTART + 10, RLENGTH - 11); if (nm in helper) comp(helper[nm]) }
           if (match(line[i], /severity: "?:?(critical|high|medium|warn|low|info)/)) {
             sv = substr(line[i], RSTART, RLENGTH); sub(/.*[:"]/, "", sv)
             lit = sv
