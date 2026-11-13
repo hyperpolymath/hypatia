@@ -337,6 +337,14 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       lock = Path.join([repo, ".github", "workflows", "actions.lock"])
       File.cp!("test/fixtures/actions_lock/standards-b3ce78e-v0.0.3.lock", lock)
 
+      # The fixture's self-SHA record is a reusable edge only if a workflow
+      # calls it at job level.
+      File.write!(Path.join([repo, ".github", "workflows", "gov.yml"]), """
+      jobs:
+        gov:
+          uses: hyperpolymath/standards/.github/workflows/gov.yml@427eb35c40552d912d8c757518e8326f0d20f597
+      """)
+
       refute Enum.any?(
                WorkflowHardening.wh004_unpinned_uses(repo),
                &(&1.rule == "invalid_actions_lock")
