@@ -628,4 +628,84 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       refute Enum.any?(CodeSafety.scan_content(bare, "zig"), &(&1.rule == :zig_ptr_cast))
     end
   end
+
+  describe "unsafe_block honours SAFETY comments (gitbot-fleet#673)" do
+    defp unsafe_lines(code) do
+      code
+      |> CodeSafety.scan_content("rust")
+      |> Enum.find(&(&1.rule == :unsafe_block))
+      |> case do
+        nil -> []
+        f -> f.lines
+      end
+    end
+
+    test "a // SAFETY: comment directly above excuses the block" do
+      code = """
+      // SAFETY: pid is a child we spawned and still own.
+      // The process group exists until we reap it.
+      unsafe { libc::killpg(pid, libc::SIGKILL) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "attributes between the comment and the block are allowed" do
+      code = """
+      // SAFETY: the pointer came from Box::into_raw above.
+      #[allow(clippy::undocumented_unsafe_blocks)]
+      unsafe { drop(Box::from_raw(p)) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a /* SAFETY: */ block comment above excuses the block" do
+      code = """
+      /* SAFETY: fd is open and owned by this struct. */
+      unsafe { libc::close(fd) };
+      """
+
+      assert unsafe_lines(code) == []
+    end
+
+    test "a SAFETY comment separated by code does not excuse the block" do
+      code = """
+      // SAFETY: about something else.
+      let x = 1;
+      unsafe { ptr::read(addr) };
+      """
+
+      assert unsafe_lines(code) == [3]
+    end
+
+    test "an undocumented block is still flagged" do
+      assert unsafe_lines("let v = unsafe { ptr::read(addr) };\n") == [1]
+    end
+
+    test "unsafe { inside a string literal is not a block" do
+      assert unsafe_lines(~S|let msg = "never write unsafe { here }";| <> "\n") == []
+    end
+  end
+
+  describe "from_raw only flags raw-pointer constructors" do
+    defp from_raw?(code) do
+      code |> CodeSafety.scan_content("rust") |> Enum.any?(&(&1.rule == :from_raw))
+    end
+
+    test "the safe rustix Pid::from_raw is not flagged" do
+      refute from_raw?("let pid = rustix::process::Pid::from_raw(1234);\n")
+    end
+
+    test "unsafe raw-pointer constructors are still flagged" do
+      for code <- [
+            "let b = unsafe { Box::from_raw(p) };",
+            "let a = unsafe { Arc::from_raw(p) };",
+            "let s = unsafe { std::slice::from_raw_parts(p, n) };",
+            "let f = unsafe { File::from_raw_fd(fd) };"
+          ] do
+        assert from_raw?(code <> "\n"), code
+      end
+    end
+  end
 end

@@ -104,7 +104,11 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :from_raw,
       severity: :high,
-      pattern: ~r/from_raw/,
+      # Only the constructors that take a raw pointer or handle and are
+      # `unsafe`. A bare `from_raw` also matched safe APIs such as
+      # `rustix::process::Pid::from_raw(i32)` (gitbot-fleet#673).
+      pattern:
+        ~r/\b(?:Box|Arc|Rc|Weak|Vec|String|CString|OsString|NonNull)::from_raw\b|\bfrom_raw_(?:parts|parts_mut|fd|handle|socket)\b/,
       cwe: "CWE-676",
       description: "from_raw constructs types from raw pointers without safety checks"
     },
@@ -844,6 +848,23 @@ defmodule Hypatia.Rules.CodeSafety do
       # finding survives even though every matching line is known-safe.
       # Rejected lines are BLANKED, not dropped — dropping would shift every
       # subsequent line number (the main.zig:1 class of defect, issue #834).
+      # A documented `unsafe {` (a `SAFETY:` comment block directly above it)
+      # is not a finding; nor is `unsafe {` inside a string literal. The
+      # comment is read from the ORIGINAL lines: `subject` has comments
+      # stripped. Rejected lines are blanked, as below.
+      subject =
+        if rule.id == :unsafe_block do
+          subject
+          |> String.split("\n")
+          |> Enum.with_index(1)
+          |> Enum.map(fn {line, line_number} ->
+            if unsafe_line_excused?(line, orig_lines, line_number), do: "", else: line
+          end)
+          |> Enum.join("\n")
+        else
+          subject
+        end
+
       subject =
         if rule.id == :shell_download_then_run do
           subject
@@ -918,6 +939,42 @@ defmodule Hypatia.Rules.CodeSafety do
           ]
       end
     end)
+  end
+
+  # True when every `unsafe {` on the line is inside a string literal, or the
+  # nearest non-blank lines above it are a comment block naming `SAFETY:`.
+  # Attribute lines (`#[...]`) between the comment and the block are allowed.
+  defp unsafe_line_excused?(line, orig_lines, line_number) do
+    code_hits =
+      ~r/unsafe\s*\{/
+      |> Regex.scan(line, return: :index)
+      |> Enum.reject(fn [{off, _} | _] -> inside_string?(binary_part(line, 0, off)) end)
+
+    code_hits == [] or safety_comment_above?(orig_lines, line_number)
+  end
+
+  # An odd number of unescaped double quotes before the match means it is
+  # inside a string on this line.
+  defp inside_string?(prefix) do
+    prefix
+    |> String.replace("\\\"", "")
+    |> String.graphemes()
+    |> Enum.count(&(&1 == "\""))
+    |> rem(2) == 1
+  end
+
+  defp safety_comment_above?(orig_lines, line_number) do
+    orig_lines
+    |> Enum.take(line_number - 1)
+    |> Enum.reverse()
+    |> Enum.map(&String.trim/1)
+    |> Enum.drop_while(&(&1 == "" or String.starts_with?(&1, "#[")))
+    |> Enum.take_while(&comment_line?/1)
+    |> Enum.any?(&String.contains?(&1, "SAFETY:"))
+  end
+
+  defp comment_line?(line) do
+    String.starts_with?(line, ["//", "/*", "*"]) or String.ends_with?(line, "*/")
   end
 
   @doc false
