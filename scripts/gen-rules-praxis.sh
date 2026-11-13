@@ -286,6 +286,10 @@ done <<<"$SUPERSEDE"
 # An id that already has a row (a coded id, a named or superseded one) is skipped.
 has_row() { awk -F'\t' -v i="$1" '$1 == i { f = 1 } END { exit !f }' "$rows"; }
 
+# Portability: gawk (the CI runner) and mawk (some dev machines) read a backslash
+# in a `-v` value differently: gawk turns `\[` into `[`, an invalid regex, and the
+# awk dies inside a process substitution with no error here. Pass no backslash in
+# a `-v` value; write a bracket as `[[]`.
 # Entries of a pattern table: "name US severity US text". One entry runs from its
 # `id: :name,` line to the next one; `need` names a key it must contain.
 entries() { # <file> <need-regex> [block-start-regex]
@@ -323,7 +327,7 @@ grep -qF 'severity: to_string(Map.get(f, :severity, "medium"))' lib/hypatia/cli.
   { echo "gen-rules-praxis: cli.ex no longer defaults content_patterns severity to medium; update the generator" >&2; exit 1; }
 while IFS=$'\037' read -r name sev txt; do
   emit_name content_patterns "$name" "${sev:-medium}" "$txt"
-done < <(entries lib/rules/cicd_rules.ex 'applies_to:' '^  @blocked_patterns \[')
+done < <(entries lib/rules/cicd_rules.ex 'applies_to:' '^  @blocked_patterns [[]')
 
 for m in honest_completion green_web root_hygiene workflow_audit; do
   f=lib/rules/$m.ex

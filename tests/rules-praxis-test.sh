@@ -126,6 +126,22 @@ for pair in $STALE; do
 done
 if [ -z "$stale_wrong" ]; then ok "the stale baseline names are in no code under lib/"; else bad "listed as stale but lib/ mentions:$stale_wrong"; fi
 
+# Portability: gawk and mawk differ (a `\[` in a -v value is valid in one and a
+# fatal regex error in the other, and the awk then dies without a word inside a
+# process substitution). The output must not depend on which awk is installed, so
+# run the generator under each one found and require the committed bytes and an
+# empty stderr.
+awkdir="$work/awk"; mkdir -p "$awkdir"
+for a in gawk mawk original-awk; do
+  command -v "$a" >/dev/null 2>&1 || continue
+  ln -sf "$(command -v "$a")" "$awkdir/awk"
+  if PATH="$awkdir:$PATH" bash scripts/gen-rules-praxis.sh --stdout 2>"$work/awk.err" | cmp -s - "$deed" && [ ! -s "$work/awk.err" ]; then
+    ok "the generator gives the committed registry under $a"
+  else
+    bad "the generator differs or warns under $a"; head -3 "$work/awk.err" >&2
+  fi
+done
+
 if [ -n "${DEED_LINT:-}" ]; then
   if node "$DEED_LINT" "$deed" >"$work/out" 2>&1; then ok "deed_lint.js accepts $deed"
   else bad "deed_lint.js rejects $deed"; sed 's/^/       /' "$work/out" >&2; fi
