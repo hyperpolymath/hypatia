@@ -123,8 +123,8 @@ defmodule Hypatia.Rules.RsrConformanceTest do
     (repo-deed
       :schema-version "1.0.0"
       :canonical-name "x"
-      :repo-uuid #u5"github.com/o/x"
-      :beholding-chora #u5"estate/chora"
+      :repo-uuid #u8"chora-registry:github.com/o/x"
+      :beholding-chora #uuid"00000000-0000-8000-8000-0000000000b1"
     """
 
     test "a deed-era repo declares its capabilities in (rsr-profile …)", %{tmp_dir: tmp} do
@@ -248,8 +248,8 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       (repo-deed
         :schema-version "1.0.0"
         :canonical-name "x"
-        :repo-uuid #u5"github.com/o/x"
-        :beholding-chora #u5"estate/chora"
+        :repo-uuid #u8"chora-registry:github.com/o/x"
+        :beholding-chora #uuid"00000000-0000-8000-8000-0000000000b1"
         (rsr-profile :version "1.0.0" :capabilities ("bash")))
       """)
 
@@ -267,8 +267,8 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       (repo-deed
         :schema-version "1.0.0"
         :canonical-name "x"
-        :repo-uuid #u5"github.com/o/x"
-        :beholding-chora #u5"estate/chora"
+        :repo-uuid #u8"chora-registry:github.com/o/x"
+        :beholding-chora #uuid"00000000-0000-8000-8000-0000000000b1"
       """
 
       mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
@@ -337,8 +337,8 @@ defmodule Hypatia.Rules.RsrConformanceTest do
     (repo-deed
       :schema-version "1.0.0"
       :canonical-name "x"
-      :repo-uuid #u5"github.com/o/x"
-      :beholding-chora #u5"estate/chora"
+      :repo-uuid #u8"chora-registry:github.com/o/x"
+      :beholding-chora #uuid"00000000-0000-8000-8000-0000000000b1"
     """
 
     defp agentic_verdicts(tmp) do
@@ -447,6 +447,59 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert deed_era_verdicts(tmp)["3.2.1"] == :fail
     end
 
+    # The deed is read first: a broken chora deed fails 3.2.1 even when every
+    # record-dialect .a2ml left parses, and a valid deed does not excuse a
+    # malformed .a2ml.
+    test "3.2.1 needs every carrier to parse, the deed first", %{tmp_dir: tmp} do
+      mk!(tmp, ".machine_readable/descriptiles/STATE.a2ml", "[metadata]\nversion = \"0.1.0\"\n")
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (meta) ; )\n")
+      assert deed_era_verdicts(tmp)["3.2.1"] == :fail
+
+      File.write!(Path.join(tmp, "x_chora.deed"), @deed_head <> "  (meta))\n")
+      assert deed_era_verdicts(tmp)["3.2.1"] == :pass
+
+      File.write!(
+        Path.join(tmp, ".machine_readable/descriptiles/STATE.a2ml"),
+        "[metadata]\nversion = unquoted-bare-scalar\n"
+      )
+
+      assert deed_era_verdicts(tmp)["3.2.1"] == :fail
+    end
+
+    defp substrate_verdict(tmp) do
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Enum.find(&(&1.id == "3.1.1")) |> Map.fetch!(:verdict)
+    end
+
+    # 3.1.1 names the descriptiles/ directory. A repo whose descriptiles moved
+    # into its chora deed has the substrate there (deed first); the directory
+    # still counts.
+    test "3.1.1: a chora deed with a top-level descriptile clause is the substrate", %{
+      tmp_dir: tmp
+    } do
+      for clause <- ~w(status meta ecosystem agentic neurosym playbook anchor clade) do
+        File.write!(Path.join(tmp, "x_chora.deed"), @deed_head <> "  (#{clause}))\n")
+        assert substrate_verdict(tmp) == :pass, "(#{clause}) should carry 3.1.1"
+      end
+    end
+
+    test "3.1.1: a deed with none, or only nested, fails; the directory alone passes", %{
+      tmp_dir: tmp
+    } do
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (identity :owner \"o\"))\n")
+      assert substrate_verdict(tmp) == :fail
+
+      File.write!(Path.join(tmp, "x_chora.deed"), @deed_head <> "  (notes (meta) (status)))\n")
+      assert substrate_verdict(tmp) == :fail
+
+      File.write!(Path.join(tmp, "x_chora.deed"), @deed_head <> "  (meta) ; )\n")
+      assert substrate_verdict(tmp) == :fail
+
+      File.mkdir_p!(Path.join(tmp, ".machine_readable/descriptiles"))
+      assert substrate_verdict(tmp) == :pass
+    end
+
     # 3.1.9 is the ESTATE clade (registers into gv-clade-index), which the
     # chora deed's (clade) clause carries. In-repo clade organisation (the
     # subtrees a repo groups its own content into, e.g. boj-server's
@@ -552,10 +605,11 @@ defmodule Hypatia.Rules.RsrConformanceTest do
 
       assert {:ok, %Scorecard{} = sc} = RsrConformance.score(catalogue, repo_root)
       # hypatia carries its descriptiles as chora-deed clauses (A2ML retired
-      # 2026-11-14) and has no descriptiles/ directory, which 3.1.1 still names:
-      # the oracle must report that honestly rather than crash or invent a pass.
+      # 2026-11-14) and has no descriptiles/ directory: the deed is the
+      # substrate (3.1.1) and the one carrier 3.2.1 validates.
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
-      assert verdicts["3.1.1"] in [:pass, :fail]
+      assert verdicts["3.1.1"] == :pass
+      assert verdicts["3.2.1"] == :pass
       assert sc.provisional == true
     end
   end
