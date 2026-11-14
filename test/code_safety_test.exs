@@ -918,6 +918,25 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert f.lines == [4]
     end
 
+    test "every call through a bound name counts, each on its own line" do
+      code = "const cp = require('child_process');\ncp.exec('first');\ncp.exec('second');\n"
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.occurrences == 2
+      assert f.lines == [2, 3]
+
+      [w] = Enum.filter(CodeSafety.scan_web_security(code), &(&1.rule == :js_exec_sync))
+      assert w.occurrences == 2
+    end
+
+    test "two bindings in one file are both followed" do
+      code =
+        "import * as cp from 'node:child_process';\nconst proc = require('child_process');\n" <>
+          "proc.execSync(a);\ncp.exec(b);\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [3, 4]
+    end
+
     test "a shell option makes spawn and execFile shell calls" do
       assert exec_sync?("spawnSync(cmd, args, {shell: true});\n")
       assert exec_sync?("spawn(cmd, { shell : '/bin/bash' });\n")

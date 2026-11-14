@@ -617,11 +617,13 @@ defmodule Hypatia.Rules.CodeSafety do
       #     option (bare or quoted key) set to true or to a shell path.
       # Importing node:child_process is not a finding, nor is a shell-free
       # call with an argv array, RegExp.exec, or a `shell` key outside a
-      # process call. \K reports the call's line, not the import's.
+      # process call. The <ns> calls are matched per file by
+      # pattern_for/2 (`bound_calls`), so every call counts, on its own line.
       # Not covered: a shell option passed through a variable, and tainted
       # argv to a shell-free call -- a pattern cannot trace values (mathesis#90).
       pattern:
-        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|(?:import\s+(?:\*\s+as\s+)?(\w+)\s+from\s*['"](?:node:)?child_process['"]|(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*['"](?:node:)?child_process['"]\s*\))[\s\S]*?\K\b(?:\1|\2)\.exec(?:Sync)?\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
+        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
+      bound_calls: :child_process,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
     },
@@ -911,7 +913,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # line where the match starts) is not a finding; nor is `unsafe {`
       # inside a string literal. Matches are excused after the scan, so a
       # block whose brace is on the next line is judged as one block.
-      matches = Regex.scan(rule.pattern, subject, return: :index)
+      matches = Regex.scan(pattern_for(rule, subject), subject, return: :index)
 
       matches =
         if rule.id == :unsafe_block,
@@ -1637,10 +1639,40 @@ defmodule Hypatia.Rules.CodeSafety do
   """
   def stub_crypto_patterns, do: @stub_crypto_patterns
 
+  # The names a file binds node:child_process to: `import * as cp from`,
+  # `import cp from`, `const cp = require(...)`. A regex cannot carry a
+  # binding to every later call (a match consumes it), so the rule's
+  # pattern is widened per file with `<name>.exec(` / `<name>.execSync(`.
+  @child_process_binding ~r/(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*['"](?:node:)?child_process['"]|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"](?:node:)?child_process['"]\s*\))/
+
+  @doc false
+  def pattern_for(%{bound_calls: :child_process} = rule, content) do
+    names =
+      @child_process_binding
+      |> Regex.scan(content, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.uniq()
+
+    case names do
+      [] ->
+        rule.pattern
+
+      names ->
+        alt = Enum.map_join(names, "|", &Regex.escape/1)
+
+        Regex.compile!(
+          Regex.source(rule.pattern) <> "|(?<![\\w$.])(?:" <> alt <> ")\\.exec(?:Sync)?\\s*\\("
+        )
+    end
+  end
+
+  def pattern_for(rule, _content), do: rule.pattern
+
   @doc "Scan JavaScript/TypeScript content for web security issues"
   def scan_web_security(content) do
     Enum.flat_map(@javascript_patterns, fn rule ->
-      case Regex.scan(rule.pattern, content) do
+      case Regex.scan(pattern_for(rule, content), content) do
         [] ->
           []
 
