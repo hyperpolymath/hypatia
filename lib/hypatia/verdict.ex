@@ -11,7 +11,7 @@ defmodule Hypatia.Verdict do
 
     * `support` — what its evidence supports:
       `%{kind: "pattern"}` (a rule matched),
-      `%{kind: "observed", observations: n}` (a fleet count; rules.a2ml's
+      `%{kind: "observed", observations: n}` (a fleet count; the rule-lifecycle
       thresholds are belief formation, not soundness), or
       `%{kind: "mechanical", ...}` (a prover re-check, with both digests);
     * `evidence` — the tokens the finding was issued on: rule, rule version,
