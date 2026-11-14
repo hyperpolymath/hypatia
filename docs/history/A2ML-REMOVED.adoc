@@ -202,6 +202,27 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | Prose instructions for rule management: the rule lifecycle (5 observations to propose, 10 + 3 fixes to auto-approve) and rule quality standards.
 | Deleted: no mapping spec. Comments that cited it now state the thresholds without the file name.
 
+| `test/fixtures/hypatia_rules/profile-drift-detector.a2ml`
+| 2810
+| `ef6ec038778a93c8a960f70ed7a84cfa3ec66a63437d6b4e7b8f638e32e30d35`
+| `f5b4b07b2dd3741d35845eacf7eb2f915ffe6476`
+| RuleLoader fixture, a copy of a standards `hypatia-rules/` definition (HYP-S004).
+| Inlined into `test/rules/rule_loader_test.exs`, which writes it to a temporary directory.
+
+| `test/fixtures/hypatia_rules/registry-staleness.a2ml`
+| 7120
+| `d4646d83ac5dfff145da9d24ebc2690a963d702476ed957041de7248d5b7fd38`
+| `db381f12820ec23149a7e03cb25a81b88110e01e`
+| RuleLoader fixture (HYP-S006).
+| Inlined into `test/rules/rule_loader_test.exs`.
+
+| `test/fixtures/hypatia_rules/rsr-self-compliance.a2ml`
+| 2268
+| `ed67587df09c2a4bcf317e0d86cb1994ed24ad33ed039a88bac8c54d9b4cef8f`
+| `261eb56f8bfcb774b768101d8bbdfe8f10932b6a`
+| RuleLoader fixture (HYP-S007).
+| Inlined into `test/rules/rule_loader_test.exs`.
+
 |===
 
 == Retained, with the reason
