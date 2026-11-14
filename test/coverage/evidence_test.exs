@@ -347,6 +347,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
 
       assert Evidence.counted?(lang(prop(), "idris2")) == :counted
       refute Evidence.overclaim?({:not_counted, :unknown_language})
+
+      for why <- [:no_vectors, :inconsistent_vectors, :incomplete_benchmark],
+          do: assert(Evidence.overclaim?({:not_counted, why}))
     end
 
     test "R needs a generator (overclaim)" do
@@ -500,6 +503,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
           conf(%{"version" => nil}),
           conf(%{"vectors_sha256" => nil}),
           conf(%{"failed" => 1}),
+          conf(%{"vectors" => 0}),
+          conf(%{"failed" => nil}),
+          rec("B"),
           bench(false),
           proof([]),
           proof([%{}]),

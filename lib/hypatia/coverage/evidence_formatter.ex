@@ -115,7 +115,8 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
         "module_path" => inspect(test.module),
         "name" => Atom.to_string(test.name),
         "file" => relative(test.tags[:file]),
-        "line" => test.tags[:line]
+        "line" => test.tags[:line],
+        "parameters" => parameters(test)
       }
       |> drop_nils()
 
@@ -127,7 +128,9 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
       "id" => id(repo, test_id, kind),
       "repo" => repo,
       "commit" => commit,
-      "run_id" => config[:run_id] || env("GITHUB_RUN_ID"),
+      "run_id" =>
+        config[:run_id] || env("HYPATIA_COVERAGE_RUN_ID") || env("GITHUB_RUN_ID") ||
+          (commit && "local-" <> commit),
       "language" => "elixir",
       "kind" => kind,
       "test_id" => test_id,
@@ -174,10 +177,23 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
     end
   end
 
+  # Only kinds that never count (E, M, unknown) get a default; a counted kind (P/R/C/B)
+  # with no fixtures stays
+  # inadmissible, so Evidence.counted?/2 reports :no_fixtures instead of counting it.
+  # Elixir 1.18+ `parameterize:` runs one test per parameter set with the same name and
+  # line; the parameters keep their records (and ids) apart.
+  defp parameters(test) do
+    case Map.get(test, :parameters) do
+      p when p in [nil, %{}] -> nil
+      p -> jsonable(p)
+    end
+  end
+
   defp fixtures(tag) do
-    case tag[:fixtures] do
-      nil -> %{"cannot_fail_by_design" => "example test"}
-      f -> jsonable(f)
+    case {tag[:fixtures], kind(tag)} do
+      {nil, k} when k in ["P", "R", "C", "B"] -> nil
+      {nil, _} -> %{"cannot_fail_by_design" => "example test"}
+      {f, _} -> jsonable(f)
     end
   end
 

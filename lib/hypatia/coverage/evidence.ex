@@ -94,7 +94,10 @@ defmodule Hypatia.Coverage.Evidence do
     :proof_check_not_passed,
     :no_covers_decls,
     :unapproved_checker,
-    :no_generator
+    :no_generator,
+    :no_vectors,
+    :inconsistent_vectors,
+    :incomplete_benchmark
   ]
 
   @mutation_languages ~w(rust js ts javascript typescript elixir julia)

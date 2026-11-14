@@ -26,6 +26,21 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
     do: Evidence.counted?(record, repo: @repo, commit: @sha)
 
   describe "record/2" do
+    test "a stronger kind without fixtures gets none, so it is not admissible" do
+      tag = %{evidence: %{kind: "R", generator: "g", seed: "1", cases: 500}}
+      r = EvidenceFormatter.record(test_struct(:"test prop", nil, tag), @cfg)
+      refute Map.has_key?(r, "fixtures")
+      assert counted?(r) == {:not_counted, :no_fixtures}
+    end
+
+    test "parameterized runs get distinct test ids and record ids" do
+      t = test_struct(:"test p", nil, %{})
+      a = EvidenceFormatter.record(Map.put(t, :parameters, %{n: 1}), @cfg)
+      b = EvidenceFormatter.record(Map.put(t, :parameters, %{n: 2}), @cfg)
+      assert a["test_id"]["parameters"] == %{"n" => 1}
+      assert a["id"] != b["id"]
+    end
+
     test "an untagged test is kind E, passed, example_test, and fully shaped" do
       r = EvidenceFormatter.record(test_struct(:"test plain", nil, %{}), @cfg)
 

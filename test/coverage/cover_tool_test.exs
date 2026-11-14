@@ -4,7 +4,7 @@ defmodule Hypatia.Coverage.CoverToolTest do
 
   alias Hypatia.Coverage.CoverTool
 
-  @env ~w(GITHUB_REPOSITORY GITHUB_SHA GITHUB_RUN_ID HYPATIA_COVERAGE_ROLE)
+  @env ~w(GITHUB_REPOSITORY GITHUB_SHA GITHUB_RUN_ID HYPATIA_COVERAGE_ROLE HYPATIA_COVERAGE_RUN_ID)
 
   setup do
     saved = Map.new(@env, &{&1, System.get_env(&1)})
@@ -41,12 +41,21 @@ defmodule Hypatia.Coverage.CoverToolTest do
     assert m["commit"] == String.duplicate("c", 40)
   end
 
-  test "unknown values are left out, never invented; run_id gets a local id" do
+  test "unknown values are left out, never invented" do
     m = CoverTool.meta()
     refute Map.has_key?(m, "repo")
     refute Map.has_key?(m, "commit")
     refute Map.has_key?(m, "role")
-    assert m["run_id"] =~ ~r/\Alocal-\d+-[0-9a-f]{6}\z/
+    refute Map.has_key?(m, "run_id")
+  end
+
+  test "the local run id is deterministic, so raw and proven runs pair up" do
+    sha = String.duplicate("d", 40)
+    raw = CoverTool.meta(commit: sha, role: "raw")
+    proven = CoverTool.meta(commit: sha, role: "proven")
+    assert raw["run_id"] == "local-" <> sha and raw["run_id"] == proven["run_id"]
+    System.put_env("HYPATIA_COVERAGE_RUN_ID", "shared-1")
+    assert CoverTool.meta(commit: sha)["run_id"] == "shared-1"
   end
 
   test "an invalid role is dropped" do

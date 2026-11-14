@@ -23,7 +23,8 @@ defmodule Hypatia.Coverage.CoverTool do
 
     * `:export_lcov` - path of the LCOV file. Without it nothing extra is written.
     * `:repo`, `:commit`, `:run_id`, `:role` - fill the metadata sidecar (below). Defaults:
-      `GITHUB_REPOSITORY`, `GITHUB_SHA`, `GITHUB_RUN_ID` (else a generated `local-...` id) and
+      `GITHUB_REPOSITORY`, `GITHUB_SHA`, `HYPATIA_COVERAGE_RUN_ID` or `GITHUB_RUN_ID` (else
+      `local-<commit>`, so the raw and proven runs of one commit share it) and
       `HYPATIA_COVERAGE_ROLE` (`raw` or `proven`).
     * `:ignore_modules` - modules (or regexes, as in Mix) left out of the LCOV file too.
 
@@ -68,7 +69,11 @@ defmodule Hypatia.Coverage.CoverTool do
     analyses = Map.new(modules, fn m -> {m, :cover.analyse(m, :calls, :line)} end)
 
     sources =
-      for m <- modules, src = source(m), into: %{}, do: {m, CoverExport.relative_source(src)}
+      for m <- modules,
+          src = source(m),
+          is_binary(src),
+          into: %{},
+          do: {m, CoverExport.relative_source(src)}
 
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, CoverExport.to_lcov(analyses, sources))
@@ -90,7 +95,9 @@ defmodule Hypatia.Coverage.CoverTool do
       "schema" => @meta_schema,
       "repo" => opts[:repo] || env("GITHUB_REPOSITORY"),
       "commit" => opts[:commit] || env("GITHUB_SHA"),
-      "run_id" => opts[:run_id] || env("GITHUB_RUN_ID") || local_run_id(),
+      "run_id" =>
+        opts[:run_id] || env("HYPATIA_COVERAGE_RUN_ID") || env("GITHUB_RUN_ID") ||
+          local_run_id(opts[:commit] || env("GITHUB_SHA")),
       "role" => role(opts[:role] || env("HYPATIA_COVERAGE_ROLE")),
       "tool" => "erlang-cover",
       "tool_version" => tools_version()
@@ -113,11 +120,10 @@ defmodule Hypatia.Coverage.CoverTool do
     end
   end
 
-  defp local_run_id do
-    "local-" <>
-      Integer.to_string(System.os_time(:second)) <>
-      "-" <> Base.encode16(:crypto.strong_rand_bytes(3), case: :lower)
-  end
+  # Deterministic, so the raw and proven runs of one checkout pair up (COV-E007 compares
+  # run ids). Without a commit there is no id; the sidecar then fails COV-E013 honestly.
+  defp local_run_id(nil), do: nil
+  defp local_run_id(commit), do: "local-" <> commit
 
   defp env(name) do
     case System.get_env(name) do
@@ -142,7 +148,11 @@ defmodule Hypatia.Coverage.CoverTool do
   defp source(mod) do
     case :cover.is_compiled(mod) do
       {:file, _beam} ->
-        mod.module_info(:compile)[:source]
+        case mod.module_info(:compile)[:source] do
+          src when is_list(src) -> List.to_string(src)
+          src when is_binary(src) -> src
+          _ -> nil
+        end
 
       _ ->
         nil
