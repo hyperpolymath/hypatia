@@ -332,6 +332,18 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
   end
 
+  # CodeRabbit on #1129.
+  test "a comment after a subshell does not hide the exit on the next line" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "(true)# it's a note\n          [ \"$DEED_RESULT\" = success ] || exit 1"
+      )
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
   test "it is part of the full audit" do
     %{findings: fs} =
       WorkflowAudit.audit(["fork-governance.yml"], %{"fork-governance.yml" => @verdict})

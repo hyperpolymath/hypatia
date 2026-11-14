@@ -871,6 +871,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [%{file: "cs.yml", line: 4}] = Enum.filter(found, &(&1.file == "cs.yml"))
     end
 
+    # CodeRabbit on #1129.
+    test "a flag commented out after a subshell is not a pin" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: (cd x)# grid --hypatia-ref #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ss.yml", wf)) == []
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
