@@ -125,7 +125,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "rules/0 is the whole inventory, including the non-log rules" do
       names = T.rules() |> Enum.map(& &1.id) |> MapSet.new()
 
-      for n <- ["required_check_never_reported", "scanner_pin_drift", "always_after_cancel"] do
+      for n <- [
+            "required_check_never_reported",
+            "scanner_pin_drift",
+            "hypatia_pin_drift",
+            "always_after_cancel"
+          ] do
         assert T.id(n) in names
       end
 
@@ -586,6 +591,224 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     end
   end
 
+  describe "hypatia pin drift" do
+    # The template's split on rsr-template-repo main d183b32 (CASE-065).
+    @new "6693f9aed8e4383f78a3d01b600b32663bf7a45c"
+    @old "51539abf3d2472b955da9b051a68c5971f6cfa22"
+
+    # A whole workflow whose one step checks out `repo_line`'s repository.
+    defp checkout_wf(repo_line, sha, extra \\ "") do
+      "on: push\njobs:\n  oracle:\n    runs-on: ubuntu-24.04\n    steps:\n" <>
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n" <>
+        "        with:\n          #{repo_line}\n" <>
+        "          # Pinned to a commit that contains hypatia#1062.\n" <>
+        extra <> "          ref: #{sha}\n          path: _hypatia\n"
+    end
+
+    defp template_set(oracle) do
+      %{
+        ".github/workflows/hypatia-scan.yml" =>
+          "jobs:\n  scan:\n    env:\n      HYPATIA_SHA: '#{@new}'\n",
+        ".github/workflows/fork-governance.yml" =>
+          "      - run: |\n          scripts/verdict-grid.sh \\\n            --hypatia-ref #{@new}\n",
+        ".github/workflows/verdict-grid-publish.yml" =>
+          "      - run: |\n          scripts/verdict-grid.sh \\\n            --hypatia-ref #{@new} \\\n            --out x\n",
+        ".github/workflows/dogfood-gate.yml" =>
+          checkout_wf("repository: hyperpolymath/hypatia", oracle),
+        ".machine_readable/policies/hypatia-rule-order.json" =>
+          ~s({"scanner":{"commit":"#{@new}","repository":"hyperpolymath/hypatia"}})
+      }
+    end
+
+    test "the template's split oracle pin reports every site" do
+      found = T.check_hypatia_pin_drift(template_set(@old))
+      assert length(found) == 5
+      assert Enum.all?(found, &(&1.pinned == Enum.sort([@new, @old])))
+      assert Enum.all?(found, &(&1.action == :owner and &1.fix == nil))
+
+      assert Enum.map(found, & &1.key) |> Enum.sort() ==
+               Enum.sort([
+                 "HYPATIA_SHA",
+                 "--hypatia-ref",
+                 "--hypatia-ref",
+                 "checkout ref",
+                 "scanner.commit"
+               ])
+    end
+
+    test "one pin everywhere is clean" do
+      assert T.check_hypatia_pin_drift(template_set(@new)) == []
+    end
+
+    test "a checkout of another repository at another commit is not a Hypatia pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "x.yml",
+          checkout_wf("repository: metadatastician/standards", @old)
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "a commented-out old pin is not a second pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "y.yml",
+          "env:\n  # HYPATIA_SHA: #{@old}\n  HYPATIA_SHA: #{@new}\n"
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "a policy naming another scanner is not a Hypatia pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "other.json",
+          ~s({"scanner":{"commit":"#{@old}","repository":"hyperpolymath/panic-attack"}})
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "ref before repository in a checkout is still read" do
+      set =
+        Map.put(
+          template_set(@new),
+          "z.yml",
+          "on: push\njobs:\n  j:\n    runs-on: x\n    steps:\n" <>
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+            "        with:\n          ref: #{@old}\n          repository: hyperpolymath/hypatia\n"
+        )
+
+      assert length(T.check_hypatia_pin_drift(set)) == 6
+    end
+
+    # Codex on #1103: a blank line or many sibling inputs must not hide the pin.
+    test "a checkout with a blank line and many inputs is still read" do
+      many = Enum.map_join(1..10, "", &"          opt#{&1}: x\n")
+      wf = checkout_wf("repository: hyperpolymath/hypatia", @old, "\n" <> many)
+
+      found =
+        T.check_hypatia_pin_drift(
+          Map.put(template_set(@new), ".github/workflows/dogfood-gate.yml", wf)
+        )
+
+      assert Enum.any?(found, &(&1.key == "checkout ref" and &1.sha == @old))
+    end
+
+    # Codex on #1103: each occurrence is its own site.
+    test "the same old flag in two jobs is two findings" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: grid --hypatia-ref #{@old}\n" <>
+          "  b:\n    steps:\n      - run: grid --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "two.yml", wf))
+      assert found |> Enum.filter(&(&1.file == "two.yml")) |> Enum.map(& &1.line) == [4, 7]
+    end
+
+    # Codex on #1103: an apostrophe in a plain value does not open a quote.
+    test "a commented flag after an apostrophe is not a pin" do
+      wf = "jobs:\n  a:\n    name: Don't use this # --hypatia-ref #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "apos.yml", wf)) == []
+    end
+
+    # Codex on #1103, second round: read pins the way YAML does.
+    test "a doubled quote before a hash does not hide a live pin" do
+      wf = "env: {NOTE: 'Don''t # special', HYPATIA_SHA: #{@old}}\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "dq.yml", wf))
+      assert Enum.any?(found, &(&1.file == "dq.yml" and &1.sha == @old))
+    end
+
+    test "a folded run scalar carries its flag across the line break" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: >\n          grid --hypatia-ref\n          #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "fold.yml", wf))
+      assert [%{file: "fold.yml", line: 5}] = Enum.filter(found, &(&1.file == "fold.yml"))
+    end
+
+    test "an aliased HYPATIA_SHA is a pin" do
+      wf = "env:\n  PIN: &h #{@old}\n  HYPATIA_SHA: *h\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "alias.yml", wf))
+
+      assert [%{file: "alias.yml", line: 3, key: "HYPATIA_SHA"}] =
+               Enum.filter(found, &(&1.file == "alias.yml"))
+    end
+
+    test "a lowercase hypatia_sha is not a pin" do
+      wf = "env:\n  hypatia_sha: #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "lc.yml", wf)) == []
+    end
+
+    # Codex on #1103, third round.
+    test "a HYPATIA_SHA action input under with: is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - uses: x/y@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        with:\n          HYPATIA_SHA: #{@old}\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "with.yml", wf)) == []
+    end
+
+    test "a flag in a step name is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - name: Test without --hypatia-ref #{@old}\n        run: true\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "name.yml", wf)) == []
+    end
+
+    test "a shell-commented flag in a run script is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n          # previously --hypatia-ref #{@old}\n" <>
+          "          grid --hypatia-ref #{@new}\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "sh.yml", wf)) == []
+    end
+
+    test "a policy naming the scanner in another case is still a pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          ".machine_readable/policies/hypatia-rule-order.json",
+          ~s({"scanner":{"commit":"#{@old}","repository":"Hyperpolymath/Hypatia"}})
+        )
+
+      assert Enum.any?(T.check_hypatia_pin_drift(set), &(&1.key == "scanner.commit"))
+    end
+
+    # Codex on #1103, fourth round.
+    test "an env given as an alias is read through it" do
+      wf =
+        "x-shared: &e {HYPATIA_SHA: #{@old}}\njobs:\n  a:\n    env: *e\n    steps:\n      - run: true\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ali.yml", wf))
+
+      assert [%{file: "ali.yml", line: 4, key: "HYPATIA_SHA"}] =
+               Enum.filter(found, &(&1.file == "ali.yml"))
+    end
+
+    test "the text fallback still finds a Hypatia checkout" do
+      # A multi-line double-quoted scalar is outside the parser's subset.
+      wf =
+        "jobs:\n  a:\n    name: \"first\n      second\"\n    steps:\n" <>
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        with:\n\n          repository: hyperpolymath/hypatia\n          path: _h\n          ref: #{@old}\n"
+
+      assert {:error, _} = Hypatia.Kyaml.parse(wf)
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "fb.yml", wf))
+
+      assert [%{file: "fb.yml", key: "checkout ref", line: 11}] =
+               Enum.filter(found, &(&1.file == "fb.yml"))
+    end
+
+    test "a variable HYPATIA_SHA is not a pin" do
+      set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+  end
+
   describe "scanner pin drift" do
     @a "410a8f821ea8297833162565b50a298f787815da"
     @b "b689a74d2762a1c19839ae3fbd59b7fe5ef920ea"
@@ -633,6 +856,24 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       }
 
       assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a doubled single quote before a hash keeps the flow pin" do
+      contents = %{
+        "a.yml" => "env: {NOTE: 'Don''t # here', PA_SHA: #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a quote straight after a colon does not open a scalar" do
+      contents = %{
+        "a.yml" => "name: scheme:'value # {PA_SHA: #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert T.check_scanner_pin_drift(contents) == []
     end
 
     test "a quoted pin key is still a pin" do
