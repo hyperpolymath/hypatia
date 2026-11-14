@@ -608,7 +608,31 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :js_exec_sync,
       severity: :high,
-      pattern: ~r/execSync\s*\(|child_process/,
+      # Only calls a shell parses:
+      #   * execSync(, and exec( under a name the file imports from
+      #     node:child_process ({exec}, {exec as run}, {exec: run}) --
+      #     a local function named exec is not a shell;
+      #   * <ns>.exec( / <ns>.execSync( where <ns> is the name the file binds
+      #     node:child_process to (import * as ns / import ns / require /
+      #     await import), and
+      #     require('child_process').exec( -- any argument shape;
+      #   * spawn/spawnSync/execFile/execFileSync (or a name the file imports
+      #     them as) called with a `shell` option (bare or quoted key) set to
+      #     true or to a shell path. fork() ignores `shell`, so it is not here.
+      # Importing node:child_process is not a finding, nor is a shell-free
+      # call with an argv array, RegExp.exec, or a `shell` key outside a
+      # process call. The <ns> calls are matched per file by
+      # pattern_for/2 (`bound_calls`), so every call counts, on its own line.
+      # Not covered: a shell option passed through a variable, tainted argv to
+      # a shell-free call, and call arguments nested more than two
+      # parentheses deep -- a pattern cannot trace values (mathesis#90).
+      # Known false positive: a `shell` key nested inside another option of a
+      # process call (`spawn(c, a, {env: {shell: 'x'}})`) is reported; telling
+      # object depth apart needs a parser, and a rare false alarm is the safer
+      # error for a high-severity rule.
+      pattern:
+        ~r/\bexecSync\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync)\s*\((?:[^;()]|\((?:[^()]|\([^()]*\))*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
+      bound_calls: :child_process,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
     },
@@ -898,7 +922,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # line where the match starts) is not a finding; nor is `unsafe {`
       # inside a string literal. Matches are excused after the scan, so a
       # block whose brace is on the next line is judged as one block.
-      matches = Regex.scan(rule.pattern, subject, return: :index)
+      matches = Regex.scan(pattern_for(rule, subject), subject, return: :index)
 
       matches =
         if rule.id == :unsafe_block,
@@ -1624,10 +1648,85 @@ defmodule Hypatia.Rules.CodeSafety do
   """
   def stub_crypto_patterns, do: @stub_crypto_patterns
 
+  # A file's bindings of node:child_process. A regex cannot carry a binding
+  # to every later call (a match consumes it), so the rule's pattern is
+  # widened per file:
+  #   * namespaces (`import * as cp from`, `import cp from`,
+  #     `const cp = require(...)`) add `cp.exec(` and `cp.execSync(`;
+  #   * destructured exec or execSync (`import {exec, execSync as run}
+  #     from`, `const {exec: run} = require(...)`) adds `exec(` / `run(`;
+  #   * a renamed spawn/spawnSync/execFile/execFileSync (`{spawn as run}`)
+  #     adds `run(` with a `shell` option, like the unrenamed names.
+  # `require(...)` may also be `import(...)` or `await import(...)`.
+  # Regex sources, compiled at call time: a compiled regex in a module
+  # attribute does not survive OTP 28.
+  @cp_source ~S|['"](?:node:)?child_process['"]|
+  @cp_load ~S/(?:require|(?:await\s+)?import)\(\s*/
+  @cp_namespace ~S|(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*| <>
+                  @cp_source <>
+                  ~S/|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*/ <>
+                  @cp_load <> @cp_source <> ~S|\s*\))|
+  @cp_destructured ~S|(?:import\s*\{([^}]*)\}\s*from\s*| <>
+                     @cp_source <>
+                     ~S/|(?:const|let|var)\s*\{([^}]*)\}\s*=\s*/ <>
+                     @cp_load <> @cp_source <> ~S|\s*\))|
+  # The argument span of a call up to a `shell` option set to true or to a
+  # shell path; arguments may nest parentheses two deep.
+  @shell_option_tail ~S/\s*\((?:[^;()]|\((?:[^()]|\([^()]*\))*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/
+
+  @doc false
+  def pattern_for(%{bound_calls: :child_process} = rule, content) do
+    namespaces = captures(Regex.compile!(@cp_namespace), content)
+
+    bindings =
+      @cp_destructured
+      |> Regex.compile!()
+      |> captures(content)
+      |> Enum.flat_map(&String.split(&1, ","))
+      |> Enum.flat_map(fn entry ->
+        case Regex.run(
+               ~r/^\s*(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/,
+               entry
+             ) do
+          [_, name, local] -> [{name, local}]
+          [_, name] -> [{name, name}]
+          nil -> []
+        end
+      end)
+      |> Enum.uniq()
+
+    # exec/execSync run a shell whatever the arguments; the spawn family
+    # does only with a `shell` option (unrenamed names are in the pattern).
+    execs = for {name, local} <- bindings, name in ["exec", "execSync"], do: local
+
+    spawns =
+      for {name, local} <- bindings, name not in ["exec", "execSync"], local != name, do: local
+
+    extra =
+      Enum.map(namespaces, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\.exec(?:Sync)?\\s*\\(")) ++
+        Enum.map(execs, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\s*\\(")) ++
+        Enum.map(spawns, &("(?<![\\w$.])" <> Regex.escape(&1) <> @shell_option_tail))
+
+    case extra do
+      [] -> rule.pattern
+      extra -> Regex.compile!(Enum.join([Regex.source(rule.pattern) | extra], "|"))
+    end
+  end
+
+  def pattern_for(rule, _content), do: rule.pattern
+
+  defp captures(regex, content) do
+    regex
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
   @doc "Scan JavaScript/TypeScript content for web security issues"
   def scan_web_security(content) do
     Enum.flat_map(@javascript_patterns, fn rule ->
-      case Regex.scan(rule.pattern, content) do
+      case Regex.scan(pattern_for(rule, content), content) do
         [] ->
           []
 
