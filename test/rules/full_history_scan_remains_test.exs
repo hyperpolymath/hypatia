@@ -746,6 +746,83 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
   end
 
+  test "quoted scanner arguments are read without their quotes" do
+    remote =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        ~s(      - run: trufflehog git "https://github.com/someone/else"\n)
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => remote})
+
+    wf =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+
+    quoted =
+      String.replace(wf, "      - run: gitleaks git ", ~s(      - run: gitleaks git "source" ))
+
+    assert quoted =~ ~s(git "source")
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => quoted}) == []
+  end
+
+  test "a continuation between scanner and subcommand is still a scanner" do
+    pr =
+      String.replace(
+        @pr_range,
+        "      - run: gitleaks git",
+        "      - run: |\n          gitleaks \\\n            git"
+      )
+
+    assert pr =~ "gitleaks \\\n"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr})
+  end
+
+  test "a later checkout whose condition cannot be read may replace the deep one" do
+    wf =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - if: github.event_name == 'schedule' || github.event_name == 'push'\n" <>
+          "        uses: actions/checkout@v7.0.1\n        with:\n          repository: someone/else\n" <>
+          "      - run: " <> @full_run
+      )
+
+    assert wf =~ "someone/else"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+  end
+
+  test "the last of repeated --log-opts is the one that runs" do
+    wf =
+      String.replace(
+        @scheduled_full,
+        ~s(--log-opts="--all"),
+        ~s(--log-opts="--all" --log-opts="HEAD~1..HEAD")
+      )
+
+    assert wf =~ "HEAD~1"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+  end
+
+  test "range inputs only limit trufflehog's action" do
+    wf =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        "      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7\n        with:\n          base: main\n"
+
+    assert check(%{"pr.yml" => @pr_range, "a.yml" => wf}) == []
+  end
+
+  test "the estate rail needs a ref" do
+    rail = fn ref ->
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n" <>
+        "    uses: hyperpolymath/standards/.github/workflows/secret-scanner-reusable.yml@#{ref}\n"
+    end
+
+    assert check(%{"pr.yml" => @pr_range, "r.yml" => rail.("abc123")}) == []
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => rail.("")})
+  end
+
   test "a remote trufflehog scan counts only for this repository" do
     remote = fn url ->
       "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git #{url}\n"

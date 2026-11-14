@@ -4544,6 +4544,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp all_history_log_opts?(text) do
     @log_opts
     |> Regex.scan(text, capture: :all_but_first)
+    # A repeated --log-opts overwrites the earlier one: the last value runs.
+    |> Enum.take(-1)
     |> Enum.any?(fn groups ->
       value = Enum.join(groups, " ")
 
@@ -4711,7 +4713,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     cond do
       is_binary(job.uses) and
           Regex.match?(
-            ~r{^(?:hyperpolymath|metadatastician)/standards/\.github/workflows/secret-scanner-reusable\.yml@},
+            ~r{^(?:hyperpolymath|metadatastician)/standards/\.github/workflows/secret-scanner-reusable\.yml@[^\s@]+$},
             String.trim(job.uses)
           ) ->
         [Map.merge(base, %{kind: :rail, step: nil, index: nil, line: job.line})]
@@ -4749,9 +4751,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp scanner_kind(step) do
     cond do
-      is_binary(step.uses) and Regex.match?(@scanner_action, step.uses) -> :action
-      is_binary(step.run) and Regex.match?(@scanner_run, run_code(step)) -> :run
-      true -> nil
+      is_binary(step.uses) and Regex.match?(@scanner_action, step.uses) ->
+        :action
+
+      is_binary(step.run) and
+          Regex.match?(@scanner_run, String.replace(run_code(step), ~r/\\\r?\n[ \t]*/, " ")) ->
+        :run
+
+      true ->
+        nil
     end
   end
 
@@ -4845,9 +4853,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # range with `base`/`head`, or with a limit in `extra_args`.
         full_events = Enum.filter(events, &(&1 in ["schedule", "workflow_dispatch"]))
 
+        # Only trufflehog's action takes these inputs; gitleaks' has none.
+        trufflehog? =
+          String.starts_with?(
+            String.downcase(String.trim(step.uses)),
+            "trufflesecurity/trufflehog@"
+          )
+
         ranged? =
-          Enum.any?(["base", "head"], &(Hypatia.Workflow.input(step, &1) not in [nil, ""])) or
-            Regex.match?(@trufflehog_limits, Hypatia.Workflow.input(step, "extra_args") || "")
+          trufflehog? and
+            (Enum.any?(["base", "head"], &(Hypatia.Workflow.input(step, &1) not in [nil, ""])) or
+               Regex.match?(@trufflehog_limits, Hypatia.Workflow.input(step, "extra_args") || ""))
 
         full_events != [] and not ranged? and
           deep_checkout_before?(job, i, full_events, wf_doc)
@@ -4905,7 +4921,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       [_, args] ->
         args
         |> String.split(~r/\s+/, trim: true)
-        |> Enum.map(&String.trim(&1, "'\""))
+        |> Enum.map(&unquote_arg/1)
         |> Enum.find(
           &Regex.match?(~r/^(?:(?:https?|ssh|git):\/\/|git@|\$\{\{github\.server_url)/, &1)
         )
@@ -4943,9 +4959,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       steps
       |> Enum.take(i)
       |> Enum.filter(fn step ->
+        # A checkout whose condition cannot be read may run, so it may
+        # replace an earlier one; it cannot itself be the deep checkout.
         is_binary(step.uses) and
           String.starts_with?(String.downcase(String.trim(step.uses)), "actions/checkout@") and
-          runs_on_any?(step.if, [event]) and
+          narrow_events(step.if, [event]) != [] and
           covers?(norm_path(Hypatia.Workflow.input(step, "path")), target)
       end)
       |> List.last()
@@ -4954,7 +4972,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           false
 
         checkout ->
-          norm_path(Hypatia.Workflow.input(checkout, "path")) == target and
+          narrow_events(checkout.if, [event]) != :unknown and
+            norm_path(Hypatia.Workflow.input(checkout, "path")) == target and
             Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
             self_repository?(Hypatia.Workflow.input(checkout, "repository"))
       end
@@ -4965,13 +4984,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp self_repository?(repo),
     do: String.replace(repo, ~r/\s+/, "") in ["", "${{github.repository}}"]
-
-  defp runs_on_any?(cond_text, events) do
-    case narrow_events(cond_text, events) do
-      :unknown -> false
-      narrowed -> narrowed != []
-    end
-  end
 
   # A checkout feeds the scanner when it lands where the scanner reads: the
   # scanner's `--source`/`file://` path, else the action's `path` input,
@@ -5068,7 +5080,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do: first_positional(rest)
 
   defp first_positional(["-" <> _ | rest]), do: first_positional(rest)
-  defp first_positional([arg | _]), do: String.trim(arg, ~s("'))
+  defp first_positional([arg | _]), do: unquote_arg(arg)
+
+  # Remove one matching pair of outer quotes; leave anything else as is.
+  defp unquote_arg(arg) do
+    case Regex.run(~r/^(["'])(.*)\1$/s, arg) do
+      [_, _, inner] -> inner
+      nil -> arg
+    end
+  end
 
   defp in_wd(wd, source) do
     cond do
