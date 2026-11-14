@@ -21,7 +21,11 @@ defmodule Hypatia.Rules.JsCallScan do
   spawn-family call site re-reads its own argument list, so the cost is
   quadratic in how deeply such calls nest inside one another's arguments
   (real code does not nest them deeply, and only those four callees are
-  candidates).
+  candidates); a quote in JSX text (`<span>Don't</span>`) is read as
+  opening a string to the end of that line, so a call later on the same
+  line is missed; an object that is any top-level operand of an option
+  argument counts, so `{shell: true} && opts` is reported even when `opts`
+  wins -- a rare false alarm is the safer error for a high-severity rule.
   """
 
   @spawn_family ~w(spawn spawnSync execFile execFileSync)
@@ -69,10 +73,7 @@ defmodule Hypatia.Rules.JsCallScan do
     case split_top_level(src, open + 1, ?)) do
       {:ok, args, _close} ->
         Enum.any?(args, fn {from, to} ->
-          case object_start(src, from, to) do
-            {:ok, brace} -> object_has_shell?(src, brace)
-            :none -> false
-          end
+          src |> object_operands(from, to) |> Enum.any?(&object_has_shell?(src, &1))
         end)
 
       :error ->
@@ -80,41 +81,66 @@ defmodule Hypatia.Rules.JsCallScan do
     end
   end
 
-  # The `{` of an argument that is an object literal, stepping over wrapping
-  # parentheses (`({shell: true})`) and the whitespace and comments around
-  # them. The object (or the parenthesised one) must be the whole argument:
-  # in a comma expression `({shell: true}, {shell: false})` the value is the
-  # last operand, so it is not read as this object.
-  defp object_start(src, from, to) do
-    case first_code_byte(src, from, to) do
-      {:ok, i} when i < to ->
-        case :binary.at(src, i) do
-          ?{ ->
-            case split_top_level(src, i + 1, ?}) do
-              {:ok, _props, close} -> if trivia?(src, close + 1, to), do: {:ok, i}, else: :none
-              :error -> :none
-            end
+  # The `{` of every object literal that is a top-level operand of the
+  # expression in `from..to`: reached without entering any bracket except
+  # wrapping parentheses. So a ternary branch, an `as`/`satisfies` assertion
+  # and an `||`/`??`/`&&` operand all count; an object inside a call, an
+  # array or another object does not. In a parenthesised comma expression
+  # only the last element is the value.
+  defp object_operands(src, from, to), do: operands(src, from, to, nil, [])
 
-          ?( ->
-            case split_top_level(src, i + 1, ?)) do
-              {:ok, [{a, b}], close} ->
-                if trivia?(src, close + 1, to), do: object_start(src, a, b), else: :none
+  defp operands(_src, i, to, _prev, acc) when i >= to, do: Enum.reverse(acc)
 
-              _ ->
-                :none
-            end
+  defp operands(src, i, to, prev, acc) do
+    case :binary.at(src, i) do
+      c when c in [?', ?", ?`] ->
+        operands(src, skip_string(src, i), to, ?", acc)
 
-          _ ->
-            :none
+      ?/ ->
+        case comment_end(src, i) do
+          nil -> operands(src, i + 1, to, ?/, acc)
+          j -> operands(src, j, to, prev, acc)
         end
 
-      _ ->
-        :none
+      ?{ ->
+        case split_top_level(src, i + 1, ?}) do
+          {:ok, _props, close} -> operands(src, close + 1, to, ?}, [i | acc])
+          :error -> Enum.reverse(acc)
+        end
+
+      ?( ->
+        case split_top_level(src, i + 1, ?)) do
+          {:ok, elems, close} ->
+            # After a name, `)` or `]` this is a call; otherwise a group.
+            inner =
+              if call_paren?(prev),
+                do: [],
+                else: (fn {a, b} -> object_operands(src, a, b) end).(List.last(elems))
+
+            operands(src, close + 1, to, ?), Enum.reverse(inner, acc))
+
+          :error ->
+            Enum.reverse(acc)
+        end
+
+      ?[ ->
+        case split_top_level(src, i + 1, ?]) do
+          {:ok, _, close} -> operands(src, close + 1, to, ?], acc)
+          :error -> Enum.reverse(acc)
+        end
+
+      c when c in [?\s, ?\t, ?\r, ?\n] ->
+        operands(src, i + 1, to, prev, acc)
+
+      c ->
+        operands(src, i + 1, to, c, acc)
     end
   end
 
-  # Only whitespace and comments from `from` up to `to`.
-  defp trivia?(src, from, to), do: first_code_byte(src, from, to) == :none
+  defp call_paren?(prev) when is_integer(prev),
+    do: prev in [?), ?], ?_, ?$] or prev in ?a..?z or prev in ?A..?Z or prev in ?0..?9
+
+  defp call_paren?(_), do: false
 
   defp object_has_shell?(src, brace) do
     case split_top_level(src, brace + 1, ?}) do
@@ -128,10 +154,7 @@ defmodule Hypatia.Rules.JsCallScan do
               if String.starts_with?(text, "...") do
                 # An inline spread `...{shell: true}` contributes its own
                 # top-level keys.
-                case object_start(src, key + 3, to) do
-                  {:ok, inner} -> object_has_shell?(src, inner)
-                  :none -> false
-                end
+                src |> object_operands(key + 3, to) |> Enum.any?(&object_has_shell?(src, &1))
               else
                 Regex.match?(
                   ~r/\A(?:shell|'shell'|"shell"|\[\s*(['"`])shell\1\s*\])\s*:\s*(?:true\b|['"`])/,

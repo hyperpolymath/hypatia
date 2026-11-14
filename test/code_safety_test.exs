@@ -1069,9 +1069,20 @@ defmodule Hypatia.Rules.CodeSafetyTest do
 
     test "a comma expression's value is its last operand" do
       refute exec_sync?("spawn(c, a, ({shell: true}, {shell: false}));\n")
-      refute exec_sync?("spawn(c, a, {shell: true} && opts);\n")
+      # Accepted over-report: any top-level operand object counts.
+      assert exec_sync?("spawn(c, a, {shell: true} && opts);\n")
       assert exec_sync?("spawn(c, a, (({shell: true})));\n")
       assert exec_sync?("spawn(c, a, ({shell: true} /* why */));\n")
+    end
+
+    test "an options object that is any top-level operand counts" do
+      assert exec_sync?("spawn(c, a, useShell ? {shell: true} : {shell: false});\n")
+      assert exec_sync?("spawn(c, a, useShell ? {} : {shell: '/bin/sh'});\n")
+      assert exec_sync?("spawn(c, a, {shell: true} as SpawnOptions);\n")
+      assert exec_sync?("spawn(c, a, {shell: true} satisfies SpawnOptions);\n")
+      assert exec_sync?("spawn(c, a, opts || {shell: true});\n")
+      refute exec_sync?("spawn(c, a, cond ? f({shell: true}) : x);\n")
+      refute exec_sync?("spawn(c, a, [{shell: true}]);\n")
     end
 
     test "a computed string key names the shell option too" do
