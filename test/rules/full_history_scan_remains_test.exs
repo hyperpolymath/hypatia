@@ -790,6 +790,13 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
 
     assert wf =~ "working-directory: source"
     assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+
+    up = String.replace(wf, "--source .", "--source ../source")
+    assert up =~ "--source ../source"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => up}) == []
+
+    away = String.replace(wf, "--source .", "--source ../other")
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => away})
   end
 
   test "is skipped when audit/3 is told the workflow set is partial" do

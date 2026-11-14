@@ -4989,15 +4989,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp norm_path(nil), do: ""
 
+  # Component-wise: `.` and empty parts drop, `..` pops its parent, so
+  # `source/../source` and `./source/` both read as `source`.
   defp norm_path(path) do
+    path = String.trim(path)
+    lead = if String.starts_with?(path, "/"), do: "/", else: ""
+
     path
-    |> String.trim()
-    |> String.trim_leading("./")
-    |> String.trim_trailing("/")
-    |> case do
-      "." -> ""
-      p -> p
-    end
+    |> String.split("/")
+    |> Enum.reduce([], fn
+      part, acc when part in ["", "."] -> acc
+      "..", [prev | rest] when prev != ".." -> rest
+      part, acc -> [part | acc]
+    end)
+    |> Enum.reverse()
+    |> Enum.join("/")
+    |> then(&(lead <> &1))
   end
 
   defp default_wd(nil), do: nil
