@@ -160,8 +160,12 @@ if [ "$with_idris2" = 1 ]; then
   tag=$(awk '/IDRIS2_VERSION:/ { print $2; exit }' "$repo/.github/workflows/verify-proofs.yml")
   [ -n "$tag" ] || die "verify-proofs.yml names no IDRIS2_VERSION"
   idris="$HOME/.idris2/bin/idris2"
+  # `make install` puts the launcher in place before the libraries. The marker
+  # is written after it ends, so an install that stopped part-way is built
+  # again. An Idris 2 tree that has no marker is built again once.
+  mark="$HOME/.idris2/.installed-$tag"
   have=""
-  [ -x "$idris" ] && have=$("$idris" --version 2>/dev/null || true)
+  [ -f "$mark" ] && [ -x "$idris" ] && have=$("$idris" --version 2>/dev/null || true)
   case "$have" in
     *"version ${tag#v}"*) ;; # the pinned release is already there
     *)
@@ -180,6 +184,7 @@ if [ "$with_idris2" = 1 ]; then
       [ "$got" = "$want" ] || die "Idris 2 $tag is commit $got, want $want"
       make -C "$work/idris2" bootstrap SCHEME=chezscheme >/dev/null
       make -C "$work/idris2" install PREFIX="$HOME/.idris2" >/dev/null
+      : > "$mark"
       ;;
   esac
   # A wrapper, not a link: the launcher finds idris2_app beside its own path.
