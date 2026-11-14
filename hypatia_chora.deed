@@ -3,20 +3,30 @@
 ;;
 ;; The repo deed of hypatia (one deed per repo, standards#837).
 ;;
-;; Clauses translated field for field from .machine_readable/CLADE.a2ml under
-;; the mapping spec 1-formats/deed/mappings/clade-to-repo-deed.adoc, the only
-;; authority a family translation may cite: (identity) (clade) (forges)
-;; (lineage) (status). CLADE's [identity] name and project are not in that
-;; table; both repeat canonical-name and are not emitted. :repo-uuid is the
-;; ADR-008 profile C UUIDv8 re-derived from the name (spec section 5, P-1),
-;; not the v5 that CLADE.a2ml still holds.
+;; Every clause below is translated field for field from a retired A2ML
+;; descriptile under the mapping spec that governs its family, in standards
+;; 1-formats/deed/mappings/ (the only authority a family translation may cite).
+;; A field a table does not list does not translate: it was dropped, not
+;; re-homed. docs/history/A2ML-REMOVED.adoc records each removed file, its git
+;; blob id and what was dropped from it (owner ruling 2026-11-14, "Full
+;; migration now").
 ;;
-;; AGENTIC, NEUROSYM and PLAYBOOK.a2ml carry sections their mapping table does
-;; not list (agentic: max-automation, sprint-patterns, workflow-pin-detection;
-;; neurosym: proof-integration; playbook: crg-promotion-criteria), so
-;; a2ml_to_deed.py refuses them rather than guess. META and ECOSYSTEM are not
-;; translated either, and STATE.a2ml waits on state-v1-decision.adoc. All of
-;; those stay live and untranslated, as in standards_chora.deed.
+;;   CLADE.a2ml      -> (identity) (clade) (forges) (lineage) (status)
+;;                      clade-to-repo-deed.adoc. CLADE's [identity] name and
+;;                      project repeat canonical-name and are not emitted.
+;;                      :repo-uuid is the ADR-008 profile C UUIDv8 re-derived
+;;                      from the name (spec section 5, P-1), not the v5 that
+;;                      CLADE.a2ml held.
+;;   META.a2ml       -> (meta)       meta-ecosystem-to-repo-deed.adoc
+;;   ECOSYSTEM.a2ml  -> (ecosystem)  meta-ecosystem-to-repo-deed.adoc
+;;   AGENTIC.a2ml    -> (agentic)    agentic-neurosym-playbook-to-repo-deed.adoc
+;;   NEUROSYM.a2ml   -> (neurosym)   agentic-neurosym-playbook-to-repo-deed.adoc
+;;   PLAYBOOK.a2ml   -> (playbook)   agentic-neurosym-playbook-to-repo-deed.adoc
+;;   STATE.a2ml      -> (maturity)   state-v1-decision.adoc, option B (ruled
+;;                      2026-11-10): the lifecycle claim is the (status) clause
+;;                      above, the maturity a clause of its own
+;;                      (vocabulary/maturity.adoc), and the journal is archived,
+;;                      not translated.
 ;;
 ;; (egress ...) is the standards ADR-009 declaration that RE001 checks: one
 ;; entry per job that reads a secret other than GITHUB_TOKEN. Each :endpoints
@@ -52,6 +62,76 @@
     :ended ""
     (history
       (entry :phase active :since "2026-03-16" :note "backfilled default — correct if the true phase differs")))
+  ; STATE.a2ml under state-v1-decision.adoc option B: [project-context]
+  ; maturity, the one statal field the (status) clause does not already carry.
+  ; The source gave no date, so there is no :since.
+  (maturity :level alpha)
+  ; META.a2ml: [metadata] last-updated, [maintenance-axes] scoping-first and
+  ; the [architecture-decisions] ADRs (id, title, status, date) are the rows
+  ; the table lists. Not in the table, so not translated: [metadata] project,
+  ; author, license, standard, media-type; [development-practices] (build-tool
+  ; is prose, not the SYMBOL the row requires); [maintenance-axes]
+  ; priority-order; each ADR's context, decision and consequences.
+  (meta
+    :last-updated "2026-08-07"
+    :scoping-first #t
+    (adr :id "ADR-001" :title "Replace Logtalk rule engine with pure Elixir rules" :status accepted :date "2026-04-14")
+    (adr :id "ADR-002" :title "Rename VQL→VCL and verisimdb→verisim throughout" :status accepted :date "2026-04-05")
+    (adr :id "ADR-003" :title "Route ProofObligations through FleetDispatcher to echidnabot" :status accepted :date "2026-04-11")
+    (adr :id "ADR-004" :title "Synthetic rebalancer (Strategy A) as default; B+C deferred to M9" :status accepted :date "2026-04-22")
+    (adr :id "ADR-005" :title "Use take_supervised/1 for isolated GenServer tests against Application-supervised processes" :status accepted :date "2026-04-25"))
+  ; ECOSYSTEM.a2ml: [metadata] project and ecosystem, [position] type and
+  ; purpose. Not translated: [metadata] last-updated and media-type,
+  ; [position] category, tier and role, [position.consumers],
+  ; [position.producers] and [integration-points] (no table row), and the
+  ; seven [related-projects] entries, whose relationships (sibling-standard,
+  ; data-dependency, dispatch-target, scanner-source, mcp-host) are outside
+  ; the closed set the (related) row allows. The source has no [pipeline]
+  ; section, so there is no :coordination.
+  (ecosystem
+    :project "hypatia"
+    :ecosystem "hyperpolymath"
+    :position-type "component"
+    :purpose "Neurosymbolic CI/CD intelligence layer — scans repos via panic-attack, classifies findings through the Safety Triangle, dispatches fixes to gitbot-fleet, learns from outcomes via 5 neural networks.")
+  ; AGENTIC.a2ml: [metadata] version and last-updated, [agent-permissions]
+  ; and the five [maintenance-integrity] axioms the table lists. The source
+  ; has no @profile line, so there is no (profile). Not translated:
+  ; [agent-constraints] forbidden (an unknown key, which fails closed),
+  ; maintenance-integrity completion-claim-requires-behavioural-tests,
+  ; [automation-hooks] (lists, not the comment-carried strings the (hooks)
+  ; row takes, and each one named a retired .a2ml file), [workflow-pin-
+  ; detection], [max-automation] and [sprint-patterns].
+  (agentic
+    :version "0.2.0"
+    :last-updated "2026-08-07"
+    (permissions :source #t :tests #t :docs #t :config #t :create-files #t)
+    (integrity
+      :fail-closed #t
+      :require-evidence-per-step #t
+      :allow-silent-skip #f
+      :require-rerun-after-fix #t
+      :release-claim-requires-hard-pass #t))
+  ; NEUROSYM.a2ml: [metadata] version and last-updated, [hypatia-config]
+  ; scan-enabled, scan-depth and report-format. Not translated:
+  ; [hypatia-config] verisim-data-path and fleet-path, and the populated
+  ; [neural-config], [symbolic-rules] and [proof-integration] sections,
+  ; which fail closed pending table rows.
+  (neurosym
+    :version "0.2.0"
+    :last-updated "2026-08-07"
+    (hypatia :scan-enabled #t :scan-depth deep :report-format "json"))
+  ; PLAYBOOK.a2ml: [metadata] version and last-updated, and the five
+  ; operational sections kept as positions (the family-1 slot doctrine). The
+  ; source's sections held runbook content the table has no rows for, so the
+  ; content did not translate; nor did [crg-promotion-criteria].
+  (playbook
+    :version "0.2.0"
+    :last-updated "2026-08-07"
+    (deployment)
+    (incident-response)
+    (release-process)
+    (docs-format)
+    (maintenance-operations))
   (egress
     :policy "standards ADR-009"
     (job
