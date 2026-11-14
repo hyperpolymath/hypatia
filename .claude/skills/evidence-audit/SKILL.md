@@ -11,9 +11,12 @@ The result is a table that a person can check line by line. It changes no file.
 
 ## Procedure
 
-1. **Fix the commit.** Record the commit that you read. `main` in this
-   repository moves several times each day, so a line number is correct for
-   one commit only.
+1. **Fix the commit.** Record the commit that you read
+   (`git rev-parse HEAD`). `main` in this repository moves several times each
+   day, so a line number is correct for one commit only. Then run
+   `git status --short`. If a tracked file has changes, the files that you
+   read are not the files of that commit: name each changed file at the top
+   of the report, or read the audited files with `git show <commit>:<path>`.
 2. **List the claims.** Turn the document into numbered items. One claim for
    each item. Keep the wording of the document.
 3. **Check each claim in the code.** Open the code. Do not accept a second

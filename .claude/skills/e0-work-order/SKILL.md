@@ -15,33 +15,42 @@ Work order to run: `$ARGUMENTS`
 
 ## Procedure
 
-1. **Read.** Read the whole work order in
-   `docs/operations/e0-closeout/work-orders/`. Read the "Rules for every run"
-   part of `docs/operations/e0-closeout/README.adoc`.
-2. **Check the dependencies.** Each id under `:wo-depends:` must be merged in
+1. **Start from the newest `main`.** Run `git fetch origin main`. Find the
+   work order in `docs/operations/e0-closeout/work-orders/` on `origin/main`,
+   and start the branch that its `:wo-branch:` line names from `origin/main`.
+   Do each later step on this branch, so that the code that you measure is
+   the code that you change.
+2. **Read.** Read the whole work order. Read the "Rules for every run" part
+   of `docs/operations/e0-closeout/README.adoc`.
+3. **Check the dependencies.** Each id under `:wo-depends:` must be merged in
    `main`. If one is not, stop and say which.
-3. **Measure the facts again.** Open each function that "Facts measured"
+4. **Check the toolchain.** Run `mix --version`. If it fails, run
+   `scripts/dev/install-toolchain.sh` when that file exists and the system is
+   Ubuntu 24.04. In each other case, use `mise install erlang elixir`.
+5. **Measure the facts again.** Open each function that "Facts measured"
    names. Run each command that it names. Line numbers drift, so find the code
    by its function name. If a fact no longer holds, stop and report the
    difference. Do not adapt the work order yourself.
-4. **Check the toolchain.** Run `mix --version`. If it fails on Ubuntu 24.04,
-   run `scripts/dev/install-toolchain.sh`. Elsewhere, use `mise install erlang elixir`.
-5. **Branch.** Start the branch named in `:wo-branch:` from the newest `main`.
 6. **Test first.** Where the work order changes behaviour, write the test,
    run it, and see it fail for the right reason. Then make the change.
 7. **Check.** Run, in this order, and copy each result line:
    - the test files that "Acceptance" names;
-   - `mix format --check-formatted <each file that you changed>` (see the
-     note on formatting below);
+   - `mix format --check-formatted <file>` for each changed file that was
+     formatted before your change, and for each new file (see the note on
+     formatting below);
    - `mix test` (about 1 minute);
    - `bash scripts/check-verdicts.sh`, only when you changed `src/Hypatia/ABI/`;
    - `mix escript.build && ./hypatia scan . --format json`, and look for
      findings on the files that you changed.
-8. **Gate.** Go through the `estate-gates` skill before you push.
-9. **Report.** Open one draft pull request. Use
-   `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
-   `claim-receipt` skill for each claim. Then stop. Do not merge. Do not mark
-   the pull request ready.
+8. **Gate.** Go through the `estate-gates` skill.
+9. **Commit and push.** Commit in the form that part 5 of `estate-gates`
+   gives. Then run `git status --short`: it must print nothing, so that the
+   commit holds exactly what the checks ran on. Push the branch with
+   `git push -u origin <branch>`. Record `git rev-parse HEAD` for the receipts.
+10. **Report.** Open one draft pull request. Use
+    `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
+    `claim-receipt` skill for each claim. Then stop. Do not merge. Do not mark
+    the pull request ready.
 
 ## Rules that the work orders rely on
 
@@ -56,7 +65,9 @@ Work order to run: `$ARGUMENTS`
   unformatted files on `main`, and no CI job runs it. A file that was
   formatted before your change must stay formatted. Do not reformat a file
   that was not: format only the lines that you add, by hand, in the style of
-  the file. Use `git stash` to see how a file was before your change.
+  the file. To see how a file was before your change, run
+  `git show origin/main:<file> | mix format --check-formatted -`. Exit code 0
+  means that it was formatted.
 
 ## When to stop and ask
 

@@ -36,10 +36,10 @@ Run the checks that match your change. Copy each result line for the receipt.
 
 | You changed | Run |
 |---|---|
-| Elixir | `mix compile --warnings-as-errors`, `mix test`, and `mix format --check-formatted <file>` for each file that was formatted before your change |
+| Elixir | `mix compile --warnings-as-errors`, `mix test`, and `mix format --check-formatted <file>` for each new file and each file that was formatted before your change (`git show origin/main:<file> \| mix format --check-formatted -` gives exit code 0 for such a file) |
 | `src/Hypatia/ABI/` | `bash scripts/check-verdicts.sh` (needs Idris 2) |
-| Rust | `cargo fmt --all -- --check`, `cargo clippy`, `cargo test --workspace --locked` |
-| `ffi/zig/` | `zig build test` in `ffi/zig` |
+| Rust | The commands of `ci.yml`: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, `cargo test --workspace --doc --locked` |
+| `ffi/zig/` | `zig build test --summary all` in `ffi/zig`. Read the `Build Summary:` line: it must report 8 tests or more. A run with 0 tests also ends with exit code 0 |
 | a shell script | `shellcheck` on the file |
 | an `.adoc` file | `asciidoctor --failure-level WARN -o /dev/null <file>` |
 | README, EXPLAINME, docs index, `lib/rules`, Mix tasks, the Justfile | `bash scripts/check-readme-claims.sh` |
