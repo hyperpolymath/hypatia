@@ -33,11 +33,19 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
       assert counted?(r) == {:not_counted, :no_fixtures}
     end
 
+    test "parameters that differ only in type stay distinct" do
+      t = test_struct(:"test p", nil, %{})
+      a = EvidenceFormatter.record(Map.put(t, :parameters, %{n: :one}), @cfg)
+      b = EvidenceFormatter.record(Map.put(t, :parameters, %{n: "one"}), @cfg)
+      assert a["test_id"]["parameters"]["display"] == b["test_id"]["parameters"]["display"]
+      assert a["id"] != b["id"]
+    end
+
     test "parameterized runs get distinct test ids and record ids" do
       t = test_struct(:"test p", nil, %{})
       a = EvidenceFormatter.record(Map.put(t, :parameters, %{n: 1}), @cfg)
       b = EvidenceFormatter.record(Map.put(t, :parameters, %{n: 2}), @cfg)
-      assert a["test_id"]["parameters"] == %{"n" => 1}
+      assert a["test_id"]["parameters"]["display"] == %{"n" => 1}
       assert a["id"] != b["id"]
     end
 
@@ -203,6 +211,21 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
 
       on_exit(fn -> File.rm_rf(Path.dirname(out)) end)
       %{out: out}
+    end
+
+    test "a run stopped at --max-failures writes no evidence file", %{out: out} do
+      state = %{config: Keyword.put(@cfg, :out, out), records: []}
+
+      {:noreply, state} =
+        EvidenceFormatter.handle_cast({:test_finished, test_struct(:"test one", nil, %{})}, state)
+
+      {:noreply, state} = EvidenceFormatter.handle_cast(:max_failures_reached, state)
+
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        {:noreply, _} = EvidenceFormatter.handle_cast({:suite_finished, %{run: 1}}, state)
+      end)
+
+      refute File.exists?(out)
     end
 
     test "writes a file that round-trips through Evidence.load/1", %{out: out} do

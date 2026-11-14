@@ -67,12 +67,25 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   @impl true
   def init(_opts) do
     config = Application.get_env(:hypatia, __MODULE__, [])
-    {:ok, %{config: config, records: []}}
+    {:ok, %{config: config, records: [], aborted: false}}
   end
 
   @impl true
   def handle_cast({:test_finished, %ExUnit.Test{} = test}, state) do
     {:noreply, %{state | records: [record(test, state.config) | state.records]}}
+  end
+
+  # `--max-failures` stops the run before every test is scheduled. An evidence file
+  # from such a run would look complete while missing tests, so none is written; the
+  # report then says the evidence is missing (COV-E001) instead of judging a partial run.
+  def handle_cast(:max_failures_reached, state), do: {:noreply, Map.put(state, :aborted, true)}
+
+  def handle_cast({:suite_finished, _times}, %{aborted: true} = state) do
+    IO.warn(
+      "Hypatia.Coverage.EvidenceFormatter: run stopped at --max-failures; no evidence file written"
+    )
+
+    {:noreply, state}
   end
 
   def handle_cast({:suite_finished, _times}, state) do
@@ -185,9 +198,16 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   defp parameters(test) do
     case Map.get(test, :parameters) do
       p when p in [nil, %{}] -> nil
-      p -> jsonable(p)
+      p -> %{"display" => jsonable(p), "term_sha256" => term_sha256(p)}
     end
   end
+
+  # The display form is lossy (atoms and strings both become JSON strings); the hash of
+  # the exact Erlang term keeps parameter sets such as %{n: :one} and %{n: "one"} apart.
+  defp term_sha256(term),
+    do:
+      :crypto.hash(:sha256, :erlang.term_to_binary(term, [:deterministic]))
+      |> Base.encode16(case: :lower)
 
   defp fixtures(tag) do
     case {tag[:fixtures], kind(tag)} do

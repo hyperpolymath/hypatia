@@ -4,7 +4,7 @@ defmodule Hypatia.Coverage.CoverToolTest do
 
   alias Hypatia.Coverage.CoverTool
 
-  @env ~w(GITHUB_REPOSITORY GITHUB_SHA GITHUB_RUN_ID HYPATIA_COVERAGE_ROLE HYPATIA_COVERAGE_RUN_ID)
+  @env ~w(GITHUB_REPOSITORY GITHUB_SHA GITHUB_RUN_ID HYPATIA_COVERAGE_ROLE HYPATIA_COVERAGE_RUN_ID MIX_TEST_PARTITION)
 
   setup do
     saved = Map.new(@env, &{&1, System.get_env(&1)})
@@ -56,6 +56,13 @@ defmodule Hypatia.Coverage.CoverToolTest do
     assert raw["run_id"] == "local-" <> sha and raw["run_id"] == proven["run_id"]
     System.put_env("HYPATIA_COVERAGE_RUN_ID", "shared-1")
     assert CoverTool.meta(commit: sha)["run_id"] == "shared-1"
+  end
+
+  test "a partitioned run (export set or MIX_TEST_PARTITION) is detected" do
+    assert CoverTool.partitioned?(export: "cover/part-1")
+    refute CoverTool.partitioned?([])
+    System.put_env("MIX_TEST_PARTITION", "2")
+    assert CoverTool.partitioned?([])
   end
 
   test "an invalid role is dropped" do

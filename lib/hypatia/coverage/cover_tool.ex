@@ -51,14 +51,30 @@ defmodule Hypatia.Coverage.CoverTool do
     mix_callback = Mix.Tasks.Test.Coverage.start(compile_path, opts)
 
     fn ->
-      case opts[:export_lcov] do
-        path when is_binary(path) -> write_lcov(path, opts)
-        _ -> :ok
+      cond do
+        not is_binary(opts[:export_lcov]) ->
+          :ok
+
+        partitioned?(opts) ->
+          # A partition only holds its own shard; Mix exports .coverdata for
+          # `mix test.coverage` to merge. A shard LCOV with a valid sidecar would be
+          # judged as a whole run, so none is written here.
+          Mix.shell().info(
+            "Partitioned run: no LCOV written for this shard; merge the exported " <>
+              ".coverdata with `mix test.coverage` and convert that instead"
+          )
+
+        true ->
+          write_lcov(opts[:export_lcov], opts)
       end
 
       mix_callback.()
     end
   end
+
+  @doc false
+  def partitioned?(opts),
+    do: opts[:export] not in [nil, false] or System.get_env("MIX_TEST_PARTITION") not in [nil, ""]
 
   @doc "Analyse every cover-compiled module and write the LCOV file."
   @spec write_lcov(Path.t(), keyword()) :: :ok
