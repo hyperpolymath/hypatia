@@ -97,6 +97,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
     moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
     always_after_cancel = check_always_after_cancel(workflow_contents)
+    always_reads_cancelled_needs = check_always_reads_cancelled_needs(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
     gitleaks_full_history = check_gitleaks_full_history_on_pr(workflow_contents)
     # Repository-wide: it needs every workflow. A caller that passes only some
@@ -150,6 +151,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           broken_reusable_revisions ++
           moved_reusable_calls ++
           always_after_cancel ++
+          always_reads_cancelled_needs ++
           mirror_visibility ++
           gitleaks_full_history ++
           full_history_remains ++
@@ -181,6 +183,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       broken_reusable_revision_count: length(broken_reusable_revisions),
       moved_reusable_call_count: length(moved_reusable_calls),
       always_after_cancel_count: length(always_after_cancel),
+      always_reads_cancelled_needs_count: length(always_reads_cancelled_needs),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -5273,6 +5276,110 @@ defmodule Hypatia.Rules.WorkflowAudit do
           []
       end
     end)
+  end
+
+  # ─── WF033: `if: always()` job that judges its needs' results ─────────
+  #
+  # The sibling of WF029 with no artifact in the way (CASE-066, Apodeixis.jl#28;
+  # rsr-template-repo fork-governance.yml "Fork governance verdict"). The job
+  # runs on a cancelled run, reads `needs.<job>.result` (all `cancelled`) and
+  # fails because none is `success`, so a superseded head shows a red verdict.
+  # Advisory info (owner ruling 14 Nov): a rollup that refuses missing evidence
+  # on purpose can dismiss it. A job that names `cancelled` itself already
+  # decides what a cancelled need means, so it is left alone.
+
+  @doc """
+  WF033: a job with `if: always()` (no `cancelled()` guard) that reads
+  `needs.<job>.result` and does not mention `cancelled`. Advisory info;
+  recipe: `if: ${{ !cancelled() }}`.
+  """
+  def check_always_reads_cancelled_needs(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      case Hypatia.Workflow.parse(content, filename) do
+        {:ok, %Hypatia.Workflow{jobs: jobs}} ->
+          for job <- jobs, always_reads_cancelled_needs?(job, jobs) do
+            %{
+              rule: "WF033",
+              rule_id: "hypatia/workflow_audit/always_reads_cancelled_needs",
+              type: :always_reads_cancelled_needs,
+              file: filename,
+              line: job.line,
+              job: job.id,
+              severity: :info,
+              advisory: true,
+              action: :report,
+              reason:
+                "job `#{job.id}` runs with `if: always()` and judges `needs.*.result`, " <>
+                  "but never says what `cancelled` means. When a newer push cancels the " <>
+                  "run, every need is `cancelled` and the job turns red on a superseded " <>
+                  "head. Use `if: ${{ !cancelled() }}`, or handle `cancelled` explicitly " <>
+                  "if refusing missing evidence is intended."
+            }
+          end
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp always_reads_cancelled_needs?(%Hypatia.Workflow.Job{} = job, jobs) do
+    cond_text = job.if || ""
+    text = job_scalars(job.node)
+
+    # WF029 already reports the artifact form of the same job.
+    # Only a job that can turn red: a non-zero exit or an error annotation.
+    # A summary that just prints the results is harmless.
+    Regex.match?(~r/\balways\(\)/, cond_text) and
+      not excludes_cancellation?(cond_text) and
+      not requires_need_success?(cond_text) and
+      not tolerated_failure?(job) and
+      direct_needs(job) != [] and
+      Regex.match?(~r/\bneeds\.[A-Za-z0-9_-]+\.result\b/, text) and
+      Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)|::error/, text) and
+      not String.contains?(text, "cancelled") and
+      not always_after_cancel?(job, jobs)
+  end
+
+  # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
+  # so the conjunct is a guard. Same structural reading as
+  # excludes_cancellation?/1: `||` or grouping make it uncertain.
+  defp requires_need_success?(cond_text) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+      |> String.replace(~r/\s+/, "")
+
+    not String.contains?(expr, "||") and
+      expr
+      |> String.split("&&")
+      |> Enum.any?(
+        &Regex.match?(~r/\Aneeds\.[A-Za-z0-9_-]+\.result==(?:'success'|"success")\z/, &1)
+      )
+  end
+
+  # Every scalar under a job node, joined: env values, step `run:` and `if:`.
+  defp job_scalars(nil), do: ""
+
+  defp job_scalars(node) do
+    node |> collect_scalars([]) |> Enum.reverse() |> Enum.join("\n")
+  end
+
+  defp collect_scalars(node, acc) do
+    case Hypatia.Kyaml.deref(node) do
+      %{kind: :map, entries: es} ->
+        Enum.reduce(es, acc, fn e, a -> collect_scalars(e.value, collect_scalars(e.key, a)) end)
+
+      %{kind: :seq, items: items} ->
+        Enum.reduce(items, acc, &collect_scalars/2)
+
+      %{value: v} when is_binary(v) ->
+        [v | acc]
+
+      _ ->
+        acc
+    end
   end
 
   # An `if:` that is false once the run is cancelled. Structural, not a
