@@ -971,12 +971,19 @@ defmodule Hypatia.Rules.CiFailureTriage do
   defp strip_line_comment([q | rest], q, acc), do: strip_line_comment(rest, nil, [q | acc])
   defp strip_line_comment([c | rest], q, acc), do: strip_line_comment(rest, q, [c | acc])
 
-  defp quote_can_open?(acc) do
+  # `:` and `-` need YAML's separating space before a quoted scalar
+  # (`scheme:'v` is plain text); a flow `[`, `{` or `,` does not.
+  defp quote_can_open?([]), do: true
+  defp quote_can_open?([c | _]) when c in [?[, ?{, ?,], do: true
+
+  defp quote_can_open?([c | _] = acc) when c in [?\s, ?\t] do
     case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
       [] -> true
       [prev | _] -> prev in [?:, ?-, ?[, ?{, ?,]
     end
   end
+
+  defp quote_can_open?(_acc), do: false
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -1098,28 +1105,45 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # the scanner on a Linux runner (Codex on #1103).
   @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:\s|\\\n)+)["']?([0-9a-fA-F]{40})\b/
 
-  defp walk_pins(label, node) do
+  # Walks the tree with the key that holds each node. `HYPATIA_SHA` counts
+  # only inside an `env:` mapping, and `--hypatia-ref` only inside a `run:`
+  # script with shell comments removed: a `with:` input of that name, a step
+  # `name:` or a `# previously --hypatia-ref …` line sets nothing (Codex on
+  # #1103).
+  defp walk_pins(label, node, holder \\ nil) do
     case node do
       %{kind: :map, entries: es} ->
         Enum.flat_map(es, fn e ->
-          env_pin(label, e) ++ walk_pins(label, e.key) ++ walk_pins(label, e.value)
+          key = e.key |> Hypatia.Kyaml.deref() |> Map.get(:value)
+          here = if holder == "env", do: env_pin(label, e), else: []
+          here ++ run_pins(label, key, e.value) ++ walk_pins(label, e.value, key)
         end)
 
       %{kind: :seq, items: items} ->
         Enum.flat_map(items, &walk_pins(label, &1))
 
-      # An alias is read where its anchor is defined; walking it again here
-      # would count one pin twice.
-      %{kind: :alias} ->
+      _ ->
         []
+    end
+  end
 
+  defp run_pins(label, "run", value) do
+    case Hypatia.Kyaml.deref(value) do
       %{kind: :string, value: v} = scalar when is_binary(v) ->
-        for [{off, _}, {s_off, s_len}] <- Regex.scan(@hypatia_ref_flag, v, return: :index) do
+        lines = String.split(v, "\n")
+        starts = lines |> Enum.scan(0, &(&2 + byte_size(&1) + 1)) |> then(&[0 | &1])
+
+        code =
+          Enum.map_join(lines, "\n", &strip_line_comment(String.to_charlist(&1), nil, []))
+
+        for [{off, _}, {s_off, s_len}] <- Regex.scan(@hypatia_ref_flag, code, return: :index) do
+          k = code |> binary_part(0, off) |> String.split("\n") |> length() |> Kernel.-(1)
+
           %{
             file: label,
             key: "--hypatia-ref",
-            sha: v |> binary_part(s_off, s_len) |> String.downcase(),
-            line: scalar_line(scalar, off)
+            sha: code |> binary_part(s_off, s_len) |> String.downcase(),
+            line: scalar_line(scalar, Enum.at(starts, k))
           }
         end
 
@@ -1127,6 +1151,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
         []
     end
   end
+
+  defp run_pins(_label, _key, _value), do: []
 
   defp env_pin(label, %{key: %{value: "HYPATIA_SHA"}, value: value, loc: {line, _}}) do
     case Hypatia.Kyaml.deref(value) do
@@ -1195,8 +1221,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
 
   # The rule-order policy names the scanner it was written against.
   defp hypatia_policy_pin(label, content) do
-    with {:ok, %{"scanner" => %{"repository" => "hyperpolymath/hypatia", "commit" => c}}}
-         when is_binary(c) <- Jason.decode(content),
+    with {:ok, %{"scanner" => %{"repository" => repo, "commit" => c}}}
+         when is_binary(repo) and is_binary(c) <- Jason.decode(content),
+         "hyperpolymath/hypatia" <- String.downcase(repo),
          true <- Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, c) do
       [%{file: label, key: "scanner.commit", sha: String.downcase(c), line: nil}]
     else

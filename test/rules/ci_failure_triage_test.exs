@@ -717,6 +717,41 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "lc.yml", wf)) == []
     end
 
+    # Codex on #1103, third round.
+    test "a HYPATIA_SHA action input under with: is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - uses: x/y@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        with:\n          HYPATIA_SHA: #{@old}\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "with.yml", wf)) == []
+    end
+
+    test "a flag in a step name is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - name: Test without --hypatia-ref #{@old}\n        run: true\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "name.yml", wf)) == []
+    end
+
+    test "a shell-commented flag in a run script is not a pin" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n          # previously --hypatia-ref #{@old}\n" <>
+          "          grid --hypatia-ref #{@new}\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "sh.yml", wf)) == []
+    end
+
+    test "a policy naming the scanner in another case is still a pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          ".machine_readable/policies/hypatia-rule-order.json",
+          ~s({"scanner":{"commit":"#{@old}","repository":"Hyperpolymath/Hypatia"}})
+        )
+
+      assert Enum.any?(T.check_hypatia_pin_drift(set), &(&1.key == "scanner.commit"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
@@ -779,6 +814,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       }
 
       assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a quote straight after a colon does not open a scalar" do
+      contents = %{
+        "a.yml" => "name: scheme:'value # {PA_SHA: #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert T.check_scanner_pin_drift(contents) == []
     end
 
     test "a quoted pin key is still a pin" do
