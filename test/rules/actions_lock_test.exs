@@ -197,6 +197,23 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert Hypatia.Rules.WorkflowAudit.check_actions_lock_moved_repositories(lock) == []
     end
 
+    # Codex on #1109.
+    test "a new repository at the old name, with another repo_id, is not the moved one" do
+      key = "hyperpolymath/standards@#{@old_sha}"
+      {:ok, parsed} = ActionsLock.parse(lock_with(key, 6_759_885, 1_200_000_001))
+      assert ActionsLock.moved_repository_keys(parsed) == []
+    end
+
+    test "the lookup comes from the shared moved-repositories registry" do
+      for m <- Hypatia.Rules.MovedRepositories.entries() do
+        key = "#{m.former}@#{@old_sha}"
+        {:ok, parsed} = ActionsLock.parse(lock_with(key, 1, m.repo_id))
+        assert [%{reason: :old_name, to: to}] = ActionsLock.moved_repository_keys(parsed)
+        assert to == m.current
+        assert is_integer(m.current_owner_id)
+      end
+    end
+
     test "hypatia's own lock has no moved-repository record" do
       lock = File.read!(Path.expand("../../.github/workflows/actions.lock", __DIR__))
       {:ok, parsed} = ActionsLock.parse(lock)
