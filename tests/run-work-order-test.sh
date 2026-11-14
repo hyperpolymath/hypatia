@@ -22,27 +22,37 @@ pass=0
 ok() { pass=$((pass + 1)); echo "ok   $1"; }
 fail() { echo "FAIL $1" >&2; exit 1; }
 
-# A throw-away checkout with the script, the profile, 1 agent and 3 fixture work orders.
+# A throw-away checkout with the script, the profile, 1 agent, the skill and the fixture work orders.
 repo="$work/repo"
-mkdir -p "$repo/scripts/api-agents" "$repo/.claude/profiles" "$repo/.claude/agents" "$repo/wo"
+mkdir -p "$repo/scripts/api-agents" "$repo/.claude/profiles" "$repo/.claude/agents" "$repo/.claude/skills/e0-work-order" "$repo/wo"
 cp "$here/scripts/api-agents/run-work-order.sh" "$repo/scripts/api-agents/"
 cp "$here/.claude/profiles/e0-headless.json" "$repo/.claude/profiles/"
 printf -- '---\nname: e0-executor\nmodel: sonnet\neffort: medium\n---\nfixture\n' > "$repo/.claude/agents/e0-executor.md"
-order() { # order ID REPO [MODEL]
-  local id=$1 wo_repo=$2 model=${3:-sonnet}
-  printf '= %s: fixture\n:wo-id: %s\n:wo-repo: %s\n:wo-size: small\n:wo-agent: e0-executor\n:wo-model: %s\n:wo-effort: medium\n:wo-cap-usd: 5\n:wo-max-turns: 120\n:wo-branch: fix/x\n:wo-depends: none\n' \
-    "$id" "$id" "$wo_repo" "$model" > "$repo/wo/$id-fixture.adoc"
+printf "%s\n" .env "*.pem" > "$repo/.gitignore" # the fixture ignores secret files, as hypatia does
+skill="$repo/.claude/skills/e0-work-order/SKILL.md"
+echo fixture > "$skill"
+order() { # order ID REPO [MODEL [BRANCH]]
+  local id=$1 wo_repo=$2 model=${3:-sonnet} branch=${4:-fix/x}
+  printf '= %s: fixture\n:wo-id: %s\n:wo-repo: %s\n:wo-size: small\n:wo-agent: e0-executor\n:wo-model: %s\n:wo-effort: medium\n:wo-cap-usd: 5\n:wo-max-turns: 120\n:wo-branch: %s\n:wo-depends: none\n' \
+    "$id" "$id" "$wo_repo" "$model" "$branch" > "$repo/wo/$id-fixture.adoc"
 }
 order E0-98 hyperpolymath/hypatia
 order E0-99 hyperpolymath/gitbot-fleet
 order E0-97 hyperpolymath/hypatia opus # the agent definition says sonnet
 order E0-95 hyperpolymath/hypatia
+order E0-93 hyperpolymath/hypatia sonnet --mirror     # an option of git push, not a branch
+order E0-92 hyperpolymath/hypatia sonnet +HEAD:topic  # a refspec that forces
 sed -i "s/^:wo-id: E0-95$/:wo-id: E0-94/" "$repo/wo/E0-95-fixture.adoc" # the header names another id
-url=https://example.invalid/hyperpolymath/hypatia
+# A local bare repository is the origin, so that the launch script can fetch main from it.
+url="$work/remote/hyperpolymath/hypatia.git"
+mkdir -p "$work/remote/hyperpolymath"
+git init -q --bare "$url"
 git -C "$repo" init -q
 git -C "$repo" remote add origin "$url"
 git -C "$repo" add -A
-git -C "$repo" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false commit -q -m fixture
+commit() { git -C "$repo" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false commit -q "$@"; }
+commit -m fixture
+git -C "$repo" -c push.negotiate=false push -q origin HEAD:main
 
 # A stub claude: it records its arguments and the effort variable, and prints a result.
 mkdir -p "$work/bin"
@@ -58,6 +68,10 @@ chmod +x "$work/bin/claude"
 export STUB_LOG="$work/args.log" HYPATIA_LEDGER="$work/ledger.jsonl" WO_DIR="$repo/wo"
 export PATH="$work/bin:$PATH"
 export CLAUDE_CODE_EFFORT_LEVEL=max # the launch script must not pass this on
+# The test sets the routing variables itself. A Claude Code cloud session sets
+# ANTHROPIC_BASE_URL, and that must not change the result.
+unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE \
+  CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
 : > "$STUB_LOG"
 run() { (cd "$repo" && sh scripts/api-agents/run-work-order.sh "$@"); }
 lines() { if [[ -f "$HYPATIA_LEDGER" ]]; then wc -l < "$HYPATIA_LEDGER"; else echo 0; fi; }
@@ -74,6 +88,8 @@ export ANTHROPIC_API_KEY=test-not-a-real-key
 run E0-98 >/dev/null
 [[ "$(cat "$STUB_LOG")" == *"$want"* ]] && ok "the run passes the model, effort, cap and turns, and reads project settings only" || fail "arguments: $(cat "$STUB_LOG")"
 [[ "$(cat "$STUB_LOG")" == *"effort_env=unset"* ]] && ok "an effort variable of the caller does not reach the run" || fail "effort variable: $(cat "$STUB_LOG")"
+[[ "$(cat "$STUB_LOG")" == *"--allowedTools Bash(git push --no-follow-tags -u origin refs/heads/fix/x:refs/heads/fix/x) --output-format json"* ]] &&
+  ok "the one push rule of the run names the branch of the work order" || fail "push rule: $(cat "$STUB_LOG")"
 line=$(tail -n 1 "$HYPATIA_LEDGER")
 [[ "$(lines)" == 1 ]] && [[ "$(jq -cS . <<<"$line")" == "$line" ]] && ok "one ledger line, in canonical form" || fail "ledger: $line"
 [[ "$(jq -r '[.work_order, .cost_usd, .turns, .exit, .model] | join(" ")' <<<"$line")" == "E0-98 1.25 7 0 sonnet" ]] &&
@@ -89,10 +105,10 @@ line=$(tail -n 1 "$HYPATIA_LEDGER")
   ok "a run with no result still gets a canonical ledger line" || fail "empty output: code $code, line $line"
 
 before=$(calls)
-for bad in E0-96 E0-99 E0-97 E0-95 '../E0-98' 'E0-98;id'; do
+for bad in E0-96 E0-99 E0-97 E0-95 E0-93 E0-92 '../E0-98' 'E0-98;id'; do
   if run "$bad" >/dev/null 2>&1; then fail "accepted $bad"; fi
 done
-[[ "$(calls)" == "$before" ]] && ok "an unknown id, another repo, a model that the agent does not have, a header with another id and an unsafe id are refused" || fail "a refused id reached claude"
+[[ "$(calls)" == "$before" ]] && ok "an unknown id, another repo, a model that the agent does not have, a header with another id, a branch that is an option or a refspec, and an unsafe id are refused" || fail "a refused id reached claude"
 
 if run E0-98 --dryrun >/dev/null 2>&1; then fail "accepted a mistyped option"; fi
 if run E0-98 --dry-run extra >/dev/null 2>&1; then fail "accepted an extra argument"; fi
@@ -112,5 +128,38 @@ rm "$repo/untracked.txt"
 
 if LC_ALL=C run E0-98 >/dev/null 2>&1; then fail "ran with a locale that is not UTF-8"; fi
 [[ "$(calls)" == "$before" ]] && ok "a locale that is not UTF-8 is refused" || fail "a non-UTF-8 locale reached claude"
+
+: > "$repo/.env" # ignored, so the tree is clean, and only the secret check can refuse
+err=$(run E0-98 2>&1 >/dev/null) && fail "ran with a secret file in the checkout"
+rm "$repo/.env"
+[[ "$err" == *"secret file (.env)"* ]] && [[ "$(calls)" == "$before" ]] &&
+  ok "a checkout that holds an ignored secret file is refused" || fail "secret file: $err"
+
+if CLAUDE_CODE_USE_BEDROCK=1 run E0-98 >/dev/null 2>&1; then fail "ran with a provider variable"; fi
+if ANTHROPIC_BASE_URL=https://example.invalid run E0-98 >/dev/null 2>&1; then fail "ran with another endpoint"; fi
+[[ "$(calls)" == "$before" ]] && ok "a provider variable and another endpoint are refused" || fail "a routed run reached claude"
+
+sed -i "s/^:wo-cap-usd: 5$/:wo-cap-usd: 25/" "$repo/wo/E0-98-fixture.adoc"
+commit -a -m "a work order that main does not have"
+if run E0-98 >/dev/null 2>&1; then fail "ran a work order that differs from main"; fi
+# The same from a folder below the top, with a relative work-order folder.
+if (cd "$repo/wo" && WO_DIR=. sh ../scripts/api-agents/run-work-order.sh E0-98) >/dev/null 2>&1; then
+  fail "ran a work order that differs from main, from a folder below the top"
+fi
+git -C "$repo" reset -q --hard HEAD~1
+[[ "$(calls)" == "$before" ]] && ok "a work order that differs from origin/main is refused" || fail "a stale work order reached claude"
+
+mv "$skill" "$skill.off"
+if run E0-98 --dry-run >/dev/null 2>&1; then fail "accepted a checkout without the skill"; fi
+mv "$skill.off" "$skill"
+ok "a checkout without the e0-work-order skill is refused"
+
+# The skill names these commands with no variable part, so each needs its exact rule.
+rules=$(jq -r ".permissions.allow[]" "$here/.claude/profiles/e0-headless.json")
+for cmd in "git fetch origin" "git merge --no-edit origin/main" "mix --version"; do
+  grep -qxF "Bash($cmd)" <<<"$rules" || fail "the profile has no exact rule for: $cmd"
+done
+if grep -q "^Bash(git push" <<<"$rules"; then fail "the profile has a push rule"; fi
+ok "the profile has an exact rule for each fixed command of the skill, and no push rule"
 
 echo "run-work-order: $pass checks passed"

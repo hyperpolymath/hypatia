@@ -58,11 +58,16 @@ successes. For them the raw count is the intended denominator.
   Keep each existing key, so that a consumer does not break. Add new keys.
 . For the anomaly detector, add the verification value to the telemetry
   metadata only if the event already carries the row. Do not add a file read.
+  Do not change what `window/0` returns: `test/anomaly_detector_test.exs`
+  asserts a list of booleans. Put the 2 counts in a new function.
 
 == Acceptance
 
 * Each reader of case 2 returns `claimed` and `qualified` counts, and a test
   shows 3 and 1 for the fixture.
+  For the anomaly detector a new function returns them, and `window/0` has
+  no change. If its event does not carry the verification value, the pull
+  request body lists the detector as not changed, with that reason.
 * No existing key of a report disappears. A test or a grep shows it.
 * `confidence_trend/1` has no change, and the pull request body lists it as
   an open item.
