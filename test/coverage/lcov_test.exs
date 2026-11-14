@@ -94,4 +94,31 @@ defmodule Hypatia.Coverage.LcovTest do
     {:ok, facts} = Lcov.parse(@sample, root: "/ci/work/repo")
     assert Lcov.parse(Lcov.render(facts)) == {:ok, facts}
   end
+
+  describe "declared summaries are checked" do
+    test "BRF must equal the parsed BRDA arms" do
+      text = "SF:x\nDA:1,1\nBRDA:1,0,0,1\nBRDA:1,0,1,0\nBRF:3\nBRH:1\nend_of_record\n"
+      assert {:error, {:parse, "line 7: x: BRF:3 declares 3" <> _}} = Lcov.parse(text)
+      assert {:ok, _} = Lcov.parse(String.replace(text, "BRF:3", "BRF:2"))
+    end
+
+    test "BRF:0 with no arms is valid and measurable; BRF:1 with none is an error" do
+      assert {:ok, %{branch_measurable: true}} =
+               Lcov.parse("SF:x\nDA:1,1\nBRF:0\nend_of_record\n")
+
+      assert {:error, {:parse, _}} = Lcov.parse("SF:x\nDA:1,1\nBRF:1\nend_of_record\n")
+    end
+
+    test "LF must equal the parsed DA lines when present" do
+      assert {:error, {:parse, "line 4: x: LF:2 declares 2" <> _}} =
+               Lcov.parse("SF:x\nDA:1,1\nLF:2\nend_of_record\n")
+
+      assert {:ok, _} = Lcov.parse("SF:x\nDA:1,1\nLF:1\nend_of_record\n")
+    end
+
+    test "a non-numeric or stray summary is an error" do
+      assert {:error, {:parse, _}} = Lcov.parse("SF:x\nBRF:x\nend_of_record\n")
+      assert {:error, {:parse, _}} = Lcov.parse("LF:1\n")
+    end
+  end
 end

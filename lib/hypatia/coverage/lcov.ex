@@ -6,9 +6,10 @@ defmodule Hypatia.Coverage.Lcov do
   Understood records: `SF:`, `DA:line,hits[,checksum]`,
   `BRDA:line,block,branch,taken` (`taken` of `-` means the block was never
   reached and counts as 0) and `end_of_record`. Other records (`TN:`, `FN:`,
-  `FNDA:`, `LF:`, `LH:`, `BRH:` ...) are summary data derived from the
-  above and are ignored, except that a `BRF:` line makes branches measurable
-  even with zero arms (`BRF:0`). This is the plug-in point for Elixir, JS, Julia and
+  `FNDA:`, `LH:`, `BRH:` ...) are summary data derived from the above and
+  are ignored. `BRF:N` makes branches measurable even with zero arms (`BRF:0`);
+  a declared `BRF:N` must equal the number of parsed `BRDA:` arms of that file
+  and a declared `LF:N` the number of `DA:` lines, else it is a parse error. This is the plug-in point for Elixir, JS, Julia and
   Zig later (design §4.1).
 
   A report with no `BRDA:` and no `BRF:` line has `branch_measurable: false`.
@@ -38,13 +39,20 @@ defmodule Hypatia.Coverage.Lcov do
           if cur do
             {:halt, {:error, "line #{n}: SF before end_of_record"}}
           else
-            {:cont, {{Facts.relativise(path, root), Facts.empty_file()}, done, saw_brda}}
+            {:cont, {{Facts.relativise(path, root), Facts.empty_file(), %{}}, done, saw_brda}}
           end
 
         :eor ->
-          if cur,
-            do: {:cont, {nil, [cur | done], saw_brda}},
-            else: {:halt, {:error, "line #{n}: end_of_record with no SF"}}
+          case cur do
+            nil ->
+              {:halt, {:error, "line #{n}: end_of_record with no SF"}}
+
+            {p, f, decl} ->
+              case check_declared(p, f, decl, n) do
+                :ok -> {:cont, {nil, [{p, f} | done], saw_brda}}
+                {:error, why} -> {:halt, {:error, why}}
+              end
+          end
 
         {:da, args} ->
           with_file(cur, n, "DA", fn {p, f} ->
@@ -70,8 +78,8 @@ defmodule Hypatia.Coverage.Lcov do
           end)
           |> step(done, true)
 
-        :brf ->
-          {:cont, {cur, done, true}}
+        {:summary, tag, arg} ->
+          with_decl(cur, n, tag, arg, line) |> step(done, saw_brda or tag == :brf)
       end
     end)
     |> case do
@@ -124,14 +132,44 @@ defmodule Hypatia.Coverage.Lcov do
   defp step({:ok, cur}, done, saw), do: {:cont, {cur, done, saw}}
 
   defp with_file(nil, n, tag, _fun), do: {:error, "line #{n}: #{tag} outside an SF record"}
-  defp with_file(cur, _n, _tag, fun), do: fun.(cur)
+
+  defp with_file({p, f, d}, _n, _tag, fun) do
+    with {:ok, {p, f}} <- fun.({p, f}), do: {:ok, {p, f, d}}
+  end
+
+  # A declared BRF/LF is kept and checked against the parsed arms/lines at end_of_record.
+  defp with_decl(nil, n, tag, _arg, _line),
+    do: {:error, "line #{n}: #{String.upcase(to_string(tag))} outside an SF record"}
+
+  defp with_decl({p, f, d}, n, tag, arg, line) do
+    case Integer.parse(arg) do
+      {v, ""} when v >= 0 -> {:ok, {p, f, Map.put(d, tag, v)}}
+      _ -> {:error, "line #{n}: bad #{String.upcase(to_string(tag))} record #{inspect(line)}"}
+    end
+  end
+
+  defp check_declared(path, f, decl, n) do
+    cond do
+      decl[:brf] != nil and decl[:brf] != map_size(f.branches) ->
+        {:error,
+         "line #{n}: #{path}: BRF:#{decl[:brf]} declares #{decl[:brf]} branch arm(s) but #{map_size(f.branches)} BRDA record(s) were parsed"}
+
+      decl[:lf] != nil and decl[:lf] != map_size(f.lines) ->
+        {:error,
+         "line #{n}: #{path}: LF:#{decl[:lf]} declares #{decl[:lf]} line(s) but #{map_size(f.lines)} DA record(s) were parsed"}
+
+      true ->
+        :ok
+    end
+  end
 
   defp record(""), do: :skip
   defp record("SF:" <> path), do: {:sf, path}
   defp record("end_of_record"), do: :eor
   defp record("DA:" <> rest), do: {:da, rest}
   defp record("BRDA:" <> rest), do: {:brda, rest}
-  defp record("BRF:" <> _), do: :brf
+  defp record("BRF:" <> rest), do: {:summary, :brf, String.trim(rest)}
+  defp record("LF:" <> rest), do: {:summary, :lf, String.trim(rest)}
   defp record(_other), do: :skip
 
   defp parse_da(args) do

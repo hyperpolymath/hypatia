@@ -33,7 +33,8 @@ defmodule Hypatia.Coverage.Evidence do
   5. the kind's requirements (the *overclaim* reasons, COV-E010: the record
      claims a kind it cannot back):
 
-     * `R`: `run.property.seed` present (`:no_seed`) and
+     * `R`: `run.property.generator` a non-empty string (`:no_generator`),
+       `run.property.seed` present (`:no_seed`) and
        `run.property.cases >= min_cases` (`:too_few_cases`); default 100,
        set per repo with the `:min_cases` option. The effective minimum is
        `max(min_cases, 100)`: the floor (design Q8) cannot be lowered
@@ -47,14 +48,20 @@ defmodule Hypatia.Coverage.Evidence do
        check (`:proof_check_not_passed`): `"check": "passed"`,
        `"check": {"outcome": "passed"}` or `"passed": true`; and
        `run.proof.covers_decls` a non-empty list of non-empty strings
-       (`:no_covers_decls`)
+       (`:no_covers_decls`); every rung `checker` must be an approved deductive
+       verifier (idris2, creusot, verus, prusti, spark, agda, lean, coq, rocq;
+       `:unapproved_checker`). Even a complete P record is then not counted in
+       this increment: `:proof_binding_not_implemented` (not an overclaim),
+       because proof hashes are not bound to the checkout (COV-E006) and
+       `covers_decls` are not resolved into line/branch facts yet.
 
   6. mutation (owner ruling Q7), for kinds `R`, `C`, `B` only; `P` is exempt.
      When the record's `language` has a mutation tool (rust, js, ts, javascript, typescript, elixir, julia),
      `run.mutation` must carry `tool` (non-empty string), `killed` (integer >= 1)
      and `survived == 0`; otherwise `:no_mutation_result` (missing or malformed)
-     or `:mutants_survived`. For other languages the condition does not apply
-     and the report notes "mutation: not measurable for <lang>". These are
+     or `:mutants_survived`. For `zig` and `idris2` the condition does not apply
+     and the report notes "mutation: not measurable for <lang>". Any other,
+     missing or misspelled language is `:unknown_language` (never fails open). These are
      ordinary not-counted reasons, not overclaims.
 
   The mutation check is a deliberate simplification: design §2 states it per
@@ -85,10 +92,17 @@ defmodule Hypatia.Coverage.Evidence do
     :empty_ladder,
     :incomplete_rung,
     :proof_check_not_passed,
-    :no_covers_decls
+    :no_covers_decls,
+    :unapproved_checker,
+    :no_generator
   ]
 
   @mutation_languages ~w(rust js ts javascript typescript elixir julia)
+  @no_mutation_languages ~w(zig idris2)
+  @known_languages @mutation_languages ++ @no_mutation_languages
+
+  # Deductive verifiers that count as proof (design §2.2). Bounded checkers (kani, tla ...) do not.
+  @approved_checkers ~w(idris2 creusot verus prusti spark agda lean coq rocq)
 
   @doc "The schema string records must carry (when they carry one)."
   def schema, do: @schema
@@ -271,6 +285,19 @@ defmodule Hypatia.Coverage.Evidence do
     do: "proof rung missing theorem, file, line, checker, checker version or statement hash"
 
   def reason_text(:proof_check_not_passed), do: "proof rung with no passed checker result"
+
+  def reason_text(:unknown_language),
+    do: "evidence language missing or not recognised; the mutation condition cannot be decided"
+
+  def reason_text(:no_generator), do: "property test with no generator recorded"
+
+  def reason_text(:unapproved_checker),
+    do: "proof checker is not an approved deductive verifier (bounded checkers do not count as P)"
+
+  def reason_text(:proof_binding_not_implemented),
+    do:
+      "proof record complete, but binding to source (COV-E006) and declaration coverage are not built yet; not counted in this increment"
+
   def reason_text(:no_covers_decls), do: "proof claim with no covered declarations (covers_decls)"
 
   def reason_text(:no_mutation_result),
@@ -292,9 +319,17 @@ defmodule Hypatia.Coverage.Evidence do
     cases = dig(r, ["run", "property", "cases"])
 
     cond do
-      not present?(seed) -> {:not_counted, :no_seed}
-      not (is_integer(cases) and cases >= min_cases) -> {:not_counted, :too_few_cases}
-      true -> mutation(r)
+      not present?(seed) ->
+        {:not_counted, :no_seed}
+
+      not present_string?(dig(r, ["run", "property", "generator"])) ->
+        {:not_counted, :no_generator}
+
+      not (is_integer(cases) and cases >= min_cases) ->
+        {:not_counted, :too_few_cases}
+
+      true ->
+        mutation(r)
     end
   end
 
@@ -323,7 +358,10 @@ defmodule Hypatia.Coverage.Evidence do
           not Enum.all?(ladder, &complete_rung?/1) -> {:not_counted, :incomplete_rung}
           not Enum.all?(ladder, &rung_passed?/1) -> {:not_counted, :proof_check_not_passed}
           not covers_decls?(r) -> {:not_counted, :no_covers_decls}
-          true -> :counted
+          not Enum.all?(ladder, &approved_checker?/1) -> {:not_counted, :unapproved_checker}
+          # Hashes are not yet bound to the checkout (COV-E006) and covers_decls are not yet
+          # resolved into line/branch facts, so no P record counts in this increment.
+          true -> {:not_counted, :proof_binding_not_implemented}
         end
 
       _ ->
@@ -342,6 +380,11 @@ defmodule Hypatia.Coverage.Evidence do
 
   defp complete_rung?(_), do: false
 
+  defp approved_checker?(%{"checker" => c}) when is_binary(c),
+    do: String.downcase(String.trim(c)) in @approved_checkers
+
+  defp approved_checker?(_), do: false
+
   defp covers_decls?(r) do
     case dig(r, ["run", "proof", "covers_decls"]) do
       [_ | _] = l -> Enum.all?(l, &present_string?/1)
@@ -351,23 +394,29 @@ defmodule Hypatia.Coverage.Evidence do
 
   # Mutation condition (Q7), record level.
   defp mutation(r) do
-    if language(r) in @mutation_languages do
-      m = dig(r, ["run", "mutation"])
-      killed = dig(m, ["killed"])
-      survived = dig(m, ["survived"])
+    lang = language(r)
 
-      cond do
-        is_integer(survived) and survived > 0 ->
-          {:not_counted, :mutants_survived}
+    cond do
+      lang not in @known_languages -> {:not_counted, :unknown_language}
+      lang in @mutation_languages -> mutation_result(r)
+      true -> :counted
+    end
+  end
 
-        present_string?(dig(m, ["tool"])) and is_integer(killed) and killed >= 1 and survived == 0 ->
-          :counted
+  defp mutation_result(r) do
+    m = dig(r, ["run", "mutation"])
+    killed = dig(m, ["killed"])
+    survived = dig(m, ["survived"])
 
-        true ->
-          {:not_counted, :no_mutation_result}
-      end
-    else
-      :counted
+    cond do
+      is_integer(survived) and survived > 0 ->
+        {:not_counted, :mutants_survived}
+
+      present_string?(dig(m, ["tool"])) and is_integer(killed) and killed >= 1 and survived == 0 ->
+        :counted
+
+      true ->
+        {:not_counted, :no_mutation_result}
     end
   end
 

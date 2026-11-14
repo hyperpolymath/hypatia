@@ -119,6 +119,7 @@ Conditions: the checker passed in this run or on a cached content hash; no `#[tr
 or equivalent inside the covered function; the contract names the function.
 *Bounded* checkers (Kani, bounded model checking, TLA+ with a finite model) do not count as P. They count as R,
 with the bound recorded in place of the case count.
+In the first increment no P record counts: proof hashes are not yet bound to the checkout (COV-E006) and `covers_decls` are not yet resolved into line/branch facts, so complete P records are reported as `proof_binding_not_implemented`.
 Every evidence record that is *not* counted carries a `not_counted_reason` (see §8). Nothing is silently dropped.
 
 == 3. Data model

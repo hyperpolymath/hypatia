@@ -126,9 +126,53 @@ defmodule Hypatia.Coverage.ReportTest do
       refute md =~ "0.0%"
     end
 
-    test "when only the proven run lacks branch data the pair is not measurable" do
-      v = build(%{proven: cov("llvm_proven_nobranch.json")})
-      assert v["branch"]["measurable"] == false
+    test "branch data in one run only is UNJUDGED (COV-E012), either way round" do
+      for overrides <- [
+            %{proven: cov("llvm_proven_nobranch.json")},
+            %{raw: cov("llvm_raw_nobranch.json")}
+          ] do
+        v = build(overrides)
+        assert v["outcome"] == "UNJUDGED"
+        assert "COV-E012" in codes(v)
+        assert one(v, "COV-E012")["message"] =~ "instrumented differently"
+        assert Report.to_markdown(v) =~ "**COV-E012**"
+      end
+    end
+
+    test "complete P records are not counted and not an overclaim" do
+      {:ok, records} = evidence()
+
+      p =
+        %{
+          "id" => "p2",
+          "repo" => "example/demo",
+          "commit" => @sha,
+          "language" => "rust",
+          "kind" => "P",
+          "fixtures" => %{"cannot_fail_by_design" => "proof"},
+          "run" => %{
+            "outcome" => "passed",
+            "proof" => %{
+              "covers_decls" => ["Demo.f"],
+              "ladder" => [
+                %{
+                  "theorem" => "t",
+                  "file" => "f.idr",
+                  "line" => 1,
+                  "checker" => "idris2",
+                  "checker_version" => "0.7",
+                  "statement_sha256" => String.duplicate("a", 64),
+                  "check" => "passed"
+                }
+              ]
+            }
+          }
+        }
+
+      v = build(%{evidence: {:ok, records ++ [p]}})
+      nc = Enum.find(v["evidence"]["not_counted"], &(&1["name"] == "p2"))
+      assert nc["reason"] == "proof_binding_not_implemented" and nc["overclaim"] == false
+      assert v["evidence"]["counted"] == 2
     end
   end
 
@@ -500,7 +544,10 @@ defmodule Hypatia.Coverage.ReportTest do
       "commit" => @sha,
       "test_id" => %{"name" => "p"},
       "fixtures" => %{"silence" => "s", "firing" => %{"source" => "f"}},
-      "run" => %{"outcome" => "passed", "property" => %{"seed" => "1", "cases" => 100}}
+      "run" => %{
+        "outcome" => "passed",
+        "property" => %{"generator" => "g", "seed" => "1", "cases" => 100}
+      }
     }
   end
 end

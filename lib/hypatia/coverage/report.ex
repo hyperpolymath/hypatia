@@ -38,6 +38,9 @@ defmodule Hypatia.Coverage.Report do
   | COV-E005 | zero counted evidence |
   | COV-E010 | evidence record claims a kind it cannot back (flagged, not fatal) |
   | COV-E011 | proven run covers something the raw run does not (proven must be a subset of raw) |
+  | COV-E012 | raw and proven runs were instrumented differently (branch data in one only) |
+
+  COV-E012 is raised when exactly one of the raw and proven runs has branch data.
 
   COV-E004 (branches not measurable) is reported as a note, not applied as a
   verdict reason, in this increment.
@@ -47,7 +50,7 @@ defmodule Hypatia.Coverage.Report do
 
   @cap 50
   @sample 5
-  @unjudging ["COV-E001", "COV-E002", "COV-E003", "COV-E005", "COV-E011"]
+  @unjudging ["COV-E001", "COV-E002", "COV-E003", "COV-E005", "COV-E011", "COV-E012"]
 
   # -- loading -------------------------------------------------------------
 
@@ -143,7 +146,21 @@ defmodule Hypatia.Coverage.Report do
     incons = if raw && proven, do: inconsistency(raw, proven), else: nil
     incons_reasons = if incons, do: [incons.reason], else: []
 
-    reasons = raw_reasons ++ proven_reasons ++ ev_reasons ++ path_reasons ++ incons_reasons
+    instr_reasons =
+      if raw && proven && raw.branch_measurable != proven.branch_measurable,
+        do: [
+          reason(
+            "COV-E012",
+            "raw and proven runs were instrumented differently (branch data in one only)",
+            %{raw_branches: raw.branch_measurable, proven_branches: proven.branch_measurable}
+          )
+        ],
+        else: []
+
+    reasons =
+      raw_reasons ++
+        proven_reasons ++ ev_reasons ++ path_reasons ++ incons_reasons ++ instr_reasons
+
     unjudged? = Enum.any?(reasons, &(&1.code in @unjudging))
 
     both? = raw != nil and proven != nil

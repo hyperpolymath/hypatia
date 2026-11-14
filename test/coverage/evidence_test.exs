@@ -32,7 +32,10 @@ defmodule Hypatia.Coverage.EvidenceTest do
   end
 
   defp prop(overrides \\ %{}),
-    do: rec("R", %{"property" => Map.merge(%{"seed" => "42", "cases" => 100}, overrides)})
+    do:
+      rec("R", %{
+        "property" => Map.merge(%{"generator" => "g", "seed" => "42", "cases" => 100}, overrides)
+      })
 
   defp conf(overrides \\ %{}) do
     base = %{
@@ -72,14 +75,16 @@ defmodule Hypatia.Coverage.EvidenceTest do
       assert Evidence.counted?(bench(true)) == :counted
     end
 
-    test "P with a complete, passed ladder (three accepted spellings of 'passed')" do
-      assert Evidence.counted?(proof([@rung])) == :counted
-
-      assert Evidence.counted?(proof([Map.put(@rung, "check", %{"outcome" => "passed"})])) ==
-               :counted
+    test "P never counts in this increment, even when complete (three spellings of 'passed')" do
+      nc = {:not_counted, :proof_binding_not_implemented}
+      assert Evidence.counted?(proof([@rung])) == nc
+      assert Evidence.counted?(proof([Map.put(@rung, "check", %{"outcome" => "passed"})])) == nc
 
       assert Evidence.counted?(proof([@rung |> Map.delete("check") |> Map.put("passed", true)])) ==
-               :counted
+               nc
+
+      refute Evidence.overclaim?(nc)
+      assert Evidence.reason_text(:proof_binding_not_implemented) =~ "COV-E006"
     end
 
     test "a cannot_fail_by_design fixture is admissible" do
@@ -264,10 +269,50 @@ defmodule Hypatia.Coverage.EvidenceTest do
     end
 
     test "languages without a tool, and P, are exempt" do
-      for l <- ["zig", "idris2", "unknown", nil, 5],
+      for l <- ["zig", "idris2", "IDRIS2"],
           do: assert(Evidence.counted?(lang(prop(), l)) == :counted)
 
-      assert Evidence.counted?(lang(proof([@rung]), "rust")) == :counted
+      assert Evidence.counted?(lang(proof([@rung]), "rust")) ==
+               {:not_counted, :proof_binding_not_implemented}
+    end
+  end
+
+  describe "language, generator, checker" do
+    test "unknown, missing or misspelled language never fails open" do
+      for l <- ["cobol", "rsut", "", nil, 5, %{}] do
+        for r <- [prop(), conf(), bench(true)] do
+          assert Evidence.counted?(lang(r, l)) == {:not_counted, :unknown_language}, inspect(l)
+        end
+      end
+
+      assert Evidence.counted?(Map.delete(prop(), "language")) ==
+               {:not_counted, :unknown_language}
+
+      assert Evidence.counted?(lang(prop(), "idris2")) == :counted
+      refute Evidence.overclaim?({:not_counted, :unknown_language})
+    end
+
+    test "R needs a generator (overclaim)" do
+      for g <- [nil, "", " ", 3] do
+        r = prop(%{"generator" => g})
+        assert Evidence.counted?(r) == {:not_counted, :no_generator}
+      end
+
+      assert Evidence.overclaim?({:not_counted, :no_generator})
+    end
+
+    test "P checker must be an approved deductive verifier" do
+      for c <- ~w(kani tla echo) do
+        assert Evidence.counted?(proof([%{@rung | "checker" => c}])) ==
+                 {:not_counted, :unapproved_checker}
+      end
+
+      for c <- ~w(idris2 creusot verus prusti spark agda lean coq rocq Lean COQ) do
+        assert Evidence.counted?(proof([%{@rung | "checker" => c}])) ==
+                 {:not_counted, :proof_binding_not_implemented}
+      end
+
+      assert Evidence.overclaim?({:not_counted, :unapproved_checker})
     end
   end
 
@@ -403,6 +448,10 @@ defmodule Hypatia.Coverage.EvidenceTest do
           proof([%{}]),
           proof([Map.delete(@rung, "check")]),
           proof([@rung], []),
+          proof([%{@rung | "checker" => "kani"}]),
+          proof([@rung]),
+          prop(%{"generator" => nil}),
+          lang(prop(), "cobol"),
           lang(prop(), "rust"),
           lang(prop(), "rust") |> mut(%{@mut | "survived" => 1}),
           rec("E"),
@@ -427,6 +476,8 @@ defmodule Hypatia.Coverage.EvidenceTest do
                    :unknown_kind,
                    :not_passed,
                    :no_mutation_result,
+                   :unknown_language,
+                   :proof_binding_not_implemented,
                    :mutants_survived
                  ] ++
                    Evidence.overclaim_reasons()
