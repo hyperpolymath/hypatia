@@ -32,7 +32,10 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   setup do
     original = Application.fetch_env!(:hypatia, :verisimdb_data_path)
     assert String.contains?(Path.expand(original), "/_build/test/verisim-data")
-    root = Path.join(System.tmp_dir!(), "hypatia-model-source-#{System.unique_integer([:positive])}")
+
+    root =
+      Path.join(System.tmp_dir!(), "hypatia-model-source-#{System.unique_integer([:positive])}")
+
     first = Path.join(root, "first")
     second = Path.join(root, "second")
 
@@ -73,7 +76,8 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     refute File.exists?(Path.join(ctx.first, "neural-states"))
   end
 
-  test "an in-flight root change refuses the updated model and latches the original source", ctx do
+  test "an in-flight root change refuses the updated model and latches the original source",
+       ctx do
     state = Map.merge(SourceStore.fields(), %{model: :original})
 
     assert {:error, {:source_store_changed, first, second}, blocked} =
@@ -107,8 +111,10 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   test "an actual ready cohort can analyze, train and persist its own source", ctx do
     write_training_store(ctx.first)
     {server, _cohort} = coordinator()
+
     assert %{source_store: source, source_status: :ready, network_count: 8} =
              Coordinator.analyze(@finding, server)
+
     assert source == ctx.first
     assert :ok = Coordinator.force_cycle(server)
     assert {:ok, %{cycle_count: 1}} = barrier(server, ctx.first)
@@ -129,7 +135,8 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     refute File.exists?(Path.join(ctx.second, "neural-states"))
   end
 
-  test "running A cannot answer, learn or persist as empty B and cannot resume by switching back", ctx do
+  test "running A cannot answer, learn or persist as empty B and cannot resume by switching back",
+       ctx do
     write_training_store(ctx.first)
     {server, _cohort} = coordinator()
     assert :ok = Coordinator.force_cycle(server)
@@ -178,8 +185,10 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     refute File.exists?(Path.join(ctx.second, "neural-states"))
 
     {second_server, _cohort} = coordinator()
+
     assert %{source_status: :ready, rbf: %{trained: false}, esn: %{trained: false}} =
              Coordinator.health_report(second_server)
+
     assert :ok = Coordinator.force_cycle(second_server)
     assert {:ok, %{cycle_count: 1}} = barrier(second_server, ctx.second)
     second_state = :sys.get_state(second_server)
@@ -195,8 +204,14 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   test "queued admission and execution use the same captured source", ctx do
     cohort = isolated_cohort()
     assert {:ok, state} = Coordinator.init(cohort)
+
     assert {:reply, :ok, admitted} =
-             Coordinator.handle_call({:queue, ctx.first, :force_cycle}, {self(), make_ref()}, state)
+             Coordinator.handle_call(
+               {:queue, ctx.first, :force_cycle},
+               {self(), make_ref()},
+               state
+             )
+
     assert_receive {:source_bound, source, :force_cycle} = queued
     assert source == ctx.first
 
@@ -212,23 +227,31 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   test "a stale A request cannot be admitted by a fresh B lifecycle", ctx do
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
     {server, _cohort} = coordinator()
+
     assert {:error, {:request_source_mismatch, first, second}} =
              GenServer.call(server, {:queue, ctx.first, :force_cycle})
+
     assert {first, second} == {ctx.first, ctx.second}
     assert {:ok, %{cycle_count: 0, source_status: :ready}} = Coordinator.status(server)
     refute File.exists?(Path.join(ctx.second, "neural-states"))
   end
 
-  test "named models refuse unbound and foreign restoration and expose a blocked lifecycle", ctx do
+  test "named models refuse unbound and foreign restoration and expose a blocked lifecycle",
+       ctx do
     cohort = isolated_cohort()
 
     for {_name, server} <- Keyword.fetch!(cohort, :named_networks) do
       assert {:ok, own} = GenServer.call(server, {:snapshot, ctx.first})
       assert :ok = GenServer.call(server, {:restore, ctx.first, own})
+
       assert {:error, :unbound_or_foreign_snapshot} =
                GenServer.call(server, {:restore, ctx.first, Map.delete(own, "source_schema")})
+
       assert {:error, :unbound_or_foreign_snapshot} =
-               GenServer.call(server, {:restore, ctx.first, Map.put(own, "source_store", ctx.second)})
+               GenServer.call(
+                 server,
+                 {:restore, ctx.first, Map.put(own, "source_store", ctx.second)}
+               )
     end
 
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
@@ -257,6 +280,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
     assert {:error, {:cohort_source_mismatch, :sequence, {:process_unavailable, _}}} =
              Persistence.save_all(before)
+
     refute File.exists?(Path.join(ctx.first, "neural-states"))
 
     assert {:error, {:neural_source_unavailable, details}} = Coordinator.status(server)
@@ -303,16 +327,26 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert {:ok, gnn} = GenServer.call(networks.gnn, {:snapshot, ctx.first})
     assert {:ok, vae} = GenServer.call(networks.vae, {:snapshot, ctx.first})
     embeddings = %{"fixture-agent" => [0.25]}
-    write_json(Path.join([ctx.first, "neural-states", "gnn.json"]),
-      Map.put(gnn, "node_embeddings", embeddings))
-    write_json(Path.join([ctx.first, "neural-states", "vae.json"]),
-      Map.put(vae, "cluster_labels", 42))
+
+    write_json(
+      Path.join([ctx.first, "neural-states", "gnn.json"]),
+      Map.put(gnn, "node_embeddings", embeddings)
+    )
+
+    write_json(
+      Path.join([ctx.first, "neural-states", "vae.json"]),
+      Map.put(vae, "cluster_labels", 42)
+    )
+
     before_files = snapshot_bytes(ctx.first)
     server = start_coordinator(cohort)
 
-    assert %{source_status: :blocked,
-             source_error: {:source_initialization_incomplete, {:neural_operation_failed, _}}} =
+    assert %{
+             source_status: :blocked,
+             source_error: {:source_initialization_incomplete, {:neural_operation_failed, _}}
+           } =
              :sys.get_state(server)
+
     assert {:ok, partially_restored} = GenServer.call(networks.gnn, {:snapshot, ctx.first})
     assert partially_restored["node_embeddings"] == embeddings
     assert {:ok, _} = Persistence.collect_named(ctx.first, networks)
@@ -365,10 +399,13 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
     second_board = Keyword.fetch!(isolated_cohort(), :blackboard)
     assert {:ok, _} = Blackboard.start_round_source(ctx.second, second_board)
+
     assert {:error, {:request_source_mismatch, _, _}} =
              Blackboard.write_source(ctx.first, :fixture, :value, :from_a, second_board)
+
     assert :not_found = Blackboard.read_source(ctx.second, :fixture, :value, second_board)
     assert {:ok, %{entry_count: 0}} = Blackboard.snapshot_source(ctx.second, second_board)
+
     assert {:error, {:source_store_changed, _, _}} =
              Blackboard.write_source(ctx.first, :fixture, :value, :late, first_board)
   end
@@ -382,6 +419,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
     assert {:error, :foreign_blackboard_entry} =
              Blackboard.read_source(ctx.first, :fixture, :legacy, board)
+
     assert {:error, :foreign_blackboard_entry} = Blackboard.snapshot_source(ctx.first, board)
     assert :sys.get_state(board).source_error == :foreign_blackboard_entry
 
@@ -392,8 +430,15 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
   test "captured training, trust language context and strategy reads cannot switch to B", ctx do
     write_training_store(ctx.first)
-    write_json(Path.join([ctx.first, "scans", "fixture-repo.json"]), %{"primary_language" => "rust"})
-    write_json(Path.join([ctx.second, "scans", "fixture-repo.json"]), %{"primary_language" => "elixir"})
+
+    write_json(Path.join([ctx.first, "scans", "fixture-repo.json"]), %{
+      "primary_language" => "rust"
+    })
+
+    write_json(Path.join([ctx.second, "scans", "fixture-repo.json"]), %{
+      "primary_language" => "elixir"
+    })
+
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
 
     assert TrainingPipeline.build_esn_training_data() == []
@@ -406,16 +451,32 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     pinned = GraphOfTrust.build_from_store(ctx.first)
     assert pinned.language_clusters[:systems] == ["fixture-repo"]
     assert GraphOfTrust.trust_score(pinned, "recipe-source-fixture") > 0.5
-    assert OutcomeTracker.annealed_strategy_from_store("recipe-source-fixture", :auto_execute, ctx.first) ==
+
+    assert OutcomeTracker.annealed_strategy_from_store(
+             "recipe-source-fixture",
+             :auto_execute,
+             ctx.first
+           ) ==
              :auto_execute
-    assert OutcomeTracker.annealed_strategy_from_store("recipe-source-fixture", :auto_execute, ctx.second) ==
+
+    assert OutcomeTracker.annealed_strategy_from_store(
+             "recipe-source-fixture",
+             :auto_execute,
+             ctx.second
+           ) ==
              :report_only
+
     refute File.exists?(Path.join(ctx.first, "annealing-states"))
     refute File.exists?(Path.join(ctx.second, "annealing-states"))
   end
 
   test "Kin requires a ready source assessment and preserves manual-review tiers", ctx do
-    action = %{pattern_id: "recipe-source-fixture", dispatch_tier: :auto_execute, confidence: 0.99}
+    action = %{
+      pattern_id: "recipe-source-fixture",
+      dispatch_tier: :auto_execute,
+      confidence: 0.99
+    }
+
     ready = %{
       source_store: ctx.first,
       source_status: :ready,
@@ -423,6 +484,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       strategy: :auto_execute,
       is_novel: false
     }
+
     assert :pass = Gate.neural_consensus(action, fn _ -> ready end)
 
     for result <- [
@@ -541,8 +603,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     mixed = Monitor.record_observations(state, components ++ [{:error, :pipeline_crashed}])
     assert Monitor.finish_observations(mixed, notify, recover) == mixed
 
-    assert_receive {:fixture_notification,
-                    [{:failure, ^reason}, {:failure, :pipeline_crashed}]}
+    assert_receive {:fixture_notification, [{:failure, ^reason}, {:failure, :pipeline_crashed}]}
 
     assert_receive {:fixture_recovery_pass, [{:failure, :pipeline_crashed}]}
     refute_received {:fixture_notification, _}
@@ -581,8 +642,10 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert length(after_event.lsm.history) == length(before.lsm.history) + 1
     sequence = Keyword.fetch!(cohort, :named_networks).sequence
     assert {:ok, snapshot} = GenServer.call(sequence, {:snapshot, ctx.first})
+
     assert [%{finding: @finding, outcome: "failure", confidence: confidence}] =
              snapshot["sequence_buffer"]
+
     assert is_number(confidence)
     refute File.exists?(Path.join(ctx.first, "neural-states"))
   end
@@ -616,7 +679,13 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     server = Process.whereis(Coordinator)
     assert is_pid(server)
     :ok = :sys.suspend(server)
-    action = %{pattern_id: "recipe-source-fixture", dispatch_tier: :auto_execute, confidence: 0.99}
+
+    action = %{
+      pattern_id: "recipe-source-fixture",
+      dispatch_tier: :auto_execute,
+      confidence: 0.99
+    }
+
     task = Task.async(fn -> Gate.neural_consensus(action) end)
 
     result =
@@ -668,6 +737,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     monitor = Process.monitor(missing)
     assert_receive {:DOWN, ^monitor, :process, ^missing, _}
     refute LearningScheduler.trigger_neural_cycle(missing)
+
     assert {:error, :neural_unavailable} =
              FleetDispatcher.record_neural_outcome(@finding, "failure", missing)
   end
@@ -701,7 +771,9 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   end
 
   test "canonical pattern is an explicit identity but cannot mask a malformed recipe_id" do
-    canonical = qualified_row() |> Map.delete("recipe_id") |> Map.put("pattern", "recipe-source-fixture")
+    canonical =
+      qualified_row() |> Map.delete("recipe_id") |> Map.put("pattern", "recipe-source-fixture")
+
     recipes = [%{"id" => "recipe-source-fixture"}]
     assert length(GraphOfTrust.build([canonical], recipes).edges) == 3
 
@@ -718,7 +790,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
         {name, Map.get_lazy(overrides, name, fn -> isolated_process(module, []) end)}
       end)
 
-    [named_networks: networks, blackboard: isolated_process(Blackboard, [isolated: true])]
+    [named_networks: networks, blackboard: isolated_process(Blackboard, isolated: true)]
   end
 
   defp named_sequence(name) do
@@ -767,9 +839,11 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
     # Small real reservoirs bound test cost; model training still executes.
     :sys.replace_state(server, fn state ->
-      %{state |
-        esn: EchoStateNetwork.init(reservoir_size: 4, seed: 17),
-        lsm: LiquidStateMachine.init(reservoir_size: 4, seed: 17)}
+      %{
+        state
+        | esn: EchoStateNetwork.init(reservoir_size: 4, seed: 17),
+          lsm: LiquidStateMachine.init(reservoir_size: 4, seed: 17)
+      }
     end)
 
     server
@@ -795,12 +869,24 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   defp write_training_store(root) do
     write_json(Path.join([root, "recipes", "fixture.json"]), %{"id" => "recipe-source-fixture"})
     rows = List.duplicate(qualified_row(), 71)
-    File.write!(Path.join([root, "outcomes", "fixture.jsonl"]), Enum.map_join(rows, "", &(Jason.encode!(&1) <> "\n")))
+
+    File.write!(
+      Path.join([root, "outcomes", "fixture.jsonl"]),
+      Enum.map_join(rows, "", &(Jason.encode!(&1) <> "\n"))
+    )
+
     patterns =
       for index <- 1..5 do
-        %{"id" => "pattern-#{index}", "severity" => "high", "category" => "CommandInjection",
-          "triangle_tier" => "eliminate", "frequency" => index / 5, "age_days" => index}
+        %{
+          "id" => "pattern-#{index}",
+          "severity" => "high",
+          "category" => "CommandInjection",
+          "triangle_tier" => "eliminate",
+          "frequency" => index / 5,
+          "age_days" => index
+        }
       end
+
     write_json(Path.join([root, "patterns", "registry.json"]), %{"patterns" => patterns})
   end
 

@@ -1213,7 +1213,11 @@ defmodule Hypatia.OutcomeTracker do
 
     # Resolve the default from the captured root, not a second runtime read.
     annealing_dir =
-      Application.get_env(:hypatia, :annealing_state_path, Path.join(data_root, "annealing-states"))
+      Application.get_env(
+        :hypatia,
+        :annealing_state_path,
+        Path.join(data_root, "annealing-states")
+      )
       |> Path.expand()
 
     %{data_root: data_root, annealing_dir: annealing_dir}

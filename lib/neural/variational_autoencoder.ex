@@ -67,7 +67,9 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
   def state, do: GenServer.call(__MODULE__, :get_state)
 
   @doc "Restore state from a previously snapshotted map."
-  def restore(map) when is_map(map), do: GenServer.call(__MODULE__, {:restore, SourceStore.current(), map})
+  def restore(map) when is_map(map),
+    do: GenServer.call(__MODULE__, {:restore, SourceStore.current(), map})
+
   def restore(_), do: {:error, :unbound_snapshot}
 
   @impl true
@@ -90,7 +92,10 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
         context_size: map_size(context.networks)
       }
 
-      SourceStore.accept!(Blackboard.write_source(source, :vae, :interpretation, result, blackboard))
+      SourceStore.accept!(
+        Blackboard.write_source(source, :vae, :interpretation, result, blackboard)
+      )
+
       SourceStore.accept!(Blackboard.write_source(source, :vae, :latent, latent, blackboard))
 
       {result, state}
@@ -148,5 +153,4 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
 
     SourceStore.tag(snap, state)
   end
-
 end

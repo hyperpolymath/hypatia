@@ -234,19 +234,19 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 
 == Retained, with the reason
 
-One `.a2ml` file stays, because a live reader outside this repository's
-control still needs exactly that input, and it has no deed form to move to.
+One `.a2ml` file stays, because the input it copies has no deed form to
+move to yet.
+
+`audits/assail-classifications.a2ml` was retained here until panic-attack
+could read a deed. It now reads `audits/assail-classifications_praxis.deed`
+first and keeps its two A2ML names only as a fallback for repositories that
+have not moved (`load_user_classifications` in its assail module; the
+panic-attack commit that `estate-rescan.yml` and `bridge-gate.yml` pin as
+`PA_SHA` carries it). The file is removed; its row is in the table above.
 
 [cols="3,5",options="header"]
 |===
 | Path | Why it stays
-
-| `audits/assail-classifications.a2ml`
-| panic-attack (>= 2.5.5, `load_user_classifications` in its assail
-module) reads only `audits/assail-classifications.a2ml` or
-`.panic-attack-classifications.a2ml`. No mapping spec covers it and
-panic-attack has no deed reader, so deleting it would unsuppress the audited
-findings it records. It goes when panic-attack reads a deed form first.
 
 | `test/fixtures/a2ml/rsr-criteria-v2.a2ml`
 | A dogfood copy of the RSR v2.0 criteria, whose canon
