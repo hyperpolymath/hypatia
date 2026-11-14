@@ -167,8 +167,8 @@ defmodule Hypatia.Coverage.LlvmCov do
 
   defp segment?([l, c, n, hc, e, g]),
     do:
-      is_integer(l) and is_integer(c) and is_integer(n) and is_boolean(hc) and is_boolean(e) and
-        is_boolean(g)
+      is_integer(l) and l >= 1 and is_integer(c) and c >= 1 and is_integer(n) and n >= 0 and
+        is_boolean(hc) and is_boolean(e) and is_boolean(g)
 
   defp segment?(_), do: false
 

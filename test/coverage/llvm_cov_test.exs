@@ -167,6 +167,19 @@ defmodule Hypatia.Coverage.LlvmCovTest do
     end
   end
 
+  describe "out-of-range segment values" do
+    test "line 0, negative line or negative count is a parse error" do
+      for seg <- [
+            [0, 1, 1, true, true, false],
+            [-3, 1, 1, true, true, false],
+            [2, 1, -1, true, true, false]
+          ] do
+        doc = %{"data" => [%{"files" => [%{"filename" => "a.rs", "segments" => [seg]}]}]}
+        assert {:error, {:parse, _}} = LlvmCov.from_document(doc, []), inspect(seg)
+      end
+    end
+  end
+
   describe "declared lines: tolerant truncation guard (COV-E002)" do
     defp with_file(fun) do
       doc = @fixtures |> Path.join("llvm_raw_nobranch.json") |> File.read!() |> Jason.decode!()

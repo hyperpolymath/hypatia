@@ -106,6 +106,17 @@ defmodule Hypatia.Coverage.EvidenceTest do
     end
   end
 
+  describe "malformed conformance hash" do
+    test "vectors_sha256 must be 64 hex characters" do
+      for bad <- ["x", %{}, String.duplicate("g", 64), String.duplicate("a", 63)],
+          do:
+            assert(
+              Evidence.counted?(conf(%{"vectors_sha256" => bad})) ==
+                {:not_counted, :no_vectors_sha256}
+            )
+    end
+  end
+
   describe "not counted: general" do
     test "proven-run membership must be affirmative, whichever collector wrote it" do
       assert Evidence.counted?(Map.delete(prop(), "in_proven_run")) ==
@@ -171,6 +182,10 @@ defmodule Hypatia.Coverage.EvidenceTest do
     test "no seed" do
       assert Evidence.counted?(prop(%{"seed" => nil})) == {:not_counted, :no_seed}
       assert Evidence.counted?(prop(%{"seed" => ""})) == {:not_counted, :no_seed}
+
+      for bad <- [true, [], %{}, 1.5, "  "],
+          do: assert(Evidence.counted?(prop(%{"seed" => bad})) == {:not_counted, :no_seed})
+
       assert Evidence.counted?(rec("R")) == {:not_counted, :no_seed}
     end
 
