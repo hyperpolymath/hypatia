@@ -115,6 +115,11 @@ The caps add up to $147. The estimate for the whole close-out, with rework, is
 $115 to $315. That figure is an estimate. The first 4 runs (`E0-17`, `E0-06`,
 `E0-01`, `E0-13`) are the test run that replaces it with measured numbers.
 
+`E0-02` and `E0-12` run in a `gitbot-fleet` checkout. The skills, the agents
+and the headless profile of this kit are in hypatia only, because the owner
+chose hypatia first on 2026-11-14. Put them in `gitbot-fleet` before those 2
+runs, or run those 2 work orders in a session with a person.
+
 === Order
 
 . First of all: `E0-17`. Until it merges, each `mix test` adds test rows to
@@ -135,9 +140,12 @@ $115 to $315. That figure is an estimate. The first 4 runs (`E0-17`, `E0-06`,
 * The pull request body follows `templates/pr-body.adoc`. It has an "Evidence"
   part, a "Not done" part and a "Cost" line.
 * No run edits a licence file, an SPDX header, or `.github/workflows/actions.lock`.
-* A run leaves no change in another repository. Until `E0-17` merges, check a
-  sibling `gitbot-fleet` checkout after `mix test`, and restore its
-  `shared-context/learning/fix-outcomes.jsonl` when the suite changed it.
+* A run leaves no change in another repository. Until `E0-17` merges,
+  `mix test` adds test rows to a sibling `gitbot-fleet` checkout. Run
+  `git -C ../gitbot-fleet status --short` after the suite and report a change
+  in the pull request body. Do not restore that file yourself: it can hold
+  real rows that are not committed yet. The test rows have
+  `"bot": "hypatia"` and the repo `r` or `test-repo`.
 * A model above the tier in the work order needs a reason in the pull request body.
 
 == Not in this folder
