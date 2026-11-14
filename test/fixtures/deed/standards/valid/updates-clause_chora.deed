@@ -1,0 +1,13 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; Exercises every term of the (updates ...) vocabulary:
+; 1-formats/deed/vocabulary/updates.adoc
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "updates-clause"
+  (updates
+    :enabled #t
+    :majors #f
+    :soak-days 7
+    (hold :ecosystem cargo :package "tokio" :below "2.0.0"
+      :reason "needs the async-trait rework" :issue "#42" :until "2026-12-01")
+    (exclude :ecosystem npm)))

@@ -3,12 +3,13 @@
 
 Copied verbatim from `metadatastician/standards`: `valid/` and `invalid/` from
 `1-formats/deed/tools/fixtures/egress/` (ADR-009), and `rsr-template-repo_chora.deed`
-from `fixtures/valid/` there. `test/deed_test.exs`
+from `fixtures/valid/` there, last re-copied at standards `b2aaeb0`
+(2026-11-14). `test/deed_test.exs`
 asserts that `Hypatia.Deed` accepts and rejects exactly what the standards
 checker `deed_lint.js --egress` does. Re-copy them when that directory changes;
 do not edit them here.
 
 `template-main/rsr-template-repo_chora.deed` is the estate template's live deed,
-copied from `hyperpolymath/rsr-template-repo` main at `ad478ff`, with its
+copied from `hyperpolymath/rsr-template-repo` main at `202085a` (2026-11-14), with its
 `(egress …)` clause for three jobs. It is the worked model every repo deed is
 written from, so the reader must keep accepting it.

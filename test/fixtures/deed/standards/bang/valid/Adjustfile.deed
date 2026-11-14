@@ -1,0 +1,14 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(contractile-deed
+  :schema-version "1.0.0"
+  :canonical-name "example-game"
+  :of-chora #uuid"00000000-0000-8000-8000-0000000000a1"
+  :verb adjust
+  (rule :id "adj-alt-text" !
+    :text "A repo with a developer audience gives every image in its developer front end alt text."
+    (applies-when (identity :audience developers))
+    (requires (adjust :witness "adj-alt-text" :value #t)))
+  (rule :id "adj-contrast"
+    :text "Text contrast is at least 4.5:1."
+    (applies-when (always))
+    (requires (adjust :witness "adj-contrast" :at-least "4.5:1"))))

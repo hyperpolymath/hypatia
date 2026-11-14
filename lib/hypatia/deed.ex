@@ -4,7 +4,7 @@
 defmodule Hypatia.Deed do
   @moduledoc """
   Reader for DEED documents (`metadatastician/standards`
-  `1-formats/deed/spec/abnf/deed.abnf` v1.2.1) and for the `(egress …)` clause
+  `1-formats/deed/spec/abnf/deed.abnf` v2.0.0) and for the `(egress …)` clause
   profile (`1-formats/deed/spec/abnf/clauses/egress.abnf` v1.0.0, ADR-009).
 
   This is a *reader*, not the conformance gate. `deed_lint.js` in standards is
@@ -12,31 +12,137 @@ defmodule Hypatia.Deed do
   produces the same tree the gate does, so a consumer can read a clause:
 
       {head, items}
-      item  = {:field, keyword, value} | {:clause, symbol, [item]}
+      item  = {:field, keyword, value} | {:field, keyword, value, :bang}
+            | {:clause, symbol, [item]}
       value = {:string, s} | {:symbol, s} | {:integer, n} | {:boolean, b}
             | {:uuid5, s} | {:uuid8, s} | {:uuid, s} | {:quoted, value} | {:list, [value]}
 
-  It accepts a deed only when both the normative grammar and the gate would:
-  `deed.abnf`, plus the gate's semantic checks (one string `:schema-version`,
-  a non-blank SPDX payload, a `#u8` domain). Where the two differ, the
-  stricter reading wins, so a deed the reader refuses only ever declares
-  nothing. It reports the reason. v1.2.1 (metadatastician/standards#1359)
-  made the grammar and the gate agree; an apg-js run of `deed.abnf` and this
-  reader agree on 20,043 mutated deeds, semantic checks apart.
+  `{:field, "id", value, :bang}` is a rule marked blocking (A7 J17): the only
+  place the grammar's bang token may stand.
+
+  It accepts a deed only when both the normative grammar and the gate's core
+  check (`deed_lint.js FILE`) would. That is `deed.abnf`, plus the gate's
+  semantic checks: one string `:schema-version`; a non-blank SPDX payload; a
+  `#u8` domain; no line over 998 octets (v1.3.0); `!` only after the `:id` of
+  a `(rule …)` clause at the top level of a contractile-deed (v1.5.0); no `#u5`,
+  and no `#uuid` other than version 8, in an identity field (owner ruling Q2,
+  CHORA-SPEC 7.1), read lexically as the gate reads it; and, given a file
+  name (`parse/2`), the filename dispatch to a doc-head (`dispatch/1`). Where
+  the grammar and the gate differ, the stricter reading wins, so a deed the
+  reader refuses only ever declares nothing. It reports the reason. At
+  standards b2aaeb0 this reader and `deed_lint.js FILE` gave the same verdict
+  on all 343 standards fixtures and on 4,000 mutants of the core ones.
+
+  The clause profiles the gate runs under its own flags (`--anchor`,
+  `--contractiles`, `--edict`, `--verb-descriptile`, `--ecosystem`, `--state`,
+  `--rsr-scorecard`, `--mustfile-json`, `--proof-receipt-json`) are not
+  checked here; `(egress …)` is the one profile this module reads
+  (`egress_declarations/1`). `test/deed_conformance_test.exs` runs the
+  standards core fixtures against it.
   """
 
-  @doc "Parse deed source text into `{:ok, {head, items}}` or `{:error, reason}`."
-  def parse(text) when is_binary(text) do
+  # deed.abnf v2.0.0 doc-head. v1.4.0 added contractile-deed and
+  # descriptile-deed (A7 J14); v2.0.0 removed anchor-deed (A7 S1, J24).
+  @doc_heads ~w(estate-deed repo-deed estate-atlas-deed praxis-deed contractile-deed descriptile-deed)
+
+  # A7 J14: exact, case-sensitive file names. A file in capitals says how it
+  # is; a Capitalised file says how it must be (A7 YL4).
+  @contractile_files MapSet.new(~w(Intent Must Trust Adjust Dust Bust), &"#{&1}file.deed")
+  @descriptile_files MapSet.new(
+                       ~w(META STATE ECOSYSTEM AGENTIC NEUROSYM PLAYBOOK CLADE INTENT MUST TRUST ADJUST DUST BUST),
+                       &"#{&1}.deed"
+                     )
+
+  # Identity fields (CHORA-SPEC 7.1), the gate's IDENTITY_FIELDS and the field
+  # names scripts/check-uuid-v8.sh reads.
+  @identity_fields ~w(repo-uuid estate-uuid forge-uuid beholding-chora of-chora uuid estate base forge repo)
+
+  @max_line_octets 998
+
+  @doc """
+  Parse deed source text into `{:ok, {head, items}}` or `{:error, reason}`.
+
+  Given `filename` (a path or a base name), the doc-head must also be the one
+  that name dispatches to (`dispatch/1`), as the gate checks every file it is
+  given. Without one, only the text is judged.
+  """
+  def parse(text, filename \\ nil)
+
+  def parse(text, filename) when is_binary(text) do
     with true <- String.valid?(text) || {:error, "a deed is UTF-8"},
+         :ok <- line_lengths(text),
          {:ok, rest} <- header(text),
          {:ok, {head, items}, rest} <- form(skip(rest)),
          "" <- skip(rest),
-         :ok <- schema_version(items) do
+         :ok <- schema_version(items),
+         :ok <- identity_lexical(text),
+         :ok <- dispatch_matches(filename, head) do
       {:ok, {head, items}}
     else
       {:error, _} = err -> err
       rest when is_binary(rest) -> {:error, "trailing content after the form"}
     end
+  end
+
+  @doc """
+  The doc-head a deed file name dispatches to (deed.abnf `deed-filename`):
+  `{:ok, head}` or `{:error, reason}`. Exact names first, so
+  `estate_chora.deed` is the estate deed and never a repo deed; then the J14
+  contractile and descriptile names, which are case-sensitive; then the
+  `_praxis.deed` and `_chora.deed` suffixes, split on the final suffix so a
+  stem may hold dots.
+  """
+  def dispatch(filename) when is_binary(filename) do
+    base = Path.basename(filename)
+
+    cond do
+      base == "estate_chora.deed" -> {:ok, "estate-deed"}
+      base == "ATLAS.deed" -> {:ok, "estate-atlas-deed"}
+      base == "0-AI-MANIFEST.deed" -> {:ok, "repo-deed"}
+      MapSet.member?(@contractile_files, base) -> {:ok, "contractile-deed"}
+      MapSet.member?(@descriptile_files, base) -> {:ok, "descriptile-deed"}
+      String.ends_with?(base, "_praxis.deed") -> {:ok, "praxis-deed"}
+      String.ends_with?(base, "_chora.deed") -> chora_stem(base)
+      true -> {:error, "filename #{inspect(base)} matches no deed dispatch pattern"}
+    end
+  end
+
+  # stem = 1*( ALPHA / DIGIT / "-" / "." / "_" ).
+  defp chora_stem(base) do
+    if Regex.match?(~r/\A[A-Za-z0-9._-]+_chora\.deed\z/, base),
+      do: {:ok, "repo-deed"},
+      else: {:error, "illegal deed filename stem: #{base}"}
+  end
+
+  defp dispatch_matches(nil, _head), do: :ok
+
+  defp dispatch_matches(filename, head) do
+    case dispatch(filename) do
+      {:ok, ^head} ->
+        :ok
+
+      {:ok, want} ->
+        {:error,
+         "doc-head/filename mismatch: #{Path.basename(filename)} dispatches to #{want} " <>
+           "but parses as #{head}"}
+
+      err ->
+        err
+    end
+  end
+
+  # SEMANTIC (deed.abnf v1.3.0): no line is longer than 998 octets, counted in
+  # UTF-8 bytes before its line-end (CRLF or LF). The last line counts too.
+  defp line_lengths(text) do
+    text
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.find_value(:ok, fn {line, n} ->
+      octets = byte_size(String.trim_trailing(line, "\r"))
+
+      if octets > @max_line_octets,
+        do: {:error, "line #{n} is #{octets} octets; a deed line is at most 998"}
+    end)
   end
 
   # form: exactly one :schema-version field, with a string value.
@@ -52,6 +158,59 @@ defmodule Hypatia.Deed do
         {:error, "the form must carry exactly one :schema-version (found #{length(found)})"}
     end
   end
+
+  # The identity rule read lexically, as the gate and check-uuid-v8.sh read it
+  # (owner rulings Q2 and "by name", 2026-11-14): an identity field name, then
+  # whitespace, then #u5"…" or a #uuid"…" that is not version 8, is an error
+  # wherever it stands, comments and strings included. Two views are read, the
+  # raw text and the text with comments blanked, so a comment between a field
+  # and its value cannot hide the value.
+  @identity_alt Enum.join(@identity_fields, "|")
+  @u5_lexical Regex.compile!(":(#{@identity_alt})\\s+#u5\"[^\"]*\"", "u")
+  @uuid_lexical Regex.compile!(
+                  ":(#{@identity_alt})\\s+#uuid\"[0-9a-f]{8}-[0-9a-f]{4}-([0-9a-f])[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\"",
+                  "u"
+                )
+
+  defp identity_lexical(text) do
+    Enum.find_value([text, blank_comments(text)], :ok, fn view ->
+      cond do
+        match = Regex.run(@u5_lexical, view) ->
+          {:error, "identity field :#{Enum.at(match, 1)} carries a #u5 literal"}
+
+        version = Enum.find(Regex.scan(@uuid_lexical, view), &(Enum.at(&1, 2) != "8")) ->
+          {:error,
+           "identity field :#{Enum.at(version, 1)} carries a version #{Enum.at(version, 2)} id; " <>
+             "an identity field carries version 8"}
+
+        true ->
+          nil
+      end
+    end)
+  end
+
+  # Each ";" comment outside a string becomes spaces, to its line-end.
+  defp blank_comments(text), do: blank(text, false, [])
+
+  defp blank("", _in_string, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp blank(<<?\\, c::utf8, rest::binary>>, true, acc),
+    do: blank(rest, true, [<<c::utf8>>, ?\\ | acc])
+
+  defp blank(<<?", rest::binary>>, in_string, acc), do: blank(rest, not in_string, [?" | acc])
+
+  defp blank(<<?;, rest::binary>>, false, acc) do
+    {comment, rest} =
+      case :binary.split(rest, "\n") do
+        [comment, tail] -> {comment, "\n" <> tail}
+        [comment] -> {comment, ""}
+      end
+
+    blank(rest, false, [String.duplicate(" ", String.length(comment) + 1) | acc])
+  end
+
+  defp blank(<<c::utf8, rest::binary>>, in_string, acc),
+    do: blank(rest, in_string, [<<c::utf8>> | acc])
 
   @doc """
   The repo deed at the root of `repo_path`: `{:ok, path}`, `:none`, or
@@ -103,11 +262,8 @@ defmodule Hypatia.Deed do
         rel = Path.relative_to(path, repo_path)
 
         with {:ok, text} <- File.read(path),
-             {:ok, {head, items}} <- parse(text),
              # Filename dispatch: <stem>_chora.deed parses as a repo-deed.
-             true <-
-               head == "repo-deed" ||
-                 {:error, "doc-head/filename mismatch: #{rel} must be a repo-deed, not #{head}"},
+             {:ok, {head, items}} <- parse(text, path),
              {:ok, jobs} <- egress_jobs(head, items) do
           {:ok, rel, jobs}
         else
@@ -305,8 +461,8 @@ defmodule Hypatia.Deed do
 
   defp form("(" <> rest) do
     with {:ok, head, rest} <- symbol(rest),
-         true <- head in ~w(estate-deed repo-deed estate-atlas-deed praxis-deed) || :bad_head,
-         {:ok, items, rest} <- items(rest, []) do
+         true <- head in @doc_heads || :bad_head,
+         {:ok, items, rest} <- items(rest, {head, []}, []) do
       {:ok, {head, items}, rest}
     else
       :bad_head -> {:error, "invalid doc-head"}
@@ -317,19 +473,20 @@ defmodule Hypatia.Deed do
   defp form(_), do: {:error, "a deed form must start with '('"}
 
   # *(token-sep (field / clause)) [token-sep] ")" — every item is preceded by
-  # a separator; only the closing paren may follow without one.
-  defp items(text, acc) do
+  # a separator; only the closing paren may follow without one. `ctx` is the
+  # doc-head and the open clause heads, innermost first: the bang needs both.
+  defp items(text, ctx, acc) do
     case skip(text) do
       ")" <> rest -> {:ok, Enum.reverse(acc), rest}
       "" -> {:error, "unbalanced parens"}
       ^text -> {:error, "expected a separator before the next field or clause"}
-      next -> with {:ok, item, rest} <- item(next), do: items(rest, [item | acc])
+      next -> with {:ok, item, rest} <- item(next, ctx), do: items(rest, ctx, [item | acc])
     end
   end
 
-  # field = keyword token-sep value. As the gate does, a field's value may not
-  # be a boolean spelled as a word: booleans are #t and #f.
-  defp item(":" <> rest) do
+  # field = keyword token-sep value [token-sep bang]. As the gate does, a
+  # field's value may not be a boolean spelled as a word: booleans are #t and #f.
+  defp item(":" <> rest, ctx) do
     with {:ok, kw, rest} <- symbol(rest),
          {:ok, rest} <- separator(rest, ":#{kw}"),
          {:ok, value, rest} <- value(rest) do
@@ -338,19 +495,47 @@ defmodule Hypatia.Deed do
           {:error, ":#{kw} #{word} is not a boolean: write #t or #f"}
 
         _ ->
-          {:ok, {:field, kw, value}, rest}
+          case bang(rest, kw, ctx) do
+            :none -> {:ok, {:field, kw, value}, rest}
+            {:ok, rest} -> {:ok, {:field, kw, value, :bang}, rest}
+            {:error, _} = err -> err
+          end
       end
     end
   end
 
-  defp item("(" <> rest) do
+  defp item("(" <> rest, {doc, stack}) do
     with {:ok, head, rest} <- symbol(rest),
-         {:ok, inner, rest} <- items(rest, []) do
+         {:ok, inner, rest} <- items(rest, {doc, [head | stack]}, []) do
       {:ok, {:clause, head, inner}, rest}
     end
   end
 
-  defp item(_), do: {:error, "expected a field or a clause"}
+  defp item(_, _ctx), do: {:error, "expected a field or a clause"}
+
+  # bang = "!" (deed.abnf v1.5.0, A7 J17), after a separator. "!" may continue
+  # a symbol, so it is the bang only when it stands alone: a separator, ")" or
+  # the end follows it. SEMANTIC: it marks a blocking rule, and stands only
+  # after the :id of a (rule …) clause at the top level of a contractile-deed.
+  defp bang(rest, kw, ctx) do
+    with "!" <> after_bang <- skip(rest),
+         false <- rest == skip(rest),
+         true <- bang_end?(after_bang) do
+      if bang_allowed?(ctx, kw),
+        do: {:ok, after_bang},
+        else:
+          {:error,
+           "'!' is allowed only directly after a rule's :id value in a contractile-deed (A7 J17)"}
+    else
+      _ -> :none
+    end
+  end
+
+  defp bang_end?(""), do: true
+  defp bang_end?(<<c, _::binary>>), do: c in [?\s, ?\n, ?\r, ?;, ?)]
+
+  defp bang_allowed?({"contractile-deed", ["rule"]}, "id"), do: true
+  defp bang_allowed?(_ctx, _kw), do: false
 
   defp separator(text, after_what) do
     case skip(text) do
@@ -404,12 +589,16 @@ defmodule Hypatia.Deed do
 
   defp uuid8(err), do: err
 
-  # uuid body: an opaque id, lowercase 8-4-4-4-12 hex (deed.abnf `uuid`). The
-  # reader keeps it as written; the gate (check-uuid-v8.sh) judges its version.
+  # uuid body: an opaque id, lowercase 8-4-4-4-12 hex, version 5 or 8, variant
+  # 10 (deed.abnf v1.3.0 `uuid-hex`; all of it is grammar). The reader keeps it
+  # as written. Which version an identity field may carry is identity_lexical/1's.
+  @uuid_hex ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[58][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
   defp uuid({:ok, {:string, s}, _} = ok) do
-    if Regex.match?(~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/, s),
+    if Regex.match?(@uuid_hex, s),
       do: tagged(:uuid, ok),
-      else: {:error, "a #uuid body must be a lowercase 8-4-4-4-12 hex id"}
+      else:
+        {:error,
+         "a #uuid body must be a lowercase 8-4-4-4-12 hex id of version 5 or 8, variant 10"}
   end
 
   defp uuid(err), do: err

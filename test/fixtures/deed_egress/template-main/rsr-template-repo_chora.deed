@@ -17,8 +17,8 @@
 (repo-deed
   :schema-version "1.0.0"
   :canonical-name "rsr-template-repo"
-  :beholding-chora #u5"estate/chora"
-  :repo-uuid #u5"github.com/hyperpolymath/rsr-template-repo"
+  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
+  :repo-uuid #uuid"8e515699-3fb9-8785-8883-ef2a100c2e02"
   ; The canon pin: which release of hyperpolymath/standards canon.lock this
   ; repo implements. It is the ONLY canon pin in this deed (deed_canon
   ; refuses zero or two); the (rsr-profile) clause below declares
@@ -29,10 +29,14 @@
   ; build/just/repo-init.just (writes the child's (provenance) clause at mint). Every hash MUST
   ; equal canon.lock [canon.artifacts]; canon.lock [canon.lockstep].order is
   ; spine-adopts-then-canon-releases, so this clause moves FIRST.
+  ; Two-phase: to adopt a canon AHEAD of its release, pin the open canon
+  ; PR's canon.lock and name it with :proposed-by "metadatastician/standards#N".
+  ; scripts/canon-pin-check.sh then checks the pin against that PR's head
+  ; while it is open; once it merges the field is spent and can be dropped.
   (canon
-    :version "2.1.3"
+    :version "2.1.5"
     :criteria-sha256 "6a5aa8857bd0d0d58ef48827938ca17c251b6b854dacf59d306388d61694d82a"
-    :gates-sha256 "2f31f46d4753432e0aa8c9c28f339e18e062c98dc6e6ef4ecbb76993cf37638b"
+    :gates-sha256 "5c510bba025be718deebb12d0333bfe7db2da43c66578b728b1a334df65290b1"
     :lockstep-since "2026-09-17"
     ; A canon change this repo cannot satisfy is a change made in the WRONG
     ; ORDER, not a rejected change: land the spine's adoption first, then the
@@ -44,9 +48,10 @@
   ; new repo. Before that swap existed every minted repo inherited this
   ; block's uuid and canonical-name and told arriving agents it WAS the
   ; template (corrected in chronicles-of-slavia and scaffoldia 2026-07-16).
-  ; The uuid is not stored: it is uuid5(URL namespace, the header
-  ; :repo-uuid name). Only that typed name is written down; a hex form here
-  ; fails ADR-008's strict v8 gate.
+  ; The header :repo-uuid is the template's chora id: the ADR-008 profile C
+  ; UUIDv8 of its birth path github.com/hyperpolymath/rsr-template-repo in the
+  ; domain gv-clade-index, minted once and carried opaquely (standards A1 V8,
+  ; A7 J11). Nothing re-derives it. repo-init writes each child its own.
   ; Identity, clade, forges, lineage, status: mapping clade-to-repo-deed.
   (identity
     :primary-forge github
@@ -105,6 +110,25 @@
     (related :name "svalinn" :relationship verification-tooling :notes "Supply-chain verification referenced by the container scaffolding.")
     (related :name "vordr" :relationship verification-tooling :notes "Build/artifact verification referenced by the container scaffolding."))
   ; <<< repo-identity
+  ; Documents that other documents link to by identifier, not by path.
+  ; Template-level convention awaiting canonisation in metadatastician/standards
+  ; (the grammar admits any clause, so it parses today). A page that can move or
+  ; disappear (a file the mint tells you to delete, one a repo renames) is
+  ; cited by :id and :role; the id is stable, the :path is current. Readers who
+  ; find a page gone look here for where it went. Ids are ADR-008 profile C, in the
+  ; domain repo-document (registered in metadatastician/standards#1500), written
+  ; as #u8"repo-document:github.com/<owner>/<repo>#<role>". The name holds the
+  ; repo slug on purpose: the mint's self-name pass rewrites it, so a minted repo
+  ; gets its own id for the same role. Derive one with standards scripts/uuid-v8.js c.
+  ; scripts/check-internal-links.sh checks that every :path exists unless the
+  ; entry is :removed-at-mint #t, and that no tracked page links to a missing file.
+  (documents
+    (document
+      :id #u8"repo-document:github.com/hyperpolymath/rsr-template-repo#placeholders"
+      :role placeholders
+      :path ".machine_readable/ai/PLACEHOLDERS.adoc"
+      :removed-at-mint #t
+      :note "The placeholder-token vocabulary that just repo-init substitutes. Present in the template; repo-init tells you to delete it after the mint, so a minted repo has no such file."))
   ; Meta: mapping meta-ecosystem-to-repo-deed. A minted repo keeps this
   ; clause (self-name pass applied) and edits it as its own.
   (meta
@@ -196,7 +220,9 @@
         (directory :id "automation-unit-forge" :ply 3 :path ".machine_readable/scripts/forge" :description "Internal automation logic for project forge.")
         (directory :id "automation-unit-lifecycle" :ply 3 :path ".machine_readable/scripts/lifecycle" :description "Internal automation logic for project lifecycle.")
         (directory :id "automation-unit-verification" :ply 3 :path ".machine_readable/scripts/verification" :description "Internal automation logic for project verification.")))
-    (directory :id "container-templates" :ply 1 :path "build/container" :version "1.0.0" :description "Container templates for the stapeln container ecosystem. This directory\nprovides Podman-Chainguard-stapeln templates that are customised via\n`just container-init` or `just repo-init` during project bootstrap.\n\nAll files use {{PLACEHOLDER}} tokens that are substituted with project-\nspecific values during initialisation." :purpose "Provide a complete, security-first container deployment story for any\nRSR-compliant repository. The templates cover the full lifecycle:\nbuild, sign, verify, deploy, monitor, and govern." :overview "The stapeln container ecosystem comprises six tools:\n\nselur       — Container orchestration with zero-copy IPC. Reads compose.toml.\ncerro-torre — Verified container packaging (.ctp bundles), Ed25519 signing.\nsvalinn     — Policy-driven edge gateway (auth, rate limits, CORS, trust).\nvordr       — Runtime monitoring (health, crashes, resources, logs).\nrokur       — Secrets management (runtime injection, no baked secrets).\nk9-svc      — Nickel deployment components (Kennel/Yard/Hunt trust levels)."
+    (directory :id "container-templates" :ply 1 :path "build/container" :version "1.0.0" :description "Container templates for the stapeln container ecosystem. This directory\nprovides Podman-Chainguard-stapeln templates that are customised via\n`just container-init` or `just repo-init` during project bootstrap.\n\nAll files use {{PLACEHOLDER}} tokens that are substituted with project-\nspecific values during initialisation."
+      :purpose "Provide a complete, security-first container deployment story for any\nRSR-compliant repository. The templates cover the full lifecycle:\nbuild, sign, verify, deploy, monitor, and govern."
+      :overview "The stapeln container ecosystem comprises six tools:\n\nselur       — Container orchestration with zero-copy IPC. Reads compose.toml.\ncerro-torre — Verified container packaging (.ctp bundles), Ed25519 signing.\nsvalinn     — Policy-driven edge gateway (auth, rate limits, CORS, trust).\nvordr       — Runtime monitoring (health, crashes, resources, logs).\nrokur       — Secrets management (runtime injection, no baked secrets).\nk9-svc      — Nickel deployment components (Kennel/Yard/Hunt trust levels)."
       :context ("https://stapeln.dev/ns/v1")
       (canonical-locations :build_pipeline "build/container/stapeln/ct-build.sh" :compose "build/container/stapeln/compose.toml" :compose_example "build/container/stapeln/compose.example.toml" :compose_portable "build/container/compose.yaml" :compose_portable_example "build/container/compose.example.yaml" :containerfile "build/container/Containerfile" :containerignore "build/container/.containerignore" :deployment "build/container/stapeln/deploy.k9.ncl" :entrypoint "build/container/entrypoint.sh" :gatekeeper "build/container/stapeln/.gatekeeper.yaml" :just_module "build/just/container.just" :manifest "build/container/stapeln/manifest.toml" :monitoring "build/container/stapeln/vordr.toml" :secrets_gate "build/container/stapeln/rokur.toml")
       :invariants ("Base images MUST be cgr.dev/chainguard/wolfi-base or cgr.dev/chainguard/static" "Container runtime is Podman — never Docker" "Containerfile — never Dockerfile" "All images run as non-root (appuser or project-specific user)" ".ctp bundles are signed with Ed25519 via cerro-torre" "Health endpoints (/health, /ready) must always be public (no auth)")

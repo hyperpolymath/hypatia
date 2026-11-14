@@ -1,0 +1,2 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed :schema-version "1.0.0" :canonical-name "uuid8-clade" :repo-uuid #u8"gv-clade-index:github.com/o/uuid8-clade" :beholding-chora #u8"chora:estate/github.com/o")

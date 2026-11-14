@@ -1,0 +1,2 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed :schema-version "1.0.0" :repo-uuid #uuid "b32d6be4-73ba-873e-9d61-e57f43c75cd1")

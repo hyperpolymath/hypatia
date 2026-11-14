@@ -2,9 +2,9 @@
 (repo-deed
   :schema-version  "1.0.0"
   :canonical-name  "rsr-template-repo"
-  :beholding-chora #u5"estate/chora"
+  :beholding-chora #u8"chora:estate/github.com/o"
 
-  :repo-uuid       #u5"github.com/hyperpolymath/rsr-template-repo"
+  :repo-uuid       #u8"gv-clade-index:github.com/hyperpolymath/rsr-template-repo"
 
   (identity :primary-forge github
             :owner          "hyperpolymath"

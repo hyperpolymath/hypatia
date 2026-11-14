@@ -1,0 +1,5 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(contractile-deed :schema-version "1.0.0" :canonical-name "x" :of-chora #uuid"00000000-0000-8000-8000-0000000000a1" :verb trust
+  (rule :id "trust-no-sha1" ; a comment may sit between the value and the bang
+    ! :text "No SHA-1 where nothing stronger is used.")
+  (rule :id "trust-last" !))

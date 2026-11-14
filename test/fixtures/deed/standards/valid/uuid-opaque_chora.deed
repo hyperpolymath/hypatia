@@ -1,0 +1,10 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+;; deed.abnf v1.3.0: the opaque #uuid literal. Version 5 is tested in
+;; deed_lint.test.js, assembled at runtime: the strict UUID-v8 gate scans
+;; this repository and rejects any literal version-5 UUID.
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "uuid-opaque"
+  :repo-uuid #uuid"b32d6be4-73ba-873e-9d61-e57f43c75cd1"
+  :beholding-chora #uuid"1e207a32-dd26-8c8a-b8d9-5f77f88dbd58"
+  (identity :aliases (#uuid"1e207a32-dd26-8c8a-b8d9-5f77f88dbd58" #u8"gv-clade-index:github.com/o/uuid-opaque")))

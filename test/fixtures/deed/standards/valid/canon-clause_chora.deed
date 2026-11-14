@@ -1,0 +1,11 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; Exercises every term of the (canon ...) vocabulary:
+; 1-formats/deed/vocabulary/canon.adoc
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "canon-clause"
+  (canon
+    :version "2.1.5"
+    :criteria-sha256 "6a5aa8857bd0d0d58ef48827938ca17c251b6b854dacf59d306388d61694d82a"
+    :gates-sha256 "5c510bba025be718deebb12d0333bfe7db2da43c66578b728b1a334df65290b1"
+    :lockstep-since "2026-09-17"))

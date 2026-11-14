@@ -1,0 +1,11 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; Exercises every term of the (maturity ...) vocabulary:
+; 1-formats/deed/vocabulary/maturity.adoc
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "maturity-clause"
+  (status
+    :phase incubating)
+  (maturity
+    :level experimental
+    :since "2026-10-02"))
