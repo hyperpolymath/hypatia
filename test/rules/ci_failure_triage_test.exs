@@ -432,7 +432,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
       %{primary: p, matches: ms} = T.classify(log, %{})
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
-      refute p.rule == T.id("runner_cancelled")
+      assert p.rule == T.id("test_failure")
       assert p.layer == :code
     end
 
