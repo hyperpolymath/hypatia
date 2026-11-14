@@ -1,0 +1,587 @@
+# SPDX-License-Identifier: MPL-2.0
+defmodule Hypatia.Coverage.Report do
+  @moduledoc """
+  The SHADOW "proven vs raw" coverage report (design §3.4, §5.3, §8).
+
+  **Not a gate.** It computes and explains; nothing here blocks anything.
+
+  Inputs (`build/1`):
+
+    * `:raw` — result of `load_coverage/2` for the run of *all* tests
+    * `:proven` — the same for the run of *only the counted* tests
+    * `:evidence` — result of `load_evidence/1` (or `{:ok, records}`)
+    * `:repo` — `"owner/name"`, `:sha` — commit, `:root` — optional checkout dir
+    * `:min_cases` — property-test floor (default 100)
+
+  Each of `:raw`, `:proven`, `:evidence` is `{:ok, value}` or
+  `{:error, {:missing, path}}` / `{:error, {:parse, path, where}}`.
+
+  ## Outcome
+
+  `UNJUDGED` if any of COV-E001, E002, E003, E005, E011 applies. Otherwise
+  `PASS` when proven lines are 100% of the raw run's executable lines and (if
+  branches are measurable) proven branches are 100% too, else `FAIL`. That is
+  the design's Stage-2 rule applied to a single run; in this increment it is
+  only reported. COV-E010 (overclaim) and the "branches not measurable" note
+  do not change the outcome.
+
+  Anything not judged shows `null` in the verdict and "not judged" in
+  Markdown, never 0% or 100%.
+
+  ## Reason codes
+
+  | Code | Meaning |
+  |---|---|
+  | COV-E001 | a report or the evidence list is missing |
+  | COV-E002 | unparseable (file and location given), or the raw run has no executable lines |
+  | COV-E003 | report paths not found under the root (sample shown) |
+  | COV-E005 | zero counted evidence |
+  | COV-E010 | evidence record claims a kind it cannot back (flagged, not fatal) |
+  | COV-E011 | proven run covers something the raw run does not (proven must be a subset of raw) |
+
+  COV-E004 (branches not measurable) is reported as a note, not applied as a
+  verdict reason, in this increment.
+  """
+
+  alias Hypatia.Coverage.{Evidence, Facts, LlvmCov, Lcov}
+
+  @cap 50
+  @sample 5
+  @unjudging ["COV-E001", "COV-E002", "COV-E003", "COV-E005", "COV-E011"]
+
+  # -- loading -------------------------------------------------------------
+
+  @doc """
+  Load a coverage report, sniffing the format: JSON (first non-blank char
+  `{`) is llvm-cov, anything else is LCOV. Options: `:root`.
+  """
+  @spec load_coverage(Path.t(), keyword()) ::
+          {:ok, Facts.t()} | {:error, {:missing, Path.t()} | {:parse, Path.t(), String.t()}}
+  def load_coverage(path, opts \\ []) do
+    case File.read(path) do
+      {:ok, text} ->
+        parsed =
+          if String.starts_with?(String.trim_leading(text), "{"),
+            do: LlvmCov.parse(text, opts),
+            else: Lcov.parse(text, opts)
+
+        case parsed do
+          {:ok, facts} -> {:ok, facts}
+          {:error, {:parse, where}} -> {:error, {:parse, path, where}}
+        end
+
+      {:error, _} ->
+        {:error, {:missing, path}}
+    end
+  end
+
+  @doc "Load the evidence list (see `Hypatia.Coverage.Evidence.load/1`)."
+  defdelegate load_evidence(path), to: Evidence, as: :load
+
+  # -- counting ------------------------------------------------------------
+
+  @doc """
+  Pure counts for the line and branch universe of `raw`, given `proven`.
+
+  Returns `%{line: %{proven, raw, total}, branch: %{proven, raw, total, measurable}}`.
+  `proven` counts only units that raw also lists (the universe is raw's).
+  """
+  @spec compute(Facts.t(), Facts.t()) :: map()
+  def compute(raw, proven) do
+    rl = Facts.line_hits(raw)
+    pl = Facts.line_hits(proven)
+    rb = Facts.branch_hits(raw)
+    pb = Facts.branch_hits(proven)
+
+    %{
+      line: %{
+        proven: count_covered(rl, pl),
+        raw: Enum.count(rl, fn {_k, h} -> h > 0 end),
+        total: map_size(rl)
+      },
+      branch: %{
+        proven: count_covered(rb, pb),
+        raw: Enum.count(rb, fn {_k, h} -> h > 0 end),
+        total: map_size(rb),
+        measurable: raw.branch_measurable and proven.branch_measurable
+      }
+    }
+  end
+
+  defp count_covered(universe, proven),
+    do: Enum.count(universe, fn {k, _} -> Map.get(proven, k, 0) > 0 end)
+
+  @doc "Percentage rounded to one decimal, or nil when the total is 0 or unknown."
+  @spec percent(integer() | nil, integer() | nil) :: float() | nil
+  def percent(_n, t) when t in [nil, 0], do: nil
+  def percent(nil, _t), do: nil
+  def percent(n, t), do: Float.round(n * 100 / t, 1)
+
+  # -- verdict -------------------------------------------------------------
+
+  @doc "Build the verdict map (JSON-safe: strings, numbers, booleans, nil, lists, maps)."
+  @spec build(map()) :: map()
+  def build(input) do
+    repo = input.repo
+    sha = input.sha
+    root = Map.get(input, :root)
+    min_cases = Map.get(input, :min_cases, Evidence.default_min_cases())
+
+    {raw, raw_reasons} = take(input.raw, "raw")
+    {proven, proven_reasons} = take(input.proven, "proven")
+    {records, ev_reasons} = take(input.evidence, "evidence")
+
+    classified = if records, do: Evidence.classify_all(records, min_cases: min_cases), else: []
+    ev_reasons = ev_reasons ++ evidence_reasons(records, classified)
+
+    raw_reasons = raw_reasons ++ raw_sanity(raw)
+    path_reasons = path_reasons(root, raw, proven)
+    incons = if raw && proven, do: inconsistency(raw, proven), else: nil
+    incons_reasons = if incons, do: [incons.reason], else: []
+
+    reasons = raw_reasons ++ proven_reasons ++ ev_reasons ++ path_reasons ++ incons_reasons
+    unjudged? = Enum.any?(reasons, &(&1.code in @unjudging))
+
+    both? = raw != nil and proven != nil
+    counts = if raw && proven, do: compute(raw, proven), else: nil
+    raw_ok? = raw != nil and raw_has_lines?(raw)
+
+    {line, branch} = numbers(counts, raw, raw_ok?, unjudged?)
+
+    outcome =
+      cond do
+        unjudged? -> "UNJUDGED"
+        passes?(line, branch) -> "PASS"
+        true -> "FAIL"
+      end
+
+    notes = notes(branch, raw, proven, root)
+
+    sections =
+      if outcome == "UNJUDGED" or not both? do
+        empty_sections()
+      else
+        sections(raw, proven, repo, sha)
+      end
+
+    %{
+      "schema" => "hypatia.proven-coverage.verdict/1",
+      "shadow" => true,
+      "repo" => repo,
+      "commit" => sha,
+      "outcome" => outcome,
+      "reasons" => Enum.map(reasons, &stringify/1),
+      "line" => line,
+      "branch" => branch,
+      "sections" => sections,
+      "evidence" => evidence_summary(records, classified),
+      "notes" => notes
+    }
+  end
+
+  defp take({:ok, v}, _name), do: {v, []}
+
+  defp take({:error, {:missing, path}}, name),
+    do: {nil, [reason("COV-E001", "#{name} input missing: #{path}", %{input: name, path: path})]}
+
+  defp take({:error, {:parse, path, where}}, name),
+    do:
+      {nil,
+       [
+         reason("COV-E002", "#{name} input did not parse: #{path} (#{where})", %{
+           input: name,
+           path: path,
+           where: where
+         })
+       ]}
+
+  defp reason(code, message, detail), do: %{code: code, message: message, detail: detail}
+
+  defp stringify(%{code: c, message: m, detail: d}),
+    do: %{"code" => c, "message" => m, "detail" => json_safe(d)}
+
+  defp json_safe(%{} = m), do: Map.new(m, fn {k, v} -> {to_string(k), json_safe(v)} end)
+  defp json_safe(l) when is_list(l), do: Enum.map(l, &json_safe/1)
+  defp json_safe(v) when is_atom(v) and v not in [nil, true, false], do: Atom.to_string(v)
+  defp json_safe(v), do: v
+
+  defp raw_has_lines?(raw), do: map_size(Facts.line_hits(raw)) > 0
+
+  defp raw_sanity(nil), do: []
+
+  defp raw_sanity(raw) do
+    if raw_has_lines?(raw),
+      do: [],
+      else: [
+        reason("COV-E002", "raw report parsed but has no executable lines; nothing to judge", %{
+          input: "raw",
+          where: "no executable lines"
+        })
+      ]
+  end
+
+  defp evidence_reasons(nil, _), do: []
+
+  defp evidence_reasons(_records, classified) do
+    counted = Enum.count(classified, &(elem(&1, 1) == :counted))
+
+    zero =
+      if counted == 0,
+        do: [
+          reason(
+            "COV-E005",
+            "zero counted evidence: #{length(classified)} record(s), none qualified (see 'Why not counted')",
+            %{records: length(classified)}
+          )
+        ],
+        else: []
+
+    over = for {r, d} <- classified, Evidence.overclaim?(d), do: {r, d}
+
+    overclaim =
+      if over == [],
+        do: [],
+        else: [
+          reason(
+            "COV-E010",
+            "#{length(over)} record(s) claim a kind they cannot back (overclaim); flagged, not counted",
+            %{
+              records:
+                for(
+                  {r, {:not_counted, why}} <- over,
+                  do: %{name: Evidence.name(r), kind: r["kind"], reason: why}
+                )
+            }
+          )
+        ]
+
+    zero ++ overclaim
+  end
+
+  # COV-E003: report paths that do not exist under the root.
+  defp path_reasons(nil, _raw, _proven), do: []
+
+  defp path_reasons(root, raw, proven) do
+    paths =
+      [raw, proven]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.flat_map(fn f ->
+        for {p, d} <- f.files, d.lines != %{} or d.branches != %{}, do: p
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    missing = Enum.reject(paths, &File.regular?(Path.join(root, &1)))
+
+    if missing == [],
+      do: [],
+      else: [
+        reason(
+          "COV-E003",
+          "#{length(missing)} of #{length(paths)} report path(s) not found under #{root}; sample: " <>
+            Enum.join(Enum.take(missing, @sample), ", ") <>
+            ". Set the path prefix (--root / collector).",
+          %{
+            root: root,
+            missing: length(missing),
+            of: length(paths),
+            sample: Enum.take(missing, @sample)
+          }
+        )
+      ]
+  end
+
+  # COV-E011: proven must be a subset of raw.
+  defp inconsistency(raw, proven) do
+    lines = MapSet.difference(Facts.covered_lines(proven), Facts.covered_lines(raw))
+    branches = MapSet.difference(Facts.covered_branches(proven), Facts.covered_branches(raw))
+
+    if MapSet.size(lines) == 0 and MapSet.size(branches) == 0 do
+      nil
+    else
+      ls = lines |> Enum.sort() |> Enum.take(@sample) |> Enum.map(fn {p, l} -> "#{p}:#{l}" end)
+
+      bs =
+        branches
+        |> Enum.sort()
+        |> Enum.take(@sample)
+        |> Enum.map(fn {p, l, _b, _a} -> "#{p}:#{l}" end)
+
+      %{
+        reason:
+          reason(
+            "COV-E011",
+            "inconsistent runs: the proven run covers #{MapSet.size(lines)} line(s) and " <>
+              "#{MapSet.size(branches)} branch arm(s) that the raw run does not " <>
+              "(proven must be a subset of raw). Sample: #{Enum.join(ls ++ bs, ", ")}",
+            %{lines: MapSet.size(lines), branches: MapSet.size(branches), sample: ls ++ bs}
+          )
+      }
+    end
+  end
+
+  defp numbers(counts, raw, raw_ok?, unjudged?) do
+    line = %{"proven" => nil, "raw" => nil, "total" => nil, "measurable" => true}
+    no_branch = %{"proven" => nil, "raw" => nil, "total" => nil, "measurable" => false}
+
+    cond do
+      not raw_ok? ->
+        {line, no_branch}
+
+      counts == nil ->
+        # raw alone: raw numbers are true, proven is unknown
+        c = compute(raw, Facts.empty())
+
+        {%{line | "raw" => c.line.raw, "total" => c.line.total},
+         branch_map(nil, c.branch.raw, c.branch.total, raw.branch_measurable)}
+
+      unjudged? ->
+        {%{line | "raw" => counts.line.raw, "total" => counts.line.total},
+         branch_map(nil, counts.branch.raw, counts.branch.total, counts.branch.measurable)}
+
+      true ->
+        {%{
+           line
+           | "proven" => counts.line.proven,
+             "raw" => counts.line.raw,
+             "total" => counts.line.total
+         },
+         branch_map(
+           counts.branch.proven,
+           counts.branch.raw,
+           counts.branch.total,
+           counts.branch.measurable
+         )}
+    end
+  end
+
+  defp branch_map(_p, _r, _t, false),
+    do: %{"proven" => nil, "raw" => nil, "total" => nil, "measurable" => false}
+
+  defp branch_map(p, r, t, true),
+    do: %{"proven" => p, "raw" => r, "total" => t, "measurable" => true}
+
+  defp passes?(line, branch) do
+    line["proven"] == line["total"] and
+      (branch["measurable"] != true or branch["proven"] == branch["total"])
+  end
+
+  defp notes(branch, raw, proven, root) do
+    n = []
+
+    n =
+      if branch["measurable"] != true and (raw != nil or proven != nil),
+        do: [
+          "Branches: not measurable (no branch data in the report; COV-E004 substitution is not applied in this increment)."
+          | n
+        ],
+        else: n
+
+    n =
+      if root == nil,
+        do: [
+          "Paths were not checked against a checkout (no --root), so COV-E003 could not be evaluated."
+          | n
+        ],
+        else: n
+
+    Enum.reverse(n)
+  end
+
+  # -- location sections ---------------------------------------------------
+
+  defp empty_sections do
+    for k <- ~w(raw_only_lines unrun_lines raw_only_branches unrun_branches), into: %{} do
+      {k, %{"items" => [], "total" => 0, "cut" => 0}}
+    end
+  end
+
+  defp sections(raw, proven, repo, sha) do
+    rl = Facts.line_hits(raw)
+    pl = Facts.line_hits(proven)
+    rb = Facts.branch_hits(raw)
+    pb = Facts.branch_hits(proven)
+
+    raw_only_l = for {{p, l} = k, h} <- rl, h > 0, Map.get(pl, k, 0) == 0, do: {p, l}
+    unrun_l = for {{p, l}, 0} <- rl, do: {p, l}
+    raw_only_b = for {{p, l, _b, _a} = k, h} <- rb, h > 0, Map.get(pb, k, 0) == 0, do: {p, l}
+    unrun_b = for {{p, l, _b, _a}, 0} <- rb, do: {p, l}
+
+    %{
+      "raw_only_lines" => section(raw_only_l, repo, sha),
+      "unrun_lines" => section(unrun_l, repo, sha),
+      "raw_only_branches" => section(raw_only_b, repo, sha),
+      "unrun_branches" => section(unrun_b, repo, sha)
+    }
+  end
+
+  defp section(locs, repo, sha) do
+    ranges = ranges(locs)
+    shown = Enum.take(ranges, @cap)
+
+    %{
+      "items" =>
+        Enum.map(shown, fn {p, a, b} ->
+          %{"path" => p, "from" => a, "to" => b, "url" => permalink(repo, sha, p, a, b)}
+        end),
+      "total" => length(ranges),
+      "cut" => max(length(ranges) - @cap, 0)
+    }
+  end
+
+  @doc "Group `{path, line}` pairs into sorted `{path, from, to}` ranges of consecutive lines."
+  @spec ranges([{String.t(), pos_integer()}]) :: [{String.t(), pos_integer(), pos_integer()}]
+  def ranges(locs) do
+    locs
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.chunk_while(
+      nil,
+      fn
+        {p, l}, nil -> {:cont, {p, l, l}}
+        {p, l}, {p, a, b} when l == b + 1 -> {:cont, {p, a, l}}
+        {p, l}, acc -> {:cont, acc, {p, l, l}}
+      end,
+      fn
+        nil -> {:cont, nil}
+        acc -> {:cont, acc, nil}
+      end
+    )
+  end
+
+  @doc "GitHub permalink pinned to the commit (design §5.5)."
+  @spec permalink(String.t(), String.t(), String.t(), pos_integer(), pos_integer()) :: String.t()
+  def permalink(repo, sha, path, a, a),
+    do: "https://github.com/#{repo}/blob/#{sha}/#{enc(path)}#L#{a}"
+
+  def permalink(repo, sha, path, a, b),
+    do: "https://github.com/#{repo}/blob/#{sha}/#{enc(path)}#L#{a}-L#{b}"
+
+  defp enc(path), do: URI.encode(path, &(URI.char_unreserved?(&1) or &1 == ?/))
+
+  # -- evidence summary ----------------------------------------------------
+
+  defp evidence_summary(nil, _), do: %{"total" => nil, "counted" => nil, "not_counted" => []}
+
+  defp evidence_summary(_records, classified) do
+    not_counted =
+      for {r, {:not_counted, why} = d} <- classified do
+        %{
+          "name" => Evidence.name(r),
+          "kind" => r["kind"],
+          "reason" => Atom.to_string(why),
+          "text" => Evidence.reason_text(why),
+          "overclaim" => Evidence.overclaim?(d)
+        }
+      end
+
+    %{
+      "total" => length(classified),
+      "counted" => Enum.count(classified, &(elem(&1, 1) == :counted)),
+      "not_counted" => not_counted
+    }
+  end
+
+  # -- rendering -----------------------------------------------------------
+
+  @doc "Render the verdict as Markdown (design §5.3 layout). Labelled SHADOW."
+  @spec to_markdown(map()) :: String.t()
+  def to_markdown(v) do
+    short = String.slice(v["commit"] || "", 0, 7)
+    l = v["line"]
+    b = v["branch"]
+
+    [
+      "## Hypatia coverage — #{v["outcome"]}  (commit #{short})\n\n",
+      "> **SHADOW — not a gate.** Computed beside Codecov for comparison; nothing is blocked or enforced.\n\n",
+      "| | proven | raw |\n|---|---|---|\n",
+      "| Lines | #{cell(l["proven"], l["total"])} | #{cell(l["raw"], l["total"])} |\n",
+      "| Branches | #{branch_cell(b, "proven")} | #{branch_cell(b, "raw")} |\n\n",
+      "_Patch numbers and change against the base commit are not part of this increment._\n\n",
+      reasons_md(v["reasons"]),
+      section_md(
+        "Lines run only by unproven tests (raw only)",
+        v["sections"]["raw_only_lines"],
+        v
+      ),
+      section_md("Lines not run by any test", v["sections"]["unrun_lines"], v),
+      section_md(
+        "Branch arms run only by unproven tests (raw only)",
+        v["sections"]["raw_only_branches"],
+        v
+      ),
+      section_md("Branch arms not run by any test", v["sections"]["unrun_branches"], v),
+      why_md(v["evidence"]),
+      notes_md(v["notes"]),
+      "Evidence base: #{v["repo"]}@#{short} · hypatia.proven-coverage.evidence/1\n"
+    ]
+    |> IO.iodata_to_binary()
+  end
+
+  defp cell(nil, _t), do: "not judged"
+  defp cell(_n, nil), do: "not judged"
+  defp cell(n, 0), do: "#{n}/0 (n/a)"
+  defp cell(n, t), do: "#{n}/#{t} (#{percent(n, t)}%)"
+
+  defp branch_cell(%{"measurable" => false}, _k), do: "not measurable"
+  defp branch_cell(b, k), do: cell(b[k], b["total"])
+
+  defp reasons_md([]), do: ""
+
+  defp reasons_md(reasons) do
+    ["### Reasons\n\n", Enum.map(reasons, &"- **#{&1["code"]}** #{&1["message"]}\n"), "\n"]
+  end
+
+  defp section_md(_title, %{"items" => []}, _v), do: ""
+
+  defp section_md(title, %{"items" => items, "total" => total, "cut" => cut}, _v) do
+    [
+      "### #{title} (#{total})\n\n",
+      Enum.map(items, fn i ->
+        label =
+          if i["from"] == i["to"],
+            do: "#{i["path"]}#L#{i["from"]}",
+            else: "#{i["path"]}#L#{i["from"]}-L#{i["to"]}"
+
+        "- [#{label}](#{i["url"]})\n"
+      end),
+      if(cut > 0, do: "- … #{cut} more not shown (cap #{@cap})\n", else: ""),
+      "\n"
+    ]
+  end
+
+  defp why_md(%{"total" => nil}), do: "### Why not counted\n\nevidence list not available.\n\n"
+
+  defp why_md(%{"not_counted" => []} = e),
+    do: "### Why not counted (0)\n\nAll #{e["total"]} evidence record(s) counted.\n\n"
+
+  defp why_md(%{"not_counted" => nc, "total" => total, "counted" => counted}) do
+    shown = Enum.take(nc, @cap)
+
+    [
+      "### Why not counted (#{length(nc)} of #{total}; #{counted} counted)\n\n",
+      Enum.map(shown, fn r ->
+        flag = if r["overclaim"], do: " [COV-E010]", else: ""
+        "- `#{r["name"]}` (kind #{r["kind"] || "?"}): #{r["text"]}#{flag}\n"
+      end),
+      if(length(nc) > @cap,
+        do: "- … #{length(nc) - @cap} more not shown (cap #{@cap})\n",
+        else: ""
+      ),
+      "\n"
+    ]
+  end
+
+  defp notes_md([]), do: ""
+  defp notes_md(notes), do: ["### Notes\n\n", Enum.map(notes, &"- #{&1}\n"), "\n"]
+
+  @doc "Render the verdict as pretty JSON."
+  @spec to_json(map()) :: String.t()
+  def to_json(v), do: Jason.encode!(v, pretty: true)
+
+  @doc "Exit code convention (design §8.1): 0 judged pass, 1 judged fail, 2 unjudged."
+  @spec exit_code(map()) :: 0 | 1 | 2
+  def exit_code(%{"outcome" => "PASS"}), do: 0
+  def exit_code(%{"outcome" => "FAIL"}), do: 1
+  def exit_code(%{"outcome" => "UNJUDGED"}), do: 2
+end

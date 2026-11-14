@@ -1,0 +1,487 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Hypatia Proven Coverage: design for replacing Codecov
+:toc: left
+:toclevels: 3
+
+*Status:* DRAFT for owner review. Design only. Nothing here is built, pushed or enabled.
+*Date:* 2026-11-14.
+*Session:* Coverage design session (started by the hub of hubs).
+
+== 0. Summary
+
+Hypatia takes over everything Codecov does, but it counts only *proven* evidence.
+A proven test is a proof-checked test, or a property or conformance test with a recorded result.
+Plain example tests and mocks are measured and shown, but they count for nothing.
+
+The work splits as ruling R1 says:
+
+* Repos' CI (stamped copies from proven-cicd-and-workflows) *collects* raw coverage and evidence records.
+* Hypatia *ingests, merges, classifies, judges and explains*. It is the only place a verdict is made.
+* Gitbots *post* the result (one check-run, one PR comment edited in place).
+* Only the Tsunami-breaker session *changes rulesets*, and only after an owner-seen dry-run (R12).
+
+No gate is set by this design. The experiment owner session measures real numbers first.
+
+=== Where this document should live
+
+[cols="1,2"]
+|===
+| Part | Proposed home
+
+| This design | `hypatia/docs/design/proven-coverage.adoc` (Hypatia owns the feature)
+| §2, the definition of a proven test and benchmark | `proven-tests-and-benches/docs/PROVEN-EVIDENCE-DEFINITION.adoc` (that repo already owns test definitions, per its `CI-EVIDENCE-ADMISSIBILITY-PROPOSAL.adoc`). Hypatia's copy links to it at a pinned SHA.
+| Collector workflows | `proven-cicd-and-workflows/templates/proven-coverage-collect.yml`, stamped like `proven-lock-gate`
+| Error codes and exclusion format | `hypatia/docs/design/proven-coverage-errors.adoc`
+|===
+
+== 1. What exists today (from a read of the repos, 2026-11-14)
+
+* *Hypatia* has no coverage ingestion. Its own CI makes `lcov.info` (`ci.yml:107-135`, `tests.yml:527-620`) and throws it away.
+  It does have the parts we need: rules as Elixir `classify/2` modules (`lib/rules/`), a SARIF writer (`lib/hypatia/sarif.ex`),
+  an advisory reviewer comment shape (`lib/hypatia/reviewer.ex`), a loopback dashboard and API (`lib/hypatia/web/`),
+  VeriSimDB stores (`data/verisim/`), the dispatch manifest that refuses a step with no source fact (`lib/dispatch_manifest.ex`),
+  and the `auto_fix` kill switch with `dry_run_first` (`fleet-config.k9.ncl`).
+* *proven-cicd-and-workflows* has one real coverage job: Rust, in `rust-ci.yml:690-740`.
+  It runs `cargo llvm-cov --json`, reads *line* percent only, and fails below a ratchet floor.
+  No branch coverage. Elixir, Julia, Zig, Idris2 and JS have no coverage tooling at all.
+* *proven-tests-and-benches* already has the right idea. A test's warrant is a typed value
+  (`Provenance`: Unproven, Provisionally-Proven, Actually-Proven with a `List1 Witnessed` proof ladder).
+  A test with `FixtureDebt` is not counted. Cell coverage is derived only from passed results.
+  Gaps: coverage ignores the tier (an Unproven test still lights a cell); nearly all cells use `FixtureDebt`
+  yet still light cells; there is no property-test machinery (no seed, no case count); benchmarks carry no tier;
+  the Idris emitter writes JSON v1 while the contract is v2.
+* *proven* (the library) has proofs in `src/Proven/<M>/Proofs.idr` and `OWED:` markers for missing ones.
+  Tests are not linked to proofs. The only join is by module name (`SafeX` to `SafeXUnit`, `SafeXProps`, `SafeXBench`).
+  `MODULE-STATUS.txt` is dated and disagrees with `PROOF-NEEDS.adoc`.
+* *proven-servers* has 88 protocol packages. Tests are Zig `test` blocks under `protocols/proven-<x>/ffi/zig/test/`.
+  The server is identifiable only by path. There are no benchmarks and no coverage tooling.
+* *cicd-squabbler* owns 47 first-line rules. None covers coverage gating. Its guard `code_fix_is_safe` refuses any change
+  that lowers a threshold or coverage value. SQ-OWN-13 is the Apodeixis.jl case ("Code coverage checks require a pull request", HTTP 409): owner-only.
+* No `codecov.yml` was found in these six repos. Codecov use is elsewhere in the estate (the experiment will list it).
+
+== 2. Definition: what a proven test and a proven benchmark is
+
+A piece of evidence *counts* toward coverage only if every line below is true.
+
+. *It ran in this judged run*, on this commit, and its outcome is `Passed`.
+  (Failed, Error and Skipped never count. This matches `coveredFrom` in proven-tests.)
+. *It is admissible.* It has a silence fixture and a firing fixture, or a written `CannotFailByDesign` reason.
+  `FixtureDebt` never counts. (This is the existing proven-tests doctrine.)
+. *It is one of the four counted kinds:*
++
+[cols="1,1,3"]
+|===
+| Kind | Code | What must be recorded
+
+| Proof-checked | `P`
+| Theorem name, proof file and line, checker and its version, the statement hash, the checker's pass result in this run (or a cached pass keyed on the hash of the proof *and* of every declaration it covers). The declarations it covers must be named and checked by elaboration (the `rung` macro idea), not typed by hand.
+
+| Property | `R`
+| Generator id, seed, number of cases run, shrink result if it failed earlier, outcome. A minimum case count applies (owner question Q8). The seed must replay the run.
+
+| Conformance | `C`
+| Spec id and version, vector set and its sha256, number of vectors, outcome per vector. Golden vectors from `integrations/proven/GoldenVectors.idr` are the model.
+
+| Benchmark | `B`
+| Workload name, iterations, samples, median, spread, runner and toolchain, the checksum that every iteration held, the baseline it is compared to. A benchmark counts only if its checksum asserts a property (a benchmark that only times code is an example).
+|===
+. *Not counted, but recorded and shown:* `E` (example test) and `M` (test that runs against a mock or stub of the code under test).
+  These are the "raw" coverage Codecov shows today. They are shown in grey so the gap is visible.
+
+`counted(e) = e.passed && e.admissible && e.kind in {P, R, C, B} && e.kind_requirements_met`.
+
+For a *line or branch* to count, a further condition applies (owner ruling Q7): if it is covered only by R, C or B evidence,
+and a mutation tool exists for its language, a mutant at that location must be killed by counted evidence.
+Lines covered by P (proof) are exempt. Property tests need at least the repo's minimum cases (floor 100, Q8) and a recorded seed.
+
+=== 2.1 Mutation tools per language (to be confirmed by the experiment)
+
+[cols="1,2,2"]
+|===
+| Language | Tool | Status
+| Rust | cargo-mutants (also Trail of Bits mewt) | Mature. Applies.
+| JS / TS | Stryker | Mature. Applies.
+| Elixir | Muex (active, v0.5.0 March 2026). Exavier and Darwin unmaintained since 2020. Muzak free tier capped at 25 mutants. | Applies if Muex passes the experiment's check.
+| Julia | Gremlins.jl (newly announced); Vimes.jl (older) | Applies if Gremlins.jl passes the experiment's check.
+| Zig | None dedicated. universalmutator could work with hand-written regex rules. | Not measurable. Counts without mutation, marked so.
+| Idris2 | None | Not measurable. Idris code is mostly covered by proof anyway.
+|===
+
+A language whose tool fails the experiment's reliability check falls back to "mutation: not measurable" until fixed.
+
+=== 2.2 Which verifiers count as proof (kind P)
+
+A *deductive* verifier that checks a function against its full contract counts as P for that function:
+Idris2 (total, no `believe_me`), Creusot and Verus (Rust), Prusti (Rust), SPARK at Silver level or above (Ada), Agda, Lean, Coq/Rocq.
+Conditions: the checker passed in this run or on a cached content hash; no `#[trusted]`, `assume`, `admit`, `sorry`, `believe_me`
+or equivalent inside the covered function; the contract names the function.
+*Bounded* checkers (Kani, bounded model checking, TLA+ with a finite model) do not count as P. They count as R,
+with the bound recorded in place of the case count.
+Every evidence record that is *not* counted carries a `not_counted_reason` (see §8). Nothing is silently dropped.
+
+== 3. Data model
+
+All records are JSON, versioned, and validated. A2ML is used only where the estate already uses it.
+
+=== 3.1 EvidenceRecord
+
+----
+{
+  "schema": "hypatia.proven-coverage.evidence/1",
+  "id": "sha256 of (repo, test_id, kind)",
+  "repo": "hyperpolymath/foo", "commit": "<40-hex>", "run_id": "<CI run>",
+  "language": "rust|elixir|julia|zig|idris2|js",
+  "kind": "P|R|C|B|E|M",
+  "tier": "ActuallyProven|ProvisionallyProven|Unproven",
+  "test_id": {"module_path": "...", "name": "...", "file": "...", "line": 42},
+  "fixtures": {"silence": "...", "firing": {"source": "...", "defect_class": "..."}}
+              | {"cannot_fail_by_design": "reason"} | {"debt": "ref"},
+  "subjects": ["proven:SafeJson", "proven-servers:proven-mqtt", "proven-cicd:proven-lock-gate@0.1.0"],
+  "run": {"outcome": "passed|failed|error|skipped", "duration_ms": 12,
+          "toolchain": "...", "runner": "...",
+          "property":    {"generator": "...", "seed": "...", "cases": 1000, "shrunk": null},
+          "conformance": {"spec": "...", "version": "...", "vectors_sha256": "...", "vectors": 64, "failed": 0},
+          "benchmark":   {"iterations": 10000, "samples_ns": [...], "median_ns": 0, "checksum": true, "baseline": "..."},
+          "proof":       {"ladder": [{"theorem": "...", "file": "...", "line": 0,
+                                      "checker": "idris2", "checker_version": "...",
+                                      "statement_sha256": "..."}],
+                          "covers_decls": ["Proven.SafeJson.parse"]}},
+  "counted": true,
+  "not_counted_reason": null
+}
+----
+
+This is a superset of the proven-tests v2 submission contract. A v2 receipt maps into it with no loss.
+The 17 x 14 taxonomy cell (`category`, `aspect`) is kept as optional fields so the existing cell matrix still works.
+
+=== 3.2 CoverageFact
+
+One row per measured unit. Lines and branches are separate rows.
+
+----
+{ "repo", "commit", "language", "tool", "tool_version",
+  "file": "repo-relative path", "decl": "enclosing function or null",
+  "unit": "line" | "branch", "line": 120, "branch": {"id": "...", "arm": 0} | null,
+  "raw_hits": 3,                       // from all tests (the Codecov number)
+  "evidence": ["<EvidenceRecord.id>"], // counted evidence that reached it
+  "strength": "P|R|C|B|none",          // strongest counted evidence
+  "carried_forward_from": null | "<commit>",
+  "excluded": null | "<Exclusion.id>" }
+----
+
+=== 3.3 Exclusion
+
+Exclusions need a written reason (owner ruling). They live in one file per repo,
+`.machine_readable/coverage-exclusions.json`, plus an in-source marker so the reader sees them:
+`hypatia-cov: exclude E-<id>` in a comment.
+
+----
+{ "id": "E-0007", "path": "src/ffi.rs", "lines": [10, 40],
+  "kind": "generated|unreachable|platform|external-io|tool-limit",
+  "reason": "free text, at least one full sentence, not boilerplate",
+  "author": "...", "added": "2026-11-14", "review_by": "2027-02-14" }
+----
+
+Hypatia rejects an exclusion with an empty or copied reason, no review date, or a range that no longer matches the code.
+
+=== 3.4 Verdict
+
+----
+{ "scope": "estate|repo|flag|dir|file|decl", "key": "...", "commit", "base_commit",
+  "line":   {"proven": 0, "raw": 0, "total": 0, "excluded": 0},
+  "branch": {"proven": 0, "raw": 0, "total": 0, "excluded": 0, "measurable": true},
+  "patch":  { same shape, for changed lines only },
+  "outcome": "PASS|FAIL|UNJUDGED",
+  "reasons": ["COV-E004", ...] }
+----
+
+=== 3.5 Store
+
+A new VeriSimDB store, `data/verisim/coverage/`, keyed by (repo, commit), read through the existing VCL client.
+Keep every `main` commit's verdict and the last 30 days of PR commits. Raw facts beyond that are compacted to per-file totals.
+
+== 4. Measuring and merging
+
+=== 4.1 Per language
+
+[cols="1,2,1,1,2"]
+|===
+| Language | Tool and output | Line | Branch | Note
+
+| Rust | `cargo llvm-cov` JSON (already in `rust-ci.yml`); `--branch` for branches | yes | yes (nightly flag; to verify in experiment) | Per-test attribution via `cargo nextest` (one process per test) with `LLVM_PROFILE_FILE=%p`.
+| JS | `c8` (V8 native), lcov | yes | yes | V8 "branches" are block ranges, not conditions. Not comparable to llvm branches.
+| Elixir | `mix test --cover` (Erlang `:cover`), exported to lcov | yes | *no* | Erlang `:cover` has no branch data. TOOL-LIMIT.
+| Julia | `--code-coverage=user`, `.cov` files to lcov (CoverageTools) | yes | *no* | TOOL-LIMIT for branches.
+| Zig | `kcov` (DWARF), cobertura or lcov | yes | *no* | Zig built-in fuzz instrumentation may give edge data later.
+| Idris2 | none reliable | *no* | *no* | Judged by *proof coverage*: each declaration is covered if it is total and named by a checked theorem. Plus the proven-tests cell matrix.
+|===
+
+Branch coverage cannot be measured in four of six languages. Owner ruling Q2: in those languages a function's branches count as covered only if a proof (P) or a counted property test (R) covers that function.
+Hypatia never invents a number. Where a unit cannot be measured, the verdict says `measurable: false` and the reason.
+
+=== 4.2 Raw run and proven run
+
+Each repo runs its suite once under instrumentation, with *per-test or per-kind attribution*.
+
+* Cheapest: run the counted subset (kinds P, R, C, B) as one instrumented run, then the rest as a second. Proven coverage is the first run alone. Raw coverage is the union.
+* Better (later): per-test attribution (nextest for Rust; ExUnit tags per test; c8 per file). Needed for "which test covers this line" and for the adequacy questions in §5.4.
+
+Proof coverage (kind P) needs no execution. A checked theorem covers every line and branch of each declaration in `covers_decls`.
+If a covered declaration's content hash changed since the proof was checked, the proof does not count (COV-E006).
+
+=== 4.3 Merge
+
+* Uploads are keyed by (repo, commit, flag). A *flag* is language plus component, as in Codecov.
+* Hits are a union across jobs, operating systems and flags. Evidence lists are unioned too.
+* Paths are normalised to repo-relative. Unmapped paths are an error, not a silent drop (COV-E003).
+* *Expected flags* are declared per repo. A verdict waits for all of them, then times out to `UNJUDGED`, never to `PASS`.
+* *Carry-forward*: a flag whose files and tests are unchanged since its last judged commit may reuse that result. It is labelled "carried forward from <sha>" and expires after 14 days.
+
+== 5. How the result is shown
+
+=== 5.1 Granularity, down to absolute
+
+Estate, repo, flag, directory, file, declaration, line, branch. At the last level, *absolute coverage* means
+the unit names the exact evidence behind it: test id with permalink, theorem name with permalink, seed, vector set hash.
+A reader can re-run or re-check that one piece of evidence.
+
+Colours mean strength, not just hit or miss:
+
+[cols="1,3"]
+|===
+| P (proof) | darkest
+| R / C / B | middle
+| raw only (E or M ran it) | grey, hatched: "executed but not proven"
+| none | red
+| excluded | outlined, with the reason on hover
+| not measurable | dotted, with the tool limit named
+|===
+
+=== 5.2 The panel
+
+Two forms (owner ruling Q5): a static panel per repo for everyone (built from Hypatia's store, published e.g. on Pages),
+and a live `/coverage` route in Hypatia's loopback dashboard for the owner.
+Sections, in order:
+
+. *Verdict strip.* PASS, FAIL or UNJUDGED for this commit, with patch and project numbers, proven and raw side by side.
+. *Code map.* A treemap (area = lines, colour = proven strength). Click through to a file, then a line.
+. *File view.* The source with the colour gutter. Each line lists its evidence with links.
+. *Evidence ledger.* Every evidence record, counted or not, with its `not_counted_reason`.
+. *Notes and questions* (§5.4).
+. *Links out.* proven at its pinned SHA, the proven-servers package used, the stamped workflow version from proven-cicd-and-workflows, the proven-tests definition.
+
+=== 5.3 PR comment and check-run
+
+* *One check-run* named `Hypatia coverage verdict`. This is the only context a ruleset would require.
+  Annotations only on *changed* lines that lack proven coverage, at most 50.
+* *One PR comment*, posted by a gitbot and *edited in place*. It is only updated when the verdict or a number changes.
+  No new comment per push. Layout:
+
+----
+Hypatia coverage — PASS | FAIL | UNJUDGED            (commit abc1234 vs base def5678)
+
+                 proven    raw     change (proven)
+Patch  lines     18/20     20/20
+Patch  branches  6/8       8/8
+Project lines    91.2%     97.0%   +0.4
+Project branches 88.0%     95.1%   +0.2   (Elixir: not measurable)
+
+Changed lines without proven evidence:
+  src/parse.rs#L40-L44   run only by example test parse_basic    -> a property test fits (pure function)
+  src/net.rs#L88          not run by any test
+
+Why not counted (3): 2 FixtureDebt, 1 property test with no seed recorded.   [details in panel]
+Evidence base: proven@5360032 · proven-coverage-collect@0.1.0 · definition@<sha>
+----
+
+=== 5.4 Notes on what the tests mean (meta analysis, against the new base)
+
+The new base is *proven coverage*, not raw coverage. For each file and each PR, Hypatia writes short notes as questions:
+
+* *Adequacy.* Is this line checked, or only executed? (Optional mutation score where a tool exists: `cargo-mutants`, Stryker for JS.)
+  Does the test have a firing fixture that would fail if the line were wrong?
+* *Significance.* For a property test: with N cases and no failure, the failure rate is below about 3/N at 95% confidence (rule of three). Is N enough here?
+  For a benchmark: is the change outside the noise (spread, leave-one-out ratio), not just over a 2x line?
+* *Vacuity.* Would the test still pass if the code were deleted? (Ties to cicd-squabbler ADR 0002 on vacuous greens.)
+* *Staleness.* Was the theorem checked against the current version of the declaration?
+* *Fit.* Is the kind of evidence right for the code shape? (See §8.3.)
+* *Taxonomy.* Which of the 17 x 14 category and aspect cells have counted evidence, which have only uncounted evidence, which are empty.
+
+=== 5.5 Hotlinks
+
+Every location is a permalink pinned to the commit:
+`https://github.com/<owner>/<repo>/blob/<sha>/<path>#L<a>-L<b>`.
+Theorems link to `proof_file#L<line>` at the pinned proven SHA. Tests link to their definition.
+For local runs, the CLI also prints `path:line` so editors and terminals make it clickable.
+
+== 6. Links to proven, proven-servers and proven-cicd-and-workflows
+
+* *proven.* A P record names a theorem in proven at a pinned SHA. The module join (`SafeX` to `SafeX/Proofs.idr`, `SafeXUnit`, `SafeXProps`, `SafeXBench`) is derived, not hand-kept.
+  `OWED:` markers are read so the panel can say "this function's proof is owed".
+* *Consumers of proven.* A repo that depends on a proven binding gets an *assurance dependency* line: "uses SafeJson via the Rust binding; 6 theorems inherited; FFI parity vectors passed".
+  This is shown next to coverage, *never added to it*. Inherited proofs cover the library, not the caller's code.
+* *proven-servers.* Evidence from `protocols/proven-<x>/` gets the subject `proven-servers:proven-<x>` from its path.
+  A repo that uses a server sees which of that server's tests are counted. Gap today: proven-servers has no benchmarks and no coverage tool (Zig, kcov).
+* *proven-cicd-and-workflows.* Collection ships from there as a stamped inline copy, `proven-coverage-collect@<ver>`, in the same way as `proven-lock-gate`, with its hash in `proven/manifest.json`.
+  It is added to the Capability Atlas (Observatory clade). New Hypatia rule ids are added to `proven/registry/sq-map.tsv` as `hypatia-only`.
+
+=== 6.1 Rename of proven (the library). The owner decides.
+
+"proven" is the root of the family and a short, generic word. Candidates:
+
+[cols="1,3"]
+|===
+| *proven-core* | Says "the base of the family". Short. Keeps the prefix. *Chosen by the owner (Q1).*
+| proven-kernel | Stresses the trusted base. Risk: confused with the proof-checker kernel.
+| proven-safe-library | Describes the `Safe*` modules plainly. Long.
+| proven-foundations | Formal, broad. Long.
+|===
+
+Cost of any rename: GitHub redirects old URLs and git remotes, but not package names in ~100 bindings, `PROVEN_PIN` users, badges, or docs. The rename needs its own small plan.
+
+== 7. How Hypatia owns it, and how it gates
+
+=== 7.1 Ownership (R1, R6, R7)
+
+* *Hypatia decides.* New modules: `lib/hypatia/coverage/` (parsers, normaliser, merger, classifier, store) and one rule, `lib/rules/coverage_gate.ex` (`classify/2`), which emits the verdict as facts. Every dispatch step names its source fact, as the dispatch manifest already requires.
+* *Bots and farms execute.* CI collects. A report-only gitbot (sustainabot fits the report tier) posts the comment and the check-run.
+* *No parallel auto-fix.* Hypatia never edits thresholds, pins, workflows or rulesets, and never re-runs jobs. Those are the squabbler's categories. A coverage failure is a *referral* item, not a first-line fix.
+* *Test scaffold PRs (owner ruling Q4).* Hypatia picks the location and the kind (§8.3). It directs rhodibot to open a *draft* PR with a test skeleton at review tier. A person finishes and merges it through the normal path. Limits to keep noise down: at most one open scaffold PR per repo, and none while that repo has a failing `main`. Hypatia never marks a scaffold as counted evidence; it counts only once it is finished and passes §2.
+* *R6.* The verdict is an *input* to the one auto-merge actuator's policy (`pr-automerge-policy.json`). It is not a second actuator.
+* *R7.* CodeRabbit and Codex stay advisory. The coverage verdict is computed, not reviewed.
+
+=== 7.2 Gating stages
+
+. *Stage 0, shadow.* Collect and show. Check-run conclusion is `neutral`. No emails, no failures. Runs beside Codecov.
+. *Stage 1, dry-run.* Hypatia computes what the gate *would* block across the estate: repo, reason, numbers. The owner sees this list.
+. *Stage 2, enable.* After the owner has seen the dry-run, the *Tsunami-breaker session* adds `Hypatia coverage verdict` as a required status check in the rulesets, and removes the GitHub code_coverage ruleset rule that caused the Apodeixis.jl 409. Nobody else changes rulesets (R12).
+
+Gate rule (owner ruling): 100% proven line *and* branch coverage, after written exclusions, for the *whole project* from the day the gate is enabled (Q3).
+Branches that no tool can measure are judged by substitution (Q2). Because this blocks hard, the Stage 1 dry-run is the owner's main decision point.
+`UNJUDGED` must never pass a gate. It also must not page anyone: it goes to the panel queue and the daily digest.
+
+== 8. Error handling, and decisions people can make with it
+
+=== 8.1 Outcomes
+
+Estate convention, kept: exit 0 = judged pass, 1 = judged fail, 2 = could not judge. A "could not judge" is never shown as 0% or 100%.
+
+=== 8.2 Error codes (first set)
+
+Each error says: what happened, why, what to run locally, and who owns it (repo developer, squabbler first-line, Hypatia referral, owner-only).
+
+[cols="1,3,2"]
+|===
+| Code | Meaning | What to do
+
+| COV-E001 | Expected flag never uploaded | Check the collector job ran. Owner: repo.
+| COV-E002 | Report did not parse (file, byte or line given) | Tool version named; upgrade or pin. Owner: repo.
+| COV-E003 | Report paths do not map to repo files (sample shown) | Set the path prefix in the collector. Owner: repo.
+| COV-E004 | Unit not measurable by this tool (branch in Elixir, Julia, Zig; all of Idris2) | Per owner ruling Q2. Owner: owner-only until ruled.
+| COV-E005 | Zero counted evidence: tests ran but none qualified | Panel lists each test and why. Usually: examples only, FixtureDebt, no seed.
+| COV-E006 | Proof is stale: covered declaration changed since check | Re-run the proof checker.
+| COV-E007 | Upload is from a different commit than the head | Re-run on the head. Owner: squabbler first-line (re-run category).
+| COV-E008 | Carried-forward result older than 14 days | Run the flag's suite.
+| COV-E009 | Exclusion invalid (no reason, no review date, range moved) | Fix the exclusion file.
+| COV-E010 | Evidence claims a kind it cannot back (e.g. P with no checker result) | Overclaim. The record is downgraded and flagged.
+|===
+
+=== 8.3 Local and global decisions
+
+* *Local.* `hypatia coverage explain <path>:<line>` prints the evidence for one line, why each test did or did not count, and the cheapest kind of evidence that would cover it.
+* *Global.* The panel ranks, across a repo or the estate, where one new piece of evidence buys the most proven coverage (lines reached only by examples, weighted by churn). It reuses proven-tests' min-plus cost routing (`Tropical.idr`, `cheapest`).
+* *Fit guide* (shown with each suggestion, owner may edit):
+
+[cols="1,2"]
+|===
+| Code shape | Best evidence
+| Pure function, total | Proof (Idris2, Creusot, SPARK) or property
+| Parser, encoder | Conformance vectors plus property (round-trip)
+| Protocol state machine (proven-servers) | Property against the Idris FSM model
+| Numeric | Property with stated tolerance
+| Hot path | Benchmark with a checksum property
+| I/O glue, FFI shim | Conformance at the boundary; else a written exclusion
+|===
+
+=== 8.4 Noise rules (the owner is getting too many failure emails)
+
+* One check-run and one edited comment per PR. Nothing per push unless numbers change.
+* Infrastructure trouble is `UNJUDGED` with a `neutral` conclusion, so GitHub does not send a failure email.
+* Failures on `main` roll up into one daily digest in the panel, not one message per run.
+* The collector job fails only on its own crash, never on a coverage number. Only Hypatia judges numbers.
+
+== 9. Migration off Codecov, and what is lost
+
+=== 9.1 Codecov feature map
+
+[cols="2,1,3"]
+|===
+| Codecov feature | Plan | Note
+
+| Upload per commit, merge across jobs | Replace | §4.3
+| Flags, components | Replace | Flag = language plus component
+| Carry-forward | Replace | Labelled, 14-day expiry
+| Project and patch status checks | Replace | One check-run, proven numbers
+| PR comment with file table | Replace | §5.3, edited in place
+| Line annotations in the diff | Replace | Check-run annotations, changed lines only
+| Sunburst, icicle, grid graphs | Replace | Treemap code map
+| Trends over time, branch compare | Replace | From the VeriSimDB store
+| Impacted files, indirect changes | Replace | Diff of facts between base and head
+| Test analytics (flaky, slow, failure rate) | Replace | From EvidenceRecord history
+| Badges | Replace | Static badge JSON for shields, from the store
+| YAML config validation | Replace | Schema for the collector and exclusion files
+| Bundle analysis (JS size) | Drop unless wanted | Not coverage
+| Codecov AI review and test generation | Drop | R7: no bot review is a gate
+| Hosted UI on codecov.io, browser extension | Lost | Panel replaces the UI; no extension
+| Historical data on codecov.io | Export, then lost | Raw numbers only; not proven anyway
+|===
+
+=== 9.2 Order
+
+. Fetch the Codecov line number wanted for upstream PR #71 (owner item) *before* anything is removed.
+. Export Codecov history for the repos that use it.
+. Run Hypatia in shadow beside Codecov for at least two weeks. Compare raw numbers. They must agree within a stated tolerance, or the difference must be explained.
+. Remove Codecov uploads from workflows (a workflow change: Tsunami-breaker or the repo owner, not Hypatia).
+. The owner uninstalls the Codecov app.
+
+== 10. Cheapest first increment (buildable and testable now)
+
+*"Proven vs raw" report for one Rust repo, shadow only.*
+
+* Input: the `cov.json` that `rust-ci.yml` already makes, plus a list of counted tests (a small JSON file, hand-written for the pilot, using the §3.1 shape).
+* New code: `Hypatia.Coverage.LlvmCov` (parse llvm-cov JSON, lines and branches if present) and `mix hypatia.coverage.report`, which writes a markdown report with proven and raw numbers, the uncovered lines, and permalinks.
+* Pilot repo: hypatia itself (its Rust workspace already runs llvm-cov in CI).
+* Tests: fixture `cov.json` files and an evidence list; property tests on the merger (union is commutative and idempotent; proven is never above raw). These tests themselves are kind R, so the increment is judged by its own rule.
+* Not included: no gate, no PR comment, no ruleset, no other language, no store.
+* Build model: Sonnet, medium effort (defined steps). Fixture generation: Haiku, low.
+* Push needs the Extended Hypatia session and the owner's "go".
+
+Second increment: the same for Elixir (`:cover` to lcov) and JS (`c8`), then the stamped collector in proven-cicd-and-workflows.
+
+== 11. Fixes needed in proven-tests-and-benches first
+
+For the definition to hold, three gaps there should close (owned by that repo, not Hypatia):
+
+. Cell coverage must filter on tier and on `FixtureDebt`, or report both numbers.
+. Property tests need a recorded seed and case count (ROADMAP item 1).
+. The Idris emitter should write the v2 contract, not v1.
+
+Also noted: `panic-attack aggregate` exits 0 unconditionally. That is a vacuous green risk if it ever feeds a gate.
+
+== 12. Open questions for the owner
+
+Asked one at a time by selector. Answers will be recorded here.
+
+[cols="1,4,2"]
+|===
+| Q | Question | Answer
+
+| Q1 | New name for proven (the library) | *proven-core*. Needs its own rename plan (§6.1).
+| Q2 | Branch coverage where tools cannot measure it (Elixir, Julia, Zig, Idris2) | *Substitute*: a function's branches count as covered only if a proof or a counted property test covers that function. Otherwise UNJUDGED (COV-E004).
+| Q3 | Path to 100% | *Project 100% at once* when the gate is enabled. The Stage 1 dry-run must show the owner every repo this blocks.
+| Q4 | May Hypatia open PRs with suggested tests | *Yes, scaffold PRs at review tier.* Hypatia directs rhodibot to open draft PRs with test skeletons. A person finishes them.
+| Q5 | Where the panel is seen | *Both*: static pages per repo for everyone, plus a live `/coverage` route in Hypatia's dashboard.
+| Q6 | When Codecov may be removed | *After three conditions*: PR #71 line number fetched; history exported; two weeks of shadow with raw numbers matching Codecov or the difference explained.
+| Q7 | Mutation scores | *Counted condition* where a tool exists (§2.1). Proof-covered lines are exempt.
+| Q8 | Minimum cases for a property test | *Per-repo setting, floor 100.* Seed must be recorded.
+|===

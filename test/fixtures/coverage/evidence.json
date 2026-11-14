@@ -1,0 +1,25 @@
+{
+  "schema": "hypatia.proven-coverage.evidence/1",
+  "evidence": [
+    {"id": "e1", "repo": "example/demo", "language": "rust", "kind": "E",
+     "test_id": {"module_path": "tests", "name": "example_negative", "file": "src/lib.rs", "line": 34},
+     "fixtures": {"cannot_fail_by_design": "pure example"}, "run": {"outcome": "passed"}},
+    {"id": "e2", "repo": "example/demo", "language": "rust", "kind": "E",
+     "test_id": {"module_path": "tests", "name": "example_zero", "file": "src/lib.rs", "line": 39},
+     "fixtures": {"cannot_fail_by_design": "pure example"}, "run": {"outcome": "passed"}},
+    {"id": "e3", "repo": "example/demo", "language": "rust", "kind": "E",
+     "test_id": {"module_path": "tests", "name": "example_clamp_ok", "file": "src/lib.rs", "line": 53},
+     "fixtures": {"cannot_fail_by_design": "pure example"}, "run": {"outcome": "passed"}},
+    {"id": "r1", "repo": "example/demo", "language": "rust", "kind": "R",
+     "test_id": {"module_path": "tests", "name": "prop_small_large", "file": "src/lib.rs", "line": 44},
+     "fixtures": {"silence": "n in 1..50", "firing": {"source": "classify(5) == \"large\"", "defect_class": "wrong-branch"}},
+     "run": {"outcome": "passed", "property": {"generator": "range 1..50", "seed": "0", "cases": 500}}},
+    {"id": "r2", "repo": "example/demo", "language": "rust", "kind": "R",
+     "test_id": {"module_path": "tests", "name": "prop_clamp_saturates", "file": "src/lib.rs", "line": 58},
+     "fixtures": {"silence": "250+10", "firing": {"source": "wrapping add", "defect_class": "overflow"}},
+     "run": {"outcome": "passed", "property": {"generator": "fixed", "seed": "0", "cases": 120}}},
+    {"id": "p1", "repo": "example/demo", "language": "rust", "kind": "P",
+     "test_id": {"module_path": "Demo", "name": "never_tested_total"},
+     "fixtures": {"cannot_fail_by_design": "proof"}, "run": {"outcome": "passed", "proof": {"ladder": []}}}
+  ]
+}
