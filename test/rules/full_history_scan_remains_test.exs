@@ -152,6 +152,134 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
              check(%{"pr.yml" => @pr_range, "a.yml" => action.("push:\n    branches: [main]")})
   end
 
+  test "a TruffleHog PR scan is a PR scan, and a full trufflehog git run remains" do
+    tpr =
+      String.replace(
+        @pr_range,
+        ~s(gitleaks git --log-opts="${{ github.event.pull_request.base.sha }}..HEAD" --redact),
+        "trufflehog git file://. --since-commit ${{ github.event.pull_request.base.sha }}"
+      )
+
+    assert tpr != @pr_range
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => tpr})
+
+    tfull =
+      String.replace(
+        @scheduled_full,
+        ~s(gitleaks git --log-opts="--all" --redact),
+        "trufflehog git file://. --only-verified"
+      )
+
+    assert tfull != @scheduled_full
+    assert check(%{"pr.yml" => tpr, "full.yml" => tfull}) == []
+  end
+
+  test "--all after a shallow checkout is not full history" do
+    shallow = String.replace(@scheduled_full, "        with:\n          fetch-depth: 0\n", "")
+    assert shallow != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => shallow})
+  end
+
+  test "a step's own if: decides which events the scan runs on" do
+    # A push-guarded step in a mixed workflow is not a PR scan...
+    mixed =
+      @pr_range
+      |> String.replace("  pull_request:\n", "  pull_request:\n  push:\n    branches: [main]\n")
+      |> String.replace(
+        ~s(      - run: gitleaks git --log-opts="${{ github.event.pull_request.base.sha }}..HEAD" --redact),
+        ~s(      - if: github.event_name == 'push'\n        run: gitleaks git --log-opts="--all" --redact)
+      )
+
+    assert check(%{"ci.yml" => mixed}) == []
+
+    # ...and a full-history step guarded to PRs does not remain.
+    pr_guarded =
+      String.replace(
+        @scheduled_full,
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'",
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'\n  pull_request:"
+      )
+      |> String.replace(
+        ~s(      - run: gitleaks git --log-opts="--all" --redact),
+        ~s(      - if: github.event_name == 'pull_request'\n        run: gitleaks git --log-opts="--all" --redact)
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => pr_guarded})
+  end
+
+  test "the deep checkout must be this repository's and come before the scan" do
+    later =
+      @scheduled_full
+      |> String.replace(~s(gitleaks git --log-opts="--all" --redact), "gitleaks git --redact")
+      |> String.replace(
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n      - run: gitleaks git --redact",
+        "      - uses: actions/checkout@v7.0.1\n      - run: gitleaks git --redact\n      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0"
+      )
+
+    assert later =~ "gitleaks git --redact\n      - uses: actions/checkout@v7.0.1\n        with:"
+
+    other_repo =
+      String.replace(
+        @scheduled_full,
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          repository: someone/else\n"
+      )
+
+    for wf <- [later, other_repo] do
+      assert wf != @scheduled_full
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+    end
+  end
+
+  test "a step that only mentions gitleaks is not a scan" do
+    install_only =
+      String.replace(
+        @pr_range,
+        ~s(      - run: gitleaks git --log-opts="${{ github.event.pull_request.base.sha }}..HEAD" --redact),
+        "      - name: Install gitleaks\n        run: curl -sSfL https://example.invalid/gitleaks.tgz -o g.tgz"
+      )
+
+    assert install_only != @pr_range
+    assert check(%{"pr.yml" => install_only}) == []
+
+    setup_job =
+      String.replace(
+        @scheduled_full,
+        ~s(      - run: gitleaks git --log-opts="--all" --redact),
+        "      - name: gitleaks cache warm-up\n        run: echo ready"
+      )
+
+    assert setup_job != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => setup_job})
+  end
+
+  test "a != guard that rules out every non-PR trigger does not remain" do
+    wf =
+      String.replace(
+        @scheduled_full,
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'",
+        "on:\n  push:\n    branches: [main]\n  pull_request:"
+      )
+      |> String.replace(
+        "    runs-on: ubuntu-latest",
+        "    if: github.event_name != 'push'\n    runs-on: ubuntu-latest"
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+  end
+
+  test "a guard too complex to read is a PR scan that does not remain" do
+    wf =
+      String.replace(
+        @scheduled_full,
+        "    runs-on: ubuntu-latest",
+        "    if: github.event_name == 'schedule' || github.actor == 'bot'\n    runs-on: ubuntu-latest"
+      )
+      |> String.replace("    - cron: '0 3 * * 1'\n", "    - cron: '0 3 * * 1'\n  pull_request:\n")
+
+    assert [%{rule: "WF032", file: "full.yml"}] = check(%{"full.yml" => wf})
+  end
+
   test "no PR scan means nothing to check" do
     assert check(%{"full.yml" => @scheduled_full}) == []
     assert check(%{}) == []

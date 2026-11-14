@@ -4574,16 +4574,31 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # one; WF032 covers a repo whose only scans are PR-range ones.
 
   @non_pr_events ["push", "schedule", "workflow_dispatch"]
+  # A scanner invocation, not a mention: a `run` that calls the binary.
+  @scanner_run ~r/(?:^|[\s;&|(`])(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|github|filesystem)\b/m
+  @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/
 
   @doc """
-  WF032: the repository runs a secret scan on pull requests, but no job
-  runs a full-history scan on push, schedule or workflow_dispatch. A
-  secret committed and later deleted, or on another branch, then has no
-  scan at all. Full history means `--log-opts` with `--all`, a gitleaks
-  run with no `--log-opts` range on a `fetch-depth: 0` checkout, the
-  estate rail (`#{@secret_history_rail}`), or gitleaks-action on a
-  schedule or manual run. One finding per repository, medium, referral
-  only (cicd-squabbler SQ-GEN-05 owns the fix, R1).
+  WF032: the repository runs a secret scan on pull requests, but no scan
+  runs over full history on push, schedule or workflow_dispatch. A secret
+  committed and later deleted, or on another branch, then has no scan at
+  all. One finding per repository, medium, referral only (cicd-squabbler
+  SQ-GEN-05 owns the fix, R1).
+
+  A scan is a scanner *step* (a `run` calling gitleaks or trufflehog, or
+  the gitleaks / trufflehog action), or a job calling the estate rail
+  (`#{@secret_history_rail}`). Its events are the workflow's triggers
+  narrowed by the job's and the step's `if:` (`==` and `!=` on
+  `github.event_name` in a flat `&&` chain). A scan counts as full history
+  when it is the rail, or when an earlier `actions/checkout` of this
+  repository with `fetch-depth: 0` feeds it and it is one of:
+  gitleaks with `--log-opts` holding `--all` or with no `--log-opts`
+  range; `trufflehog git` with no `--since-commit`/`--base`/`--head`; the
+  gitleaks or trufflehog action on a schedule or manual run.
+
+  When an `if:` is too complex to read (`||`, grouping, negation), the scan
+  is taken to run on PRs and not to remain: a referral that asks the owner
+  to look is the safer error than a gap left silent.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
     scans =
@@ -4591,22 +4606,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
           {:ok, %Hypatia.Workflow{triggers: triggers, jobs: jobs}} <- [
             Hypatia.Workflow.parse(content, filename)
           ],
-          texts = job_texts(jobs),
           job <- jobs,
-          text = Map.fetch!(texts, job.id),
-          Regex.match?(@gitleaks, text) or String.contains?(text, @secret_history_rail) do
-        %{file: filename, job: job, text: text, triggers: triggers}
-      end
+          scan <- job_scans(job),
+          do: Map.merge(scan, %{file: filename, job: job, triggers: triggers})
 
     pr_scans =
       Enum.filter(scans, fn sc ->
-        Enum.any?(sc.triggers, &(&1 in @pr_events)) and not non_pr_only?(sc.job.if || "")
+        case scan_events(sc) do
+          :unknown -> Enum.any?(sc.triggers, &(&1 in @pr_events))
+          events -> Enum.any?(events, &(&1 in @pr_events))
+        end
       end)
 
     remains? =
       Enum.any?(scans, fn sc ->
-        Enum.any?(sc.triggers, &(&1 in @non_pr_events)) and
-          not event_only?(sc.job.if || "", @pr_events) and full_history_scan?(sc)
+        case scan_events(sc) do
+          :unknown -> false
+          events -> Enum.any?(events, &(&1 in @non_pr_events)) and full_history_scan?(sc, events)
+        end
       end)
 
     case {pr_scans, remains?} do
@@ -4617,13 +4634,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
             rule_id: "hypatia/workflow_audit/full_history_scan_missing",
             type: :full_history_scan_missing,
             file: first.file,
-            line: first.job.line,
+            line: first.line,
             job: first.job.id,
             severity: :medium,
             action: :report,
             reason:
               "Secret scans run on pull requests (#{first.file} job `#{first.job.id}`), " <>
-                "but no job runs a full-history scan on push, schedule or " <>
+                "but no scan runs over full history on push, schedule or " <>
                 "workflow_dispatch. A secret deleted later, or on another branch, is " <>
                 "never scanned. Keep a full-history pass on a non-PR trigger."
           }
@@ -4636,58 +4653,107 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   def check_full_history_scan_remains(_), do: []
 
-  defp full_history_scan?(%{text: text, triggers: triggers, job: job}) do
-    cond do
-      String.contains?(text, @secret_history_rail) ->
-        true
+  # The scans in one job: the rail (job-level `uses`), or scanner steps.
+  defp job_scans(job) do
+    if is_binary(job.uses) and String.contains?(job.uses, @secret_history_rail) do
+      [%{kind: :rail, step: nil, index: nil, line: job.line}]
+    else
+      steps = job.steps || []
 
-      all_history_log_opts?(text) ->
-        true
-
-      Regex.match?(~r/gitleaks\/gitleaks-action/, text) ->
-        Enum.any?(triggers, &(&1 in ["schedule", "workflow_dispatch"]))
-
-      Regex.match?(@log_opts, text) ->
-        false
-
-      String.contains?(text, "--no-git") ->
-        false
-
-      true ->
-        deep_checkout?(job)
+      for {step, i} <- Enum.with_index(steps),
+          kind = scanner_kind(step),
+          kind != nil,
+          do: %{kind: kind, step: step, index: i, line: step.line || job.line}
     end
   end
 
-  # The job checks out all history: an actions/checkout step with
-  # `fetch-depth: 0` (read from the parsed step; the job text holds values,
-  # not keys).
-  defp deep_checkout?(%{steps: steps}) when is_list(steps) do
-    Enum.any?(steps, fn step ->
-      is_binary(step.uses) and String.starts_with?(step.uses, "actions/checkout") and
-        Hypatia.Workflow.input(step, "fetch-depth") == "0"
+  defp scanner_kind(step) do
+    cond do
+      is_binary(step.uses) and Regex.match?(@scanner_action, step.uses) -> :action
+      is_binary(step.run) and Regex.match?(@scanner_run, step.run) -> :run
+      true -> nil
+    end
+  end
+
+  # The events a scan can run on: the workflow's triggers narrowed by the
+  # job's and step's `if:`, or :unknown when a condition cannot be read.
+  defp scan_events(%{triggers: triggers, job: job, step: step}) do
+    step_if = if step, do: step.if, else: nil
+
+    Enum.reduce_while([job.if, step_if], triggers, fn cond_text, events ->
+      case narrow_events(cond_text, events) do
+        :unknown -> {:halt, :unknown}
+        narrowed -> {:cont, narrowed}
+      end
     end)
   end
 
-  defp deep_checkout?(_job), do: false
+  defp narrow_events(nil, events), do: events
 
-  # A job gated to one of `events` only: one conjunct of a flat `&&` chain is
-  # exactly `github.event_name == '<event>'`.
-  defp event_only?(cond_text, events) do
+  defp narrow_events(cond_text, events) do
     expr =
       cond_text
       |> String.trim()
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
 
-    not String.contains?(expr, "||") and
-      not Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) and
-      expr
-      |> String.split("&&")
-      |> Enum.any?(fn c ->
-        case Regex.run(~r/^\s*github\.event_name\s*==\s*['"]([a-z_]+)['"]\s*$/, c) do
-          [_, event] -> event in events
-          nil -> false
+    cond do
+      expr == "" ->
+        events
+
+      String.contains?(expr, "||") or
+          Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) ->
+        if String.contains?(expr, "github.event_name"), do: :unknown, else: events
+
+      true ->
+        expr
+        |> String.split("&&")
+        |> Enum.reduce(events, fn conj, acc ->
+          case Regex.run(~r/^\s*github\.event_name\s*(==|!=)\s*['"]([a-z_]+)['"]\s*$/, conj) do
+            [_, "==", event] -> Enum.filter(acc, &(&1 == event))
+            [_, "!=", event] -> Enum.reject(acc, &(&1 == event))
+            nil -> acc
+          end
+        end)
+    end
+  end
+
+  defp full_history_scan?(%{kind: :rail}, _events), do: true
+
+  defp full_history_scan?(%{kind: kind, step: step, job: job, index: i}, events) do
+    deep? = deep_checkout_before?(job, i)
+
+    cond do
+      not deep? ->
+        false
+
+      kind == :action ->
+        Enum.any?(events, &(&1 in ["schedule", "workflow_dispatch"]))
+
+      Regex.match?(~r/\bgitleaks\b/, step.run) ->
+        cond do
+          String.contains?(step.run, "--no-git") -> false
+          all_history_log_opts?(step.run) -> true
+          Regex.match?(@log_opts, step.run) -> false
+          true -> true
         end
-      end)
+
+      true ->
+        Regex.match?(~r/\btrufflehog\s+git\b/, step.run) and
+          not Regex.match?(~r/--(?:since-commit|base|head)\b/, step.run)
+    end
+  end
+
+  # An actions/checkout of this repository (no `repository:` input) with
+  # `fetch-depth: 0`, before step `i` of the job. Read from the parsed step:
+  # the job text holds values, not keys.
+  defp deep_checkout_before?(job, i) do
+    (job.steps || [])
+    |> Enum.take(i)
+    |> Enum.any?(fn step ->
+      is_binary(step.uses) and String.starts_with?(step.uses, "actions/checkout") and
+        Hypatia.Workflow.input(step, "fetch-depth") == "0" and
+        Hypatia.Workflow.input(step, "repository") in [nil, "", "${{ github.repository }}"]
+    end)
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
