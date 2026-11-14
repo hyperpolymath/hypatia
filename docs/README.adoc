@@ -53,6 +53,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 Each operations doc has a "When to update this memo" footer and explicit
 acceptance criteria for closing the underlying roadmap item.
 
+* link:operations/e0-closeout/README.adoc[`e0-closeout/`]: the work orders that close step E0 of issue 984, with their templates.
 * link:operations/dispatch-runner-contract.adoc[`dispatch-runner-contract.adoc`] — exit-code contract gitbot-fleet must implement.
 * link:operations/verisim-api-deployment.adoc[`verisim-api-deployment.adoc`] — runbook for when the verisim-api Rust crate ships.
 * link:operations/migration-arangodb-to-verisim.adoc[`migration-arangodb-to-verisim.adoc`] — historical migration record.

@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Ledger line: the cost record of one run
+
+Each work-order run writes one line to the cost ledger. The ledger is a JSON
+Lines file on the machine that ran the work. It is not in the repository,
+because runs happen on separate branches and a shared file would conflict.
+The pull request body carries the same numbers in its "Cost" line.
+
+Default path: `${XDG_STATE_HOME:-$HOME/.local/state}/hypatia/api-ledger.jsonl`
+
+== The line
+
+One JSON object on one line, with sorted keys and no spaces (JCS form):
+
+[source,json]
+----
+{"cap_usd":5,"cost_usd":1.84,"duration_ms":412000,"effort":"medium","ended":"2026-11-15T10:42:07Z","exit":0,"model":"sonnet","session_id":"<id>","stop":"end_turn","turns":41,"work_order":"E0-01"}
+----
+
+[cols="1,4",options="header"]
+|===
+|Key |Meaning
+|`work_order` |The id of the work order.
+|`model`, `effort` |The model alias and the effort level of the run.
+|`cap_usd` |The cap that the run had.
+|`cost_usd` |The cost that Claude Code reports. It is a client estimate, not the bill.
+|`turns`, `duration_ms` |The size of the run.
+|`stop` |Why the run ended.
+|`exit` |The exit code of the `claude` command.
+|`session_id` |The session, so that a person can open the transcript.
+|`ended` |The end time in UTC.
+|===
+
+== Reading the ledger
+
+Sum of the month:
+
+[source,bash]
+----
+jq -s 'map(.cost_usd) | add' "${XDG_STATE_HOME:-$HOME/.local/state}/hypatia/api-ledger.jsonl"
+----
+
+The Console is the authority for the bill. Compare the ledger sum with the
+Console workspace total once each week. A difference above 10 percent means
+that something ran outside the launch script.
