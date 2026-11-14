@@ -47,6 +47,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 * link:design/README.adoc[`README.adoc`] — design index.
 * link:design/DESIGN-NARRATIVE.adoc[`DESIGN-NARRATIVE.adoc`] — narrative design rationale.
 * link:design/design-decisions.adoc[`design-decisions.adoc`] — atomic decision log.
+* link:design/2026-11-14-merge-honesty.adoc[`2026-11-14-merge-honesty.adoc`]: proposed. When Hypatia treats 2 findings as 1, and 5 decisions for the owner.
 
 == Operations — runbooks + design memos
 
