@@ -218,6 +218,7 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
       false_positives: 0,
       verified: 0,
       still_present: 0,
+      qualified: %{successes: 0, failures: 0, false_positives: 0, ignored: 0},
       quarantined_recipes: MapSet.new()
     }
   end
@@ -229,6 +230,11 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
 
     bucket
     |> Map.update!(:total, &(&1 + 1))
+    |> Map.update!(:qualified, fn acc ->
+      Map.merge(acc, Hypatia.OutcomeTracker.qualified_outcome_counts([outcome]), fn _k, a, b ->
+        a + b
+      end)
+    end)
     |> maybe_inc(outcome_str, "success", :successes)
     |> maybe_inc(outcome_str, "failure", :failures)
     |> maybe_inc(outcome_str, "false_positive", :false_positives)
@@ -259,7 +265,16 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
           "yet OR the outcome log isn't in the expected location (try --outcomes-path)."
       )
     else
-      header = ["strategy", "outcomes", "success%", "verified", "still_present", "auto-q recipes"]
+      header = [
+        "strategy",
+        "outcomes",
+        "claimed%",
+        "qualified",
+        "verified",
+        "still_present",
+        "auto-q recipes"
+      ]
+
       Mix.shell().info(format_row(header))
       Mix.shell().info(format_row(Enum.map(header, fn _ -> "────────" end)))
 
@@ -275,6 +290,7 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
             r.strategy,
             Integer.to_string(r.total),
             success_pct,
+            Integer.to_string(r.qualified.successes),
             Integer.to_string(r.verified),
             Integer.to_string(r.still_present),
             Integer.to_string(MapSet.size(r.quarantined_recipes))
@@ -297,6 +313,8 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
           strategy: r.strategy,
           total: r.total,
           successes: r.successes,
+          claimed_successes: r.successes,
+          qualified: r.qualified,
           failures: r.failures,
           false_positives: r.false_positives,
           verified: r.verified,
