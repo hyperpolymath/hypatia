@@ -1034,6 +1034,27 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       refute exec_sync?("// spawn(cmd, a, {shell: true})\n")
     end
 
+    test "a comment before the shell key does not hide it" do
+      assert exec_sync?("spawn(c, a, { /* use shell */ shell: true });\n")
+      assert exec_sync?("spawn(c, a, {\n  // needs a shell\n  shell: true\n});\n")
+    end
+
+    test "exec calls written in a string or comment are not calls" do
+      bound = "const cp_1 = require('child_process');\n"
+
+      for line <- [
+            "const s = '(0, cp_1.exec)(cmd)';\n",
+            "// (0, cp_1.execSync)(cmd)\n",
+            "const t = `cp_1.exec(cmd)`;\n",
+            "/* cp_1.exec(cmd) */\n"
+          ] do
+        refute exec_sync?(bound <> line), line
+      end
+
+      assert exec_sync?(bound <> "(0, cp_1.exec)(cmd);\n")
+      assert exec_sync?(bound <> "cp_1.exec(cmd);\n")
+    end
+
     test "arguments nested deeper than two levels no longer hide the option" do
       assert exec_sync?("spawn(a(b(c(d))), [e(f(g()))], {shell: true});\n")
     end

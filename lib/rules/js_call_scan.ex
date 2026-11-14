@@ -17,7 +17,7 @@ defmodule Hypatia.Rules.JsCallScan do
   Limits, stated rather than guessed at: a regex literal containing a quote
   or bracket can desynchronise the walk; an options object passed through a
   variable is not followed; a call written inside a template literal's
-  `${...}` is not looked for.
+  `${...}` is treated as text, not code, for every form of the rule.
   """
 
   @spawn_family ~w(spawn spawnSync execFile execFileSync)
@@ -84,10 +84,17 @@ defmodule Hypatia.Rules.JsCallScan do
     case split_top_level(src, brace + 1, ?}) do
       {:ok, props, _close} ->
         Enum.any?(props, fn {from, to} ->
-          Regex.match?(
-            ~r/\A\s*(?:shell|'shell'|"shell")\s*:\s*(?:true\b|['"`])/,
-            binary_part(src, from, to - from)
-          )
+          # A comment may sit before the key: start at the first code byte.
+          case first_code_byte(src, from, to) do
+            {:ok, key} ->
+              Regex.match?(
+                ~r/\A(?:shell|'shell'|"shell")\s*:\s*(?:true\b|['"`])/,
+                binary_part(src, key, to - key)
+              )
+
+            :none ->
+              false
+          end
         end)
 
       :error ->
@@ -218,6 +225,15 @@ defmodule Hypatia.Rules.JsCallScan do
           nil
       end
     end
+  end
+
+  @doc """
+  The offsets in `offsets` that are code, not inside a string, template
+  literal or comment of `src`.
+  """
+  def code_offsets(src, offsets) when is_binary(src) do
+    spans = noncode_spans(src)
+    Enum.reject(offsets, &inside?(spans, &1))
   end
 
   # Spans of the file that are strings, templates or comments.

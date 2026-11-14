@@ -1746,7 +1746,18 @@ defmodule Hypatia.Rules.CodeSafety do
   # there even when an inline directive blanked its line in `subject`.
   @doc false
   def rule_matches(%{bound_calls: :child_process} = rule, subject, content) do
-    regex_hits = Regex.scan(pattern_for(rule, content), subject, return: :index)
+    hits = Regex.scan(pattern_for(rule, content), subject, return: :index)
+
+    # A call written in a string, template or comment is not a call.
+    code =
+      MapSet.new(
+        Hypatia.Rules.JsCallScan.code_offsets(
+          subject,
+          Enum.map(hits, fn [{off, _} | _] -> off end)
+        )
+      )
+
+    regex_hits = Enum.filter(hits, fn [{off, _} | _] -> MapSet.member?(code, off) end)
 
     shell_hits =
       subject
