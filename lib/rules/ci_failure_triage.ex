@@ -249,6 +249,21 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "if the bad leaf comes from a standards commit, fix it there (solutions at source)."
     },
     %{
+      name: "actions_lock_tag_keyed",
+      layer: :config,
+      patterns: [~r/key ref is not a 40-hex commit/i],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "The pin-contract gate (standards check-lock-pin-contract.sh, canon rule 10) " <>
+          "refused actions.lock records keyed by a tag instead of a commit SHA, the form " <>
+          "gh actions-lock writes by default. The cure is the standards repair order " <>
+          "(relock-sha-keys.sh and the scripts after it), which re-pins workflows: a " <>
+          "referral, with no fix row until that order is shown to turn the gate green."
+    },
+    %{
       name: "actions_lock_missing_ref",
       layer: :config,
       patterns: [

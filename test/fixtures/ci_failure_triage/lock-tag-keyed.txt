@@ -1,0 +1,7 @@
+Run bash standards/scripts/check-lock-pin-contract.sh .github/workflows/actions.lock
+INVALID actions/checkout@v7.0.1: key ref is not a 40-hex commit — lock keys must be SHA-pinned (canon rule 10)
+INVALID julia-actions/setup-julia@v3.0.3: key ref is not a 40-hex commit — lock keys must be SHA-pinned (canon rule 10)
+INVALID hyperpolymath/deed-ecosystem@main: key ref is not a 40-hex commit — lock keys must be SHA-pinned (canon rule 10)
+inspected 22 dependency record(s) in .github/workflows/actions.lock (schema v0.0.3); caller-side reusable edges exempted: 0; contract violations: 22
+::error::actions.lock violates the pin contract in 22 place(s). Fix the RECORD, not this gate: a leaf action's ref names the reviewed tag that resolves to its pin (run `gh actions-lock`, then close-lock.sh).
+Error: Process completed with exit code 1.
