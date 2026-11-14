@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
+#
+# SQ map source check.
+#
+# Every hypatia/ci_failure_triage rule, and each of the two ADR 0004
+# workflow_audit ids (actions_lock_stale, mirror_without_visibility_guard),
+# needs a row in the Hypatia to squabbler rule map, proven/registry/sq-map.tsv
+# in hyperpolymath/proven-cicd-and-workflows. This job fails a change here that
+# adds such a rule without that row, and names the row, so the author adds it in
+# a proven-cicd PR first and then re-runs this job.
+#
+# What is checked: the registry the rule sources emit now, from
+# `scripts/gen-rules-praxis.sh --stdout`, not the committed
+# hypatia_rules_praxis.deed. A rule added without regenerating the deed is
+# therefore still seen. Whether the committed deed is stale is quality.yml's
+# check ("Rule registry (hypatia_rules_praxis.deed) matches the code and lints").
+#
+# proven-cicd is read at main, not at a pin: the question is whether the rule is
+# mapped now. The verdict is proven-cicd's own tests/registry-sq-map.sh. A failed
+# checkout, generator or test is NOT RUN and fails the job; it is never a pass.
+#
+# Not a required check: making it one is a ruleset change for the owner.
+
+name: SQ map source check
+
+on:
+  pull_request:
+    paths:
+      - hypatia_rules_praxis.deed
+      - scripts/gen-rules-praxis.sh
+      - scripts/check-sq-map.sh
+      - tests/check-sq-map-test.sh
+      - lib/rules/**
+      - lib/pattern_registry.ex
+      - lib/hypatia/cli.ex
+      - lib/hypatia/scanner_suppression.ex
+      - lib/scorecard_ingestor.ex
+      - .github/workflows/sq-map-source-check.yml
+  push:
+    branches: [main]
+    paths:
+      - hypatia_rules_praxis.deed
+      - scripts/gen-rules-praxis.sh
+      - scripts/check-sq-map.sh
+      - tests/check-sq-map-test.sh
+      - lib/rules/**
+      - lib/pattern_registry.ex
+      - lib/hypatia/cli.ex
+      - lib/hypatia/scanner_suppression.ex
+      - lib/scorecard_ingestor.ex
+      - .github/workflows/sq-map-source-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sq-map:
+    name: Triage rules have a row in proven-cicd sq-map.tsv
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # Public repository: the default token reads it; nothing is written.
+      - name: Checkout proven-cicd-and-workflows at main (the map and its test)
+        id: proven
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/proven-cicd-and-workflows
+          ref: main
+          path: proven-cicd
+          sparse-checkout: |
+            tests/registry-sq-map.sh
+            proven/registry/sq-map.tsv
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Say NOT RUN when proven-cicd could not be checked out
+        if: failure() && steps.proven.outcome == 'failure'
+        run: |
+          echo "::error title=SQ map check NOT RUN::proven-cicd-and-workflows could not be checked out at main. This is not a pass: re-run the job."
+          printf '### SQ map check: NOT RUN\n\nproven-cicd-and-workflows could not be checked out at main. A check that did not run is not a pass.\n' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Controls for the check
+        run: bash tests/check-sq-map-test.sh proven-cicd
+
+      - name: Every triage id the rule sources emit has a row
+        run: bash scripts/check-sq-map.sh proven-cicd

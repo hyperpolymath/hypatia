@@ -537,7 +537,7 @@ defmodule Hypatia.Rules.RsrConformanceTest do
   describe "scorecard serialization" do
     @describetag :tmp_dir
 
-    # The RSR scorecard deed (standards clauses/rsr-scorecard.abnf, DRAFT; owner
+    # The RSR scorecard deed (standards clauses/rsr-scorecard.abnf v0.2.0; owner
     # ruling 2026-11-14), read back with the deed reader that agrees with the
     # standards gate.
     defp card_of(text) do
@@ -566,6 +566,14 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert {:string, score} = card["score"]
       assert score =~ ~r/\A[0-9]+(\.[0-9]+)?\z/
       refute Map.has_key?(card, "source-commit")
+
+      # who scored and when: hypatia's version from mix.exs, and the run time
+      assert card["assessor"] ==
+               {:string, "hypatia rsr_score #{Mix.Project.config()[:version]}"}
+
+      assert card["assessor"] == {:string, RsrConformance.assessor()}
+      assert {:string, at} = card["assessed-at"]
+      assert at =~ ~r/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/
 
       assert length(criteria) == length(sc.results)
 
@@ -600,6 +608,34 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert top["beholding-chora"] == {:uuid, "00000000-0000-8000-8000-0000000000e1"}
       assert card["repo"] == {:string, "example-game"}
       assert card["source-commit"] == {:string, commit}
+    end
+
+    test ":assessed-at takes an injected time, in UTC with whole seconds", %{tmp_dir: tmp} do
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      fixed = ~U[2026-11-14 19:33:12.654321Z]
+      text = RsrConformance.to_deed(sc, assessed_at: fixed)
+      {_, card, _} = card_of(text)
+      assert card["assessed-at"] == {:string, "2026-11-14T19:33:12Z"}
+      # deterministic: the same time gives the same file
+      assert RsrConformance.to_deed(sc, assessed_at: fixed) == text
+
+      # an offset is converted to UTC, not copied
+      offset = %DateTime{
+        year: 2026,
+        month: 11,
+        day: 15,
+        hour: 1,
+        minute: 3,
+        second: 12,
+        microsecond: {0, 0},
+        time_zone: "Asia/Kolkata",
+        zone_abbr: "IST",
+        utc_offset: 19_800,
+        std_offset: 0
+      }
+
+      {_, card, _} = card_of(RsrConformance.to_deed(sc, assessed_at: offset))
+      assert card["assessed-at"] == {:string, "2026-11-14T19:33:12Z"}
     end
 
     test "a repo with no chora deed gives no context", %{tmp_dir: tmp} do
