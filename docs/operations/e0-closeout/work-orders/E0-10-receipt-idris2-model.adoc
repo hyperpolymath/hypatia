@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-10: The receipt: Idris2 model and gate
+:wo-id: E0-10
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 25
+:wo-max-turns: 250
+:wo-branch: feat/e0-10-receipt-idris2-model
+:wo-depends: E0-09
+
+== Goal
+
+An Idris2 module in the ABI package models the receipt and proves the
+properties that the design of `E0-08` names. The verdict gate checks the
+module, with fixtures that it must accept and fixtures that it must reject.
+
+== Authority
+
+* https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A7.
+* `3-practice/PROOF-POLICY.adoc` in `metadatastician/standards`: APIs, ABIs and
+  engineering properties use Idris2.
+
+== Facts measured
+
+Commit `4d7f059`. The run facts are from 2026-11-14 with Idris 2 version 0.7.0.
+
+* `src/abi/hypatia-abi.ipkg` sets `sourcedir = ".."`. The modules are under
+  `src/Hypatia/ABI/`.
+* Ran: `bash scripts/check-verdicts.sh` gave
+  `PASS: ABI package, 5 positive control(s), 15 expected rejection(s)`.
+* `tests/accept/` has 5 files. `tests/reject/` has 15 files.
+* `test/egress_decision_mirror_test.exs` is the model for a test that holds
+  the Elixir code to the Idris2 model.
+* `verification/proof-ledger.jsonl` has one row for each proved obligation.
+  `verification/PROOF-STATUS.adoc` is rendered from it.
+
+== Steps
+
+. Confirm that `E0-09` is merged. Measure the facts again.
+. Write `src/Hypatia/ABI/Receipt.idr` with `%default total`. Add it to the ipkg.
+. Prove each property of the design. Use no `believe_me`, `assert_total`,
+  `postulate` or hole.
+. Add at least 1 file to `tests/accept/` and 1 file to `tests/reject/` for
+  each property. Add the module to `scripts/check-verdicts.sh`.
+. Write the mirror test in `test/`, after the pattern of the egress mirror test.
+. Add the rows to `verification/proof-ledger.jsonl`. State the trust boundary
+  in each row: the model covers the Idris2 types, not the Elixir run time.
+  Run `scripts/proof-ledger.sh check`, then `scripts/proof-ledger.sh render --write`.
+
+== Acceptance
+
+* `bash scripts/check-verdicts.sh` passes, and its counts rise by the new fixtures.
+* `idris2 --build src/abi/hypatia-abi.ipkg` passes.
+* `mix test` has 0 failures, and the mirror test is in the run.
+* `scripts/proof-ledger.sh check` and `scripts/proof-ledger.sh render --check` pass.
+* A grep for `believe_me`, `assert_total` and `postulate` in the new files finds nothing.
+
+== Stop and ask
+
+* A property of the design is false or cannot be stated. Report the
+  counter-example. Do not weaken the property without a ruling.
+* A proof needs an axiom.
+* The cost reaches the cap before the acceptance checks pass. Report the
+  open goals.

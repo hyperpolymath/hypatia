@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-04: Verification comes from a rescan, not from the caller
+:wo-id: E0-04
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 12
+:wo-max-turns: 200
+:wo-branch: fix/e0-04-verification-from-rescan
+:wo-depends: none
+
+== Goal
+
+A caller cannot stamp an outcome row as verified. Only a rescan of Hypatia or
+the qualified fleet import can do that. A rescan that cannot name a category
+gives "not verified", never "verified".
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A3:
+an absent verifier gives zero positive learning.
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14. Nothing here was shown by a run.
+
+* `lib/outcome_tracker.ex`, `record_outcome/5` (line 40): `Map.merge(metadata, base)`
+  (line 131) keeps a `"verification"` key that the caller gives. In `lib/`,
+  only `record_and_verify/5` passes `"verified"` (line 332).
+* Same file, `record_outcome_for_fix/5` (line 258): when the category cannot be
+  derived, the code puts `verify: false`, and the next line puts `verify: true`
+  again. The rescan then runs with the category `""`.
+* Same file, `verify_fix/3` (about line 205): the fix is "still present" only
+  when a weak point has the same category. With the category `""`, a scan with
+  no blank category returns `:verified`.
+* The docstring of `record_outcome_for_fix/5` names a `:scan_unavailable`
+  result. The code has no such branch.
+* The rescan compares by category for the whole repo. It does not look at the file.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write a test in `test/outcome_tracker_test.exs` that fails today: an unknown
+  recipe with a clean scan must not give `:verified`. If the test passes
+  today, the second and third facts are wrong. Stop and report.
+. Write a design note of 1 page in the pull request body. It answers:
+.. Which callers may set `"verification"`, and how the code enforces it.
+.. What an empty category returns.
+.. Whether the rescan compares the file as well as the category. Name the
+   option that is most correct in the long term, and say so if you choose another.
+. Stop for the owner's answer on point 3 if the scanner output cannot name a file.
+. Implement. Keep the public function names.
+. Add a test that a caller's `"verification" => "verified"` in `metadata` does
+  not survive `record_outcome/5`.
+
+== Acceptance
+
+* The new tests pass, and the first one failed before the change. Give both outputs.
+* `mix test test/outcome_tracker_test.exs test/outcome_tracker_runtime_store_test.exs test/cross_repo_learning_test.exs`
+  passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* `mix hypatia.record_outcome` with an unknown recipe records a row that
+  `qualified_outcome_counts/1` ignores.
+* The change touches only `lib/outcome_tracker.ex` and test files.
+
+== Stop and ask
+
+* The fleet import path needs to set `"verification"` through `record_outcome/5`
+  and the design blocks it.
+* The scanner output has no file field.
+* The cost reaches the cap before the acceptance checks pass.

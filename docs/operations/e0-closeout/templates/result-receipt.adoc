@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Result receipt: what an agent states when it reports a result
+
+A result receipt is the short evidence block that an agent gives with each
+claim. It is for people. It is not the machine receipt of the E0 event chain,
+which work orders `E0-08` to `E0-10` define.
+
+A claim with no receipt is an assertion. Report it as "not verified".
+
+== The block
+
+[source,text]
+----
+Claim:      <one sentence>
+Head:       <full commit sha that the checks ran on>
+Ran:        <command>            -> <result line, copied>
+            <command>            -> <result line, copied>
+CI:         <run link>           -> <conclusion>, or "not run"
+Read only:  <what you concluded from the code without a run>
+Not run:    <each check that the claim needs and that did not run, with the reason>
+Status:     verified | partly verified | not verified
+----
+
+== Rules
+
+* `verified` needs every check under "Ran" to pass on the commit under "Head",
+  and nothing under "Not run". A claim with a check under "Not run" is
+  `partly verified` at most.
+* A check that did not run is listed under "Not run". It is never left out.
+* A result line is copied from the tool output. It is not written from memory.
+* A skipped gate is not a pass. A zero exit code alone is not a pass.
+* When the head moves, the receipt is stale. Run the checks again. One
+  exception: a receipt in a document names the commit that the checks ran on,
+  and the commit that adds only that document does not make it stale.
