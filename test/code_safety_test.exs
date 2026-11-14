@@ -890,20 +890,41 @@ defmodule Hypatia.Rules.CodeSafetyTest do
 
     test "RegExp.exec and a function named exec are not findings" do
       refute exec_sync?("const m = /^v(\\d+)/.exec(tag);\nconst n = re.exec(line);\n")
+      refute exec_sync?("const t = re.exec(`${prefix}-${name}`);\n")
       refute exec_sync?("function exec(cmd) { return cmd; }\n")
+    end
+
+    test "a shell key outside a process call is not a finding" do
+      refute exec_sync?("const preferences = {shell: true};\n")
+      refute exec_sync?("spawnSync(git, ['status'])\nconst prefs = {shell: true}\n")
     end
 
     test "execSync and exec run a shell" do
       assert exec_sync?("const out = execSync(`git log ${ref}`);\n")
       assert exec_sync?("import {exec} from 'node:child_process';\nexec(cmd, cb);\n")
       assert exec_sync?("require('child_process').exec(`ls ${dir}`, cb);\n")
-      assert exec_sync?("cp.exec(`rm -rf ${dir}`);\n")
+    end
+
+    test "exec through the name child_process is bound to, any argument shape" do
+      assert exec_sync?("import * as cp from 'node:child_process';\ncp.exec('rm -rf ' + dir);\n")
+      assert exec_sync?("import cp from 'child_process';\ncp.execSync(cmd);\n")
+      assert exec_sync?("const proc = require('child_process');\nproc.exec(cmd, cb);\n")
+      refute exec_sync?("import * as cp from 'node:child_process';\nother.exec(cmd);\n")
+    end
+
+    test "the finding is on the call's line, not the import's" do
+      code = "import * as cp from 'node:child_process';\n\n\ncp.exec(cmd);\n"
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [4]
     end
 
     test "a shell option makes spawn and execFile shell calls" do
       assert exec_sync?("spawnSync(cmd, args, {shell: true});\n")
       assert exec_sync?("spawn(cmd, { shell : '/bin/bash' });\n")
       assert exec_sync?("execFileSync(cmd, args, {encoding: 'utf8', shell: true});\n")
+      assert exec_sync?("spawnSync(cmd, args, {'shell': true});\n")
+      assert exec_sync?("spawnSync(cmd, args, {\"shell\": true});\n")
+      assert exec_sync?("spawn(path.join(dir, 'x'), [a], {\n  shell: true\n});\n")
       refute exec_sync?("spawnSync(cmd, args, {shell: false});\n")
     end
   end

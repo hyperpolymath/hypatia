@@ -608,15 +608,20 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :js_exec_sync,
       severity: :high,
-      # Only calls a shell parses: execSync( and exec( (always /bin/sh -c),
-      # a `.exec(` given a template string, and any call with a `shell:`
-      # option set to true or a shell path. Importing node:child_process is
-      # not a finding, nor is spawn/spawnSync/execFile/execFileSync with an
-      # argv array and no `shell:` option: no shell sees the arguments.
-      # A pattern cannot tell where a program or argument came from, so
-      # tainted argv to a shell-free call is out of reach here (mathesis#90).
+      # Only calls a shell parses:
+      #   * execSync( and a bare exec( (always /bin/sh -c);
+      #   * <ns>.exec( / <ns>.execSync( where <ns> is the name the file binds
+      #     node:child_process to (import * as ns / import ns / require), and
+      #     require('child_process').exec( -- any argument shape;
+      #   * spawn/spawnSync/execFile/execFileSync/fork called with a `shell`
+      #     option (bare or quoted key) set to true or to a shell path.
+      # Importing node:child_process is not a finding, nor is a shell-free
+      # call with an argv array, RegExp.exec, or a `shell` key outside a
+      # process call. \K reports the call's line, not the import's.
+      # Not covered: a shell option passed through a variable, and tainted
+      # argv to a shell-free call -- a pattern cannot trace values (mathesis#90).
       pattern:
-        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|\.exec\s*\(\s*`|\bshell\s*:\s*(?:true\b|['"`])/,
+        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|(?:import\s+(?:\*\s+as\s+)?(\w+)\s+from\s*['"](?:node:)?child_process['"]|(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*['"](?:node:)?child_process['"]\s*\))[\s\S]*?\K\b(?:\1|\2)\.exec(?:Sync)?\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
     },
