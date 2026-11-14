@@ -47,16 +47,15 @@ defmodule Hypatia.Rules.JsCallScan do
         "|"
       )
 
-    noncode = noncode_spans(src)
+    hits =
+      source
+      |> Regex.compile!()
+      |> Regex.scan(src, return: :index)
+      |> Map.new(fn [{off, len} | _] -> {off, off + len - 1} end)
 
-    source
-    |> Regex.compile!()
-    |> Regex.scan(src, return: :index)
-    |> Enum.flat_map(fn [{off, len} | _] ->
-      open = off + len - 1
-
-      if not inside?(noncode, off) and shell_option?(src, open), do: [off], else: []
-    end)
+    src
+    |> code_offsets(Map.keys(hits))
+    |> Enum.filter(&shell_option?(src, Map.fetch!(hits, &1)))
   end
 
   # ── the call's arguments ────────────────────────────────────────────────
@@ -66,17 +65,30 @@ defmodule Hypatia.Rules.JsCallScan do
     case split_top_level(src, open + 1, ?)) do
       {:ok, args, _close} ->
         Enum.any?(args, fn {from, to} ->
-          case first_code_byte(src, from, to) do
-            {:ok, brace} when brace < to ->
-              if :binary.at(src, brace) == ?{, do: object_has_shell?(src, brace), else: false
-
-            _ ->
-              false
+          case object_start(src, from, to) do
+            {:ok, brace} -> object_has_shell?(src, brace)
+            :none -> false
           end
         end)
 
       :error ->
         false
+    end
+  end
+
+  # The `{` an argument starts with, stepping over wrapping parentheses
+  # (`({shell: true})`) and the whitespace and comments around them.
+  defp object_start(src, from, to) do
+    case first_code_byte(src, from, to) do
+      {:ok, i} when i < to ->
+        case :binary.at(src, i) do
+          ?{ -> {:ok, i}
+          ?( -> object_start(src, i + 1, to)
+          _ -> :none
+        end
+
+      _ ->
+        :none
     end
   end
 
@@ -88,7 +100,7 @@ defmodule Hypatia.Rules.JsCallScan do
           case first_code_byte(src, from, to) do
             {:ok, key} ->
               Regex.match?(
-                ~r/\A(?:shell|'shell'|"shell")\s*:\s*(?:true\b|['"`])/,
+                ~r/\A(?:shell|'shell'|"shell"|\[\s*(['"`])shell\1\s*\])\s*:\s*(?:true\b|['"`])/,
                 binary_part(src, key, to - key)
               )
 
@@ -232,8 +244,9 @@ defmodule Hypatia.Rules.JsCallScan do
   literal or comment of `src`.
   """
   def code_offsets(src, offsets) when is_binary(src) do
-    spans = noncode_spans(src)
-    Enum.reject(offsets, &inside?(spans, &1))
+    # Spans come out sorted and disjoint: walk them with the sorted offsets
+    # in one pass.
+    keep_code(Enum.sort(offsets), noncode_spans(src), [])
   end
 
   # Spans of the file that are strings, templates or comments.
@@ -258,5 +271,14 @@ defmodule Hypatia.Rules.JsCallScan do
     end
   end
 
-  defp inside?(spans, off), do: Enum.any?(spans, fn {a, b} -> off >= a and off < b end)
+  defp keep_code([], _spans, acc), do: Enum.reverse(acc)
+  defp keep_code(offs, [], acc), do: Enum.reverse(acc, offs)
+
+  defp keep_code([off | rest] = offs, [{a, b} | spans_rest] = spans, acc) do
+    cond do
+      off >= b -> keep_code(offs, spans_rest, acc)
+      off >= a -> keep_code(rest, spans, acc)
+      true -> keep_code(rest, spans, [off | acc])
+    end
+  end
 end

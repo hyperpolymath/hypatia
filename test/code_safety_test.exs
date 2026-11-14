@@ -1055,6 +1055,29 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert exec_sync?(bound <> "cp_1.exec(cmd);\n")
     end
 
+    test "a parenthesised options object is still the call's options" do
+      assert exec_sync?("spawn(c, a, ({shell: true}));\n")
+      assert exec_sync?("spawn(c, a, (\n /* x */ {shell: true}));\n")
+      refute exec_sync?("spawn(c, a, ({env: {shell: true}}));\n")
+    end
+
+    test "a computed string key names the shell option too" do
+      for key <- ["['shell']", ~s(["shell"]), "[`shell`]", "[ 'shell' ]"] do
+        assert exec_sync?("spawn(c, a, {#{key}: true});\n"), key
+      end
+
+      refute exec_sync?("spawn(c, a, {[shellKey]: true});\n")
+    end
+
+    test "string and comment offsets are found in one pass over many calls" do
+      calls = Enum.map_join(1..400, "", fn i -> "spawn(c#{i}, a, {shell: true}); // x\n" end)
+
+      [f] =
+        Enum.filter(CodeSafety.scan_content(calls, "javascript"), &(&1.rule == :js_exec_sync))
+
+      assert f.occurrences == 400
+    end
+
     test "arguments nested deeper than two levels no longer hide the option" do
       assert exec_sync?("spawn(a(b(c(d))), [e(f(g()))], {shell: true});\n")
     end
