@@ -18,7 +18,9 @@
 #
 # The run reads the project settings and the headless profile only
 # (--setting-sources project), so a personal allow rule of the caller does not
-# widen what the unattended run can do.
+# widen what the unattended run can do. The profile has no push rule: this
+# script allows the one command `git push -u origin BRANCH`, with the branch of
+# the work order, so the run cannot force, delete or push another ref.
 
 set -eu
 
@@ -63,9 +65,9 @@ attr() {
 # the wrong name would run one work order and record another.
 [ "$(attr id)" = "$id" ] || die "$file declares the id $(attr id), not $id"
 agent=$(attr agent); model=$(attr model); effort=$(attr effort)
-cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo)
-for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo"; do
-  [ -n "$v" ] || die "$file lacks one of the header lines agent, model, effort, cap-usd, max-turns, repo"
+cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo); branch=$(attr branch)
+for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo" "$branch"; do
+  [ -n "$v" ] || die "$file lacks one of the header lines agent, model, effort, cap-usd, max-turns, repo, branch"
 done
 case "$cap$turns" in
   *[!0-9]*) die "cap-usd and max-turns must be whole numbers in $file" ;;
@@ -73,6 +75,13 @@ case "$cap$turns" in
 esac
 case "$agent" in
   *[!A-Za-z0-9-]*) die "the agent name has a character that is not a letter, a digit or a hyphen: $agent" ;;
+  *) ;;
+esac
+
+# The branch goes into a permission rule, so it must be one plain ref name. A
+# value that starts with a hyphen would be an option of git push.
+case "$branch" in
+  -* | *[!A-Za-z0-9/._-]*) die "the branch is not a plain ref name: $branch" ;;
   *) ;;
 esac
 
@@ -100,17 +109,26 @@ if [ -n "$a_effort" ] && [ "$a_effort" != "$effort" ]; then
   die "work order $id names the effort $effort, and the agent $agent is defined with $a_effort"
 fi
 
-prompt="Run work order $id with the e0-work-order skill. The work order is ${file#"$repo"/}. Stop at its cost cap of $cap US dollars."
+skill="$repo/.claude/skills/e0-work-order/SKILL.md"
+[ -f "$skill" ] || die "missing $skill"
+push="git push -u origin $branch"
+prompt="Run work order $id with the e0-work-order skill. The work order is ${file#"$repo"/}. Stop at its cost cap of $cap US dollars. This run can push with one command only, with nothing after it: $push"
 profile="$repo/.claude/profiles/e0-headless.json"
 [ -f "$profile" ] || die "missing $profile"
 
 if [ "$dry" = "--dry-run" ]; then
-  printf 'claude -p "%s" --agent %s --model %s --effort %s --max-budget-usd %s --max-turns %s --permission-mode dontAsk --setting-sources project --settings %s --output-format json\n' \
-    "$prompt" "$agent" "$model" "$effort" "$cap" "$turns" "$profile"
+  printf 'claude -p "%s" --agent %s --model %s --effort %s --max-budget-usd %s --max-turns %s --permission-mode dontAsk --setting-sources project --settings %s --allowedTools "Bash(%s)" --output-format json\n' \
+    "$prompt" "$agent" "$model" "$effort" "$cap" "$turns" "$profile" "$push"
   exit 0
 fi
 
 [ -n "${ANTHROPIC_API_KEY:-}" ] || die "ANTHROPIC_API_KEY is not set: the run would bill the signed-in plan, not the API credit"
+# Each of these variables sends the run to another account or endpoint, also
+# when the API key is set (authentication precedence of Claude Code).
+for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE \
+  CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; do
+  [ -z "$(printenv "$v" || true)" ] || die "$v is set: the run would not bill the API key. Unset it first"
+done
 # Measured on 2026-11-14: 1 test of the suite fails when the locale is not
 # UTF-8, so a run would stop on a red baseline after it spent credit.
 charmap=$(locale charmap 2>/dev/null) || charmap=""
@@ -131,7 +149,8 @@ trap 'rm -f "$out"' EXIT
 status=0
 (cd "$repo" && claude -p "$prompt" --agent "$agent" --model "$model" --effort "$effort" \
   --max-budget-usd "$cap" --max-turns "$turns" --permission-mode dontAsk \
-  --setting-sources project --settings "$profile" --output-format json) > "$out" || status=$?
+  --setting-sources project --settings "$profile" --allowedTools "Bash($push)" \
+  --output-format json) > "$out" || status=$?
 
 ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 line=""
