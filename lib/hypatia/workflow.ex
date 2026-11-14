@@ -261,13 +261,16 @@ defmodule Hypatia.Workflow do
 
   The shell's rules, not YAML's: a quote opens anywhere outside quotes and
   carries across lines; a `#` opens a comment only where a word starts
-  (line start, or after a blank or `; & | ( ) < >`); a backslash escapes the
+  (line start, or after a blank or `; & | ( < >`); a backslash escapes the
   next byte outside single quotes.
   """
   def shell_mask(script, opts \\ []) when is_binary(script),
     do: mask(script, nil, true, false, Keyword.get(opts, :quotes, false), [])
 
-  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
+  # `)` is left out: one that closes `$(…)` does not end the word, so a `#`
+  # after it is text (Codex on #1110). A `#` after a subshell's `)` is then
+  # kept as text too, which only errs towards reading more of the script.
+  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?<, ?>]
 
   defp mask(<<>>, _q, _ws?, _cmt?, _qs?, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
   defp mask(<<?\n, r::binary>>, q, _, _, qs?, acc), do: mask(r, q, true, false, qs?, [?\n | acc])

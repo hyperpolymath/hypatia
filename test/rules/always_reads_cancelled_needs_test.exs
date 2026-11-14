@@ -313,6 +313,25 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert check(%{"f.yml" => wf}) == []
   end
 
+  # Codex on #1110, after merge.
+  test "a bare exit with a comment does not take the next line as its argument" do
+    wf =
+      String.replace(@verdict, "|| exit 1", "|| true\n          exit # done\n          \"$CODE\"")
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "an &> redirection is not a later command" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "test \"$DEED_RESULT\" = success && echo ok &>/dev/null"
+      )
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
   test "it is part of the full audit" do
     %{findings: fs} =
       WorkflowAudit.audit(["fork-governance.yml"], %{"fork-governance.yml" => @verdict})

@@ -862,6 +862,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [%{file: "sk.yml", key: "checkout ref"}] = Enum.filter(found, &(&1.file == "sk.yml"))
     end
 
+    # Codex on #1110, after merge.
+    test "a # straight after a command substitution is part of the word" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: grid --label=$(name)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs.yml", wf))
+      assert [%{file: "cs.yml", line: 4}] = Enum.filter(found, &(&1.file == "cs.yml"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
