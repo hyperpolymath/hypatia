@@ -51,6 +51,44 @@ defmodule Hypatia.Coverage.ReportTest do
     )
   end
 
+  defp proof_rec(id, a, b, sha \\ nil) do
+    text = File.read!(Path.join(@demo_root, "src/lib.rs"))
+    sha = sha || Hypatia.Coverage.ProofBinding.range_sha256(text, a, b)
+
+    %{
+      "id" => id,
+      "repo" => "example/demo",
+      "commit" => @sha,
+      "language" => "rust",
+      "kind" => "P",
+      "fixtures" => %{"cannot_fail_by_design" => "proof"},
+      "run" => %{
+        "outcome" => "passed",
+        "proof" => %{
+          "covers" => [
+            %{
+              "decl" => "Demo.f",
+              "file" => "src/lib.rs",
+              "lines" => [a, b],
+              "source_sha256" => sha
+            }
+          ],
+          "ladder" => [
+            %{
+              "theorem" => "t",
+              "file" => "f.idr",
+              "line" => 1,
+              "checker" => "idris2",
+              "checker_version" => "0.7",
+              "statement_sha256" => String.duplicate("a", 64),
+              "check" => "passed"
+            }
+          ]
+        }
+      }
+    }
+  end
+
   defp codes(v), do: Enum.map(v["reasons"], & &1["code"])
   defp one(v, code), do: Enum.find(v["reasons"], &(&1["code"] == code))
 
@@ -224,40 +262,69 @@ defmodule Hypatia.Coverage.ReportTest do
       end
     end
 
-    test "complete P records are not counted and not an overclaim" do
+    test "a bound P record counts without in_proven_run" do
       {:ok, records} = evidence()
+      v = build(%{evidence: {:ok, records ++ [proof_rec("p2", 21, 27)]}})
+      assert v["evidence"]["counted"] == 3
+      refute Enum.any?(v["evidence"]["not_counted"], &(&1["name"] == "p2"))
+      refute "COV-E006" in codes(v) or "COV-E014" in codes(v)
+    end
+  end
 
-      p =
-        %{
-          "id" => "p2",
-          "repo" => "example/demo",
-          "commit" => @sha,
-          "language" => "rust",
-          "kind" => "P",
-          "fixtures" => %{"cannot_fail_by_design" => "proof"},
-          "run" => %{
-            "outcome" => "passed",
-            "proof" => %{
-              "covers_decls" => ["Demo.f"],
-              "ladder" => [
-                %{
-                  "theorem" => "t",
-                  "file" => "f.idr",
-                  "line" => 1,
-                  "checker" => "idris2",
-                  "checker_version" => "0.7",
-                  "statement_sha256" => String.duplicate("a", 64),
-                  "check" => "passed"
-                }
-              ]
-            }
-          }
-        }
+  describe "proof coverage (kind P)" do
+    test "a proof over lines the proven run did not execute raises the proven percentage" do
+      {:ok, records} = evidence()
+      before = build()
+      v = build(%{evidence: {:ok, records ++ [proof_rec("p2", 21, 27)]}})
+      {:ok, raw} = cov("llvm_raw_branch.json")
+      {:ok, proven} = cov("llvm_proven_branch.json")
+      rl = Facts.line_hits(raw)
+      pl = Facts.line_hits(proven)
 
-      v = build(%{evidence: {:ok, records ++ [p]}})
+      added =
+        for {{"src/lib.rs", l} = k, _} <- rl, l in 21..27, Map.get(pl, k, 0) == 0, do: k
+
+      assert added != []
+      assert v["line"]["proven"] == before["line"]["proven"] + length(added)
+      assert v["line"]["total"] == before["line"]["total"]
+
+      assert Report.percent(v["line"]["proven"], v["line"]["total"]) >
+               Report.percent(before["line"]["proven"], before["line"]["total"])
+
+      assert v["branch"]["proven"] >= before["branch"]["proven"]
+      assert v["outcome"] in ["PASS", "FAIL"]
+    end
+
+    test "a stale proof does not count and raises COV-E006 without unjudging" do
+      {:ok, records} = evidence()
+      before = build()
+      stale = proof_rec("p2", 21, 27, String.duplicate("0", 64))
+      v = build(%{evidence: {:ok, records ++ [stale]}})
+      assert v["outcome"] == "FAIL"
+      assert v["line"] == before["line"]
+      assert one(v, "COV-E006")["detail"]["records"] == ["p2"]
       nc = Enum.find(v["evidence"]["not_counted"], &(&1["name"] == "p2"))
-      assert nc["reason"] == "proof_binding_not_implemented" and nc["overclaim"] == false
+      assert nc["reason"] == "proof_stale" and nc["overclaim"] == false
       assert v["evidence"]["counted"] == 2
+    end
+
+    test "no root: the proof is unbound, not counted, no COV-E006" do
+      {:ok, records} = evidence()
+      v = build(%{evidence: {:ok, records ++ [proof_rec("p2", 21, 27)]}, root: nil})
+      nc = Enum.find(v["evidence"]["not_counted"], &(&1["name"] == "p2"))
+      assert nc["reason"] == "proof_unbound"
+      refute "COV-E006" in codes(v)
+    end
+
+    test "proof coverage never causes COV-E011, even on lines the raw run did not execute" do
+      {:ok, records} = evidence()
+      {:ok, raw} = cov("llvm_raw_branch.json")
+      unrun = for {{"src/lib.rs", l}, 0} <- Facts.line_hits(raw), do: l
+      assert unrun != []
+      v = build(%{evidence: {:ok, records ++ [proof_rec("p2", 1, 61)]}})
+      refute "COV-E011" in codes(v)
+      assert v["outcome"] in ["PASS", "FAIL"]
+      assert v["line"]["proven"] <= v["line"]["total"]
     end
   end
 
