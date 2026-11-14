@@ -4588,7 +4588,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @non_pr_events ["push", "schedule", "workflow_dispatch"]
   # A scanner invocation, not a mention: a `run` that calls the binary.
-  @scanner_run ~r/(?:^|[\s;&|(`])(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|github|filesystem)\b/m
+  @scanner_run ~r/(?:^|[\s;&|(`])(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
   @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/
 
   @doc """
@@ -4628,7 +4628,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   Limits: local reusable workflows are followed one level deep; shell
   comments are stripped from `run` scripts, but a scanner reached through
-  a script file or a shell function is not seen.
+  a script file or a shell function is not seen; scanner arguments held in
+  a shell variable (`gitleaks detect $ARGS`) are not expanded.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
     parsed =
@@ -4834,24 +4835,35 @@ defmodule Hypatia.Rules.WorkflowAudit do
         full_events != [] and not ranged? and
           deep_checkout_before?(job, i, full_events, wf_doc)
 
-      Regex.match?(~r/\bgitleaks\b/, run) ->
-        # `protect`, `--staged` and `--pre-commit` read uncommitted changes
-        # only; `--no-git` the tree only.
-        Regex.match?(~r/\bgitleaks\s+(?:detect|git)\b/, run) and
-          not Regex.match?(~r/--(?:no-git|staged|pre-commit)\b/, run) and
-          (all_history_log_opts?(run) or not Regex.match?(@log_opts, run)) and
+      true ->
+        # Each scanner command line is judged on its own; the step counts
+        # when any one of them is a full-history scan.
+        run
+        |> String.replace(~r/\\\r?\n[ \t]*/, " ")
+        |> String.split(~r/\n|&&|;|\|\|/)
+        |> Enum.any?(&full_history_command?(&1, job, i, events, wf_doc))
+    end
+  end
+
+  defp full_history_command?(cmd, job, i, events, wf_doc) do
+    cond do
+      Regex.match?(~r/\bgitleaks\s+(?:detect|git)\b/, cmd) ->
+        # `protect`, `dir`, `--staged` and `--pre-commit` read uncommitted
+        # changes or the tree only; so does `--no-git`.
+        not Regex.match?(~r/--(?:no-git|staged|pre-commit)\b/, cmd) and
+          (all_history_log_opts?(cmd) or not Regex.match?(@log_opts, cmd)) and
           deep_checkout_before?(job, i, events, wf_doc)
 
-      Regex.match?(~r/\btrufflehog\s+git\b/, run) ->
+      Regex.match?(~r/\btrufflehog\s+git\b/, cmd) ->
         # A URL source is cloned by trufflehog itself, and counts only when
         # it is this repository; a local one needs the deep checkout. Every
         # ref is scanned unless a flag limits it.
         source_ok? =
-          if Regex.match?(~r/\btrufflehog\s+git\s+(?:https?|ssh|git):\/\//, run),
-            do: Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, run),
+          if Regex.match?(~r/\btrufflehog\s+git\s+(?:https?|ssh|git):\/\//, cmd),
+            do: Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, cmd),
             else: deep_checkout_before?(job, i, events, wf_doc)
 
-        source_ok? and not Regex.match?(@trufflehog_limits, run)
+        source_ok? and not Regex.match?(@trufflehog_limits, cmd)
 
       true ->
         false
@@ -4867,24 +4879,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
     scanner = Enum.at(steps, i)
     non_pr = Enum.filter(events, &(&1 in @non_pr_events))
 
-    # The last checkout that can run with the scan and lands where the
-    # scanner reads decides what history it sees.
-    steps
-    |> Enum.take(i)
-    |> Enum.filter(fn step ->
-      is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
-        runs_on_any?(step.if, non_pr) and
-        feeds?(Hypatia.Workflow.input(step, "path"), scanner, job, wf_doc)
-    end)
-    |> List.last()
-    |> case do
-      nil ->
-        false
+    # On each event, the last checkout that runs then and lands where the
+    # scanner reads decides what history it sees; one deep event is enough.
+    Enum.any?(non_pr, fn event ->
+      steps
+      |> Enum.take(i)
+      |> Enum.filter(fn step ->
+        is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
+          runs_on_any?(step.if, [event]) and
+          feeds?(Hypatia.Workflow.input(step, "path"), scanner, job, wf_doc)
+      end)
+      |> List.last()
+      |> case do
+        nil ->
+          false
 
-      checkout ->
-        Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
-          self_repository?(Hypatia.Workflow.input(checkout, "repository"))
-    end
+        checkout ->
+          Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
+            self_repository?(Hypatia.Workflow.input(checkout, "repository"))
+      end
+    end)
   end
 
   defp self_repository?(nil), do: true
@@ -4909,9 +4923,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp scanner_target(scanner, job, wf_doc) do
     run = if scanner, do: run_code(scanner), else: ""
 
-    case Regex.run(~r/(?:--source[=\s]+|file:\/\/)(\S+)/, run) do
-      [_, source] ->
-        source
+    case Regex.run(~r/(?:--source[=\s]+|file:\/\/)(?:"([^"]*)"|'([^']*)'|(\S+))/, run) do
+      [_ | groups] ->
+        Enum.find(groups, "", &(&1 != ""))
 
       nil ->
         [

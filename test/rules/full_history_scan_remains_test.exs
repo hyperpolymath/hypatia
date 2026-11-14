@@ -663,6 +663,69 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
            }) == []
   end
 
+  test "each scanner command in a step is judged on its own" do
+    wf =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - run: |\n          gitleaks protect --staged\n          trufflehog git file://."
+      )
+
+    assert wf != @scheduled_full
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
+  test "a scanner command continued over lines keeps its range" do
+    wf =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - run: |\n          gitleaks git \\\n            --log-opts=\"HEAD~5..HEAD\" --redact"
+      )
+
+    assert wf =~ "gitleaks git \\\n"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+  end
+
+  test "a quoted --source path is read without its quotes" do
+    for q <- [~s("source"), "'source'"] do
+      wf =
+        full_with(
+          "          fetch-depth: 0\n",
+          "          fetch-depth: 0\n          path: source\n"
+        )
+        |> String.replace(@full_run, ~s(gitleaks git --source=#{q} --log-opts="--all" --redact))
+
+      assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == [], q
+    end
+  end
+
+  test "gitleaks dir on a PR is a PR scan" do
+    pr_dir =
+      String.replace(
+        @pr_range,
+        ~s(gitleaks git --log-opts="${{ github.event.pull_request.base.sha }}..HEAD" --redact),
+        "gitleaks dir . --redact"
+      )
+
+    assert pr_dir != @pr_range
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr_dir})
+  end
+
+  test "the last checkout is chosen per event" do
+    wf =
+      full_with(
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'",
+        "on:\n  push:\n    branches: [main]\n  schedule:\n    - cron: '0 3 * * 1'"
+      )
+      |> String.replace(
+        "      - run: " <> @full_run,
+        "      - if: github.event_name == 'push'\n        uses: actions/checkout@v7.0.1\n      - run: " <>
+          @full_run
+      )
+
+    assert wf =~ "if: github.event_name == 'push'"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
   test "is skipped when audit/3 is told the workflow set is partial" do
     %{findings: fs} = WorkflowAudit.audit(["pr.yml"], %{"pr.yml" => @pr_range}, partial: true)
     refute Enum.any?(fs, &(&1[:rule] == "WF032"))
