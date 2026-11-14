@@ -857,6 +857,9 @@ defmodule Hypatia.Rules.CodeSafety do
     # as in `content` — and in the raw line array below. If a future stripper
     # breaks that invariant it must say so here.
     orig_lines = String.split(content, "\n")
+    # A tuple gives constant-time access by line number; `Enum.at/3` on the
+    # list made every rule quadratic in file length.
+    orig_tuple = List.to_tuple(orig_lines)
 
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
@@ -903,8 +906,8 @@ defmodule Hypatia.Rules.CodeSafety do
         |> String.split("\n")
         |> Enum.with_index(1)
         |> Enum.map(fn {line, line_number} ->
-          raw = Enum.at(orig_lines, line_number - 1, line)
-          prev = if line_number >= 2, do: Enum.at(orig_lines, line_number - 2)
+          raw = line_at(orig_tuple, line_number, line)
+          prev = line_at(orig_tuple, line_number - 1, nil)
 
           if Hypatia.ScannerSuppression.inline_allowed?(
                raw,
@@ -935,16 +938,17 @@ defmodule Hypatia.Rules.CodeSafety do
           []
 
         matches ->
-          lines =
-            matches
-            |> Enum.map(fn [{byte_off, _len} | _] ->
-              subject
-              |> binary_part(0, byte_off)
-              |> :binary.matches("\n")
-              |> length()
-              |> Kernel.+(1)
+          # Matches arrive in offset order, so one pass through the newline
+          # offsets gives every line number.
+          newlines = subject |> :binary.matches("\n") |> Enum.map(&elem(&1, 0))
+
+          {lines, _} =
+            Enum.map_reduce(matches, {newlines, 1, 0}, fn [{off, _} | _], pos ->
+              {_, line_number, _} = pos = advance_line(pos, off)
+              {line_number, pos}
             end)
-            |> Enum.uniq()
+
+          lines = Enum.uniq(lines)
 
           [
             %{
@@ -987,6 +991,12 @@ defmodule Hypatia.Rules.CodeSafety do
     do: advance_line({rest, line + 1, nl + 1}, off)
 
   defp advance_line(pos, _off), do: pos
+
+  # The 1-based line `n` of the source tuple, or `default` when out of range.
+  defp line_at(tuple, n, _default) when n >= 1 and n <= tuple_size(tuple),
+    do: elem(tuple, n - 1)
+
+  defp line_at(_tuple, _n, default), do: default
 
   # An odd number of unescaped double quotes before the match means it is
   # inside a string on this line. Character literals ('"', '\\"') are removed
