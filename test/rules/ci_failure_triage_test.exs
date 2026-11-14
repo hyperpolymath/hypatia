@@ -877,6 +877,31 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ss.yml", wf)) == []
     end
 
+    # Codex on #1129, after merge.
+    test "a case arm inside $(...) ends the word, so its # is a comment" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ca.yml", wf)) == []
+    end
+
+    test "the substitution still closes after esac" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case y in y) echo;; esac)#x --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce.yml", wf))
+      assert [%{file: "ce.yml"}] = Enum.filter(found, &(&1.file == "ce.yml"))
+    end
+
+    test "the word case as an argument does not open a case" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
+      assert [%{file: "cw.yml"}] = Enum.filter(found, &(&1.file == "cw.yml"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []

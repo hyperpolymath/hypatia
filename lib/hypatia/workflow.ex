@@ -271,8 +271,12 @@ defmodule Hypatia.Workflow do
   # the word, so a `#` after it opens a comment; the `)` of `$(…)` does not,
   # so `$(name)#suffix` is one word (Codex and CodeRabbit on #1129). `parens`
   # is the stack of open `(`: :subst for `$(`, :sub for a bare `(`. A `)`
-  # with nothing open (a `case` pattern) ends the word.
+  # with nothing open ends the word. The word `case` pushes :case and `esac`
+  # pops it; while :case is on top, a `)` ends a pattern, not the enclosing
+  # `$(…)`, so it ends the word and pops nothing (Codex on #1129).
   @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?<, ?>]
+  # What may follow the words `case` and `esac`.
+  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?)]
 
   defp mask(<<>>, _q, _ws?, _cmt?, _qs?, _parens, acc),
     do: acc |> Enum.reverse() |> IO.iodata_to_binary()
@@ -297,6 +301,20 @@ defmodule Hypatia.Workflow do
     mask(r, q, false, false, qs?, ps, kept ++ acc)
   end
 
+  # `case` opens a `case` only where a command starts.
+  defp mask(<<"case", c, r::binary>>, nil, true, _, qs?, ps, acc) when c in @word_ends do
+    if command_start?(acc),
+      do: mask(<<c, r::binary>>, nil, false, false, qs?, [:case | ps], ["case" | acc]),
+      else: mask(<<"ase", c, r::binary>>, nil, false, false, qs?, ps, [?c | acc])
+  end
+
+  defp mask(<<"esac", c, r::binary>>, nil, true, _, qs?, [:case | ps], acc)
+       when c in @word_ends,
+       do: mask(<<c, r::binary>>, nil, false, false, qs?, ps, ["esac" | acc])
+
+  defp mask(<<"esac">>, nil, true, _, qs?, [:case | ps], acc),
+    do: mask(<<>>, nil, false, false, qs?, ps, ["esac" | acc])
+
   defp mask(<<?$, ?(, r::binary>>, nil, _, _, qs?, ps, acc),
     do: mask(r, nil, true, false, qs?, [:subst | ps], [?(, ?$ | acc])
 
@@ -305,6 +323,7 @@ defmodule Hypatia.Workflow do
 
   defp mask(<<?), r::binary>>, nil, _, _, qs?, ps, acc) do
     case ps do
+      [:case | _] -> mask(r, nil, true, false, qs?, ps, [?) | acc])
       [:subst | rest] -> mask(r, nil, false, false, qs?, rest, [?) | acc])
       [_ | rest] -> mask(r, nil, true, false, qs?, rest, [?) | acc])
       [] -> mask(r, nil, true, false, qs?, [], [?) | acc])
@@ -316,6 +335,15 @@ defmodule Hypatia.Workflow do
 
   defp mask(<<c, r::binary>>, q, _, _, qs?, ps, acc),
     do: mask(r, q, false, false, qs?, ps, [if(qs?, do: blank(c), else: c) | acc])
+
+  # After only blanks since a newline, `;`, `&`, `|`, `(` or the start.
+  defp command_start?(acc) do
+    case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
+      [] -> true
+      [c | _] when c in [?\n, ?;, ?&, ?|, ?(] -> true
+      _ -> false
+    end
+  end
 
   defp blank(?\n), do: ?\n
   defp blank(_), do: ?\s
