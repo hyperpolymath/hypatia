@@ -1,0 +1,196 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Merge honesty: when Hypatia treats 2 findings as 1
+:toc:
+:toclevels: 2
+
+[cols="1,3"]
+|===
+|Status |PROPOSED. Not ruled. No code changes with this note.
+|Date |2026-11-14
+|Asks |5 decisions from the owner, in <<decisions>>.
+|Authority |The owner asked for this note on 2026-11-14, before any work order changes.
+|Measured at |hypatia `main` at `b660d08`, trope-checker at `0dceab6`, echo-types at `dedda75`.
+|===
+
+== The question
+
+Hypatia learns one confidence value for each fix recipe. Several steps decide
+that 2 findings are "the same" before an outcome reaches that value. This note
+asks: when such a step merges 2 different things, must the merge be recorded,
+and must the confidence be kept apart?
+
+The note uses one distinction from the trope calculus of the owner
+(`trope-checker`, `spec/calculus.adoc`, lines 205 to 214). A merge of 2 things
+into 1 has 3 grades:
+
+* `Single`: one thing.
+* `Fused(τ)`: 2 things in 1, with a label `τ`. The 2 can be recovered from the label.
+* `Conflated`: 2 things in 1, with no label. The 2 cannot be recovered.
+
+The calculus proves that `Conflated` is a two-sided zero of grade composition
+(`TB/Grade.agda`, lines 246 to 254): no later step removes it. This note does
+not claim that the proof applies to Hypatia. It uses the distinction as a
+design rule. See <<limits>>.
+
+== Facts
+
+Each fact was read in the source on 2026-11-14. "Inferred" marks a result
+that follows from the code and that no test shows.
+
+[cols="2,4,3",options="header"]
+|===
+|Where |What the code does |Result
+
+|`lib/pattern_registry.ex`, `fingerprint/1` (line 380) and line 203
+|The identity of a finding is its rule and the first 30 characters of its
+description, in lower case. A category with no entry in `@pa_rule_map` gets
+the rule `PA000`.
+|Inferred: 2 different findings with the same first 30 characters are 1
+pattern. A reworded description gives a new pattern and loses its history.
+
+|`lib/recipe_matcher.ex`, `category_match_recipe/2` (line 142)
+|Each pattern of a category gets the recipe with the highest confidence for
+that category.
+|Different defects share 1 recipe.
+
+|`lib/recipe_matcher.ex`, `fuzzy_match_recipe/2` (line 156)
+|A recipe matches when 1 of its keywords is a substring of the description.
+The match with the highest confidence wins. The number of hits is not used.
+|Inferred: a recipe with 1 hit can win over a recipe with 5 hits.
+
+|`lib/outcome_tracker.ex`, `persist_outcome/6` (line 122)
+|The outcome row has `"pattern_id" => nil`. Its subject is the recipe.
+|Each pattern that goes to 1 recipe adds to 1 confidence value and 1
+annealing stage. The row does not say which pattern it was, or which kind of
+match sent it there.
+
+|`lib/outcome_tracker.ex`, `do_verify_fix/3` (line 202)
+|The fix counts as failed when the repository has any weak point of the same
+category.
+|Inferred: another finding of that category turns a good fix into a
+qualified failure.
+
+|`lib/neural/radial_neural_network.ex`, `detect_novelty/2` (line 145)
+|A network that is not trained returns `:untrained`. The gate reads that as
+"not novel".
+|The one gate for unknown findings is open until training.
+
+|`lib/neural/variational_autoencoder.ex` (lines 80 to 84)
+|The latent vector is all zeros and the cluster is always 0.
+|Each finding is in "the same cluster".
+|===
+
+The tests of the registry and of the matcher carry the tag `:verisim_data`,
+which CI does not run.
+
+In the terms of the calculus, the first 5 rows are `Conflated` merges: 2
+things become 1, and no record says so.
+
+== Why it matters
+
+The dispatch tier of a recipe follows from its confidence and its annealing
+stage. With a merged subject, a recipe can reach `auto_execute` (0.95 or more)
+on the successes of findings that only look like the finding in front of it.
+This is the reverse of acceptance A3 of issue 984, which asks that each
+learning update rest on evidence for that update.
+
+echo-types gives 2 proved results that bound what a later repair can do:
+
+* A count cannot give back its evidence: exact recovery forces distinct
+  residues for distinct inputs (`EchoFiniteResidue.agda`, line 36).
+* An aggregation that merges 2 inputs has no canonical inverse
+  (`EchoAggregation.agda`, line 210).
+
+So the split cannot be recovered later from the confidence value. If the
+pattern is not written at the time of the outcome, it is lost.
+
+== Options
+
+=== Option A: label the merge
+
+Each outcome row, and each receipt of `E0-08`, records the pattern id and the
+kind of match (`exact`, `category`, `fuzzy`). The confidence stays one value
+for each recipe.
+
+* Result: each merge becomes `Fused(τ)`. An audit can split the outcomes of a
+  recipe by pattern. Nothing in the dispatch changes.
+* Cost: small. 2 fields, in the one place that writes the row.
+* Limit: the risk stays. A recipe can still reach `auto_execute` on merged
+  evidence. The record only makes it visible.
+
+=== Option B: keep confidence apart for each pattern
+
+The subject of confidence and of the annealing stage becomes the pair of
+recipe and pattern. A new pattern starts at the prior of its recipe.
+
+* Result: evidence for one defect no longer raises the tier for another.
+  This is the most correct option for the long term.
+* Cost: large. It changes the learning model, the confidence files, the
+  readers of the gate and the cross-repo transfer. Evidence for each pair is
+  thin, so most pairs stay in `report_only` for a long time.
+* Needs: a pattern identity that is stable. The identity of today (30
+  characters of text) is not.
+
+=== Option C: A now, B after a measurement
+
+Do option A in the E0 work. Then measure, from the labelled rows, how often a
+recipe gets outcomes from more than 1 pattern and how far their success rates
+differ. Rule on option B with those numbers.
+
+* Result: no evidence is lost from now on, and the larger change rests on a
+  measurement, not on a guess.
+* Cost: the risk of option A stays until the ruling on B.
+
+=== Option D: no change
+
+Keep the merge as it is, and record this note as a known gap.
+
+=== Recommendation
+
+Option C. Option B is the most correct for the long term, and option C is the
+way to reach it: B needs a stable pattern identity and numbers that do not
+exist yet, and A is the step that makes both possible. A departure from B as
+the direct choice is on purpose, for that reason.
+
+[[decisions]]
+== Decisions for the owner
+
+. Which option: A, B, C or D?
+. Under A or C: do a `category` match and a `fuzzy` match stay able to reach
+  `auto_execute`, or does a merged match have `review` as its highest tier
+  until a ruling on B?
+. The pattern identity. Keep the text prefix for now, or first replace it
+  with a key that does not depend on the wording (rule, file kind and a
+  normal form of the match)? Option B needs the second.
+. The 3 plain defects (the ranking of fuzzy matches, the fix check by
+  category, the cluster that is always 0): 3 small work orders now, or after
+  the ruling?
+. The novelty gate. Does `:untrained` mean "novel" (fail closed) from now on?
+
+== What this note does not propose
+
+* No new way to decide whether 2 findings are alike. The trope repositories
+  have no resemblance relation and no metric on tropes. They give a way to
+  record a merge honestly.
+* No change to the Bayesian update itself.
+* No use of `tropecheck` in Hypatia. A lowering of Hypatia's merge steps to
+  the Trope IR is a possible later step. It needs its own design.
+
+[[limits]]
+== Limits
+
+* The link between the trope calculus and Hypatia is a reading by the author
+  of this note. No proof connects them, and no prover was run for this note.
+* The results marked "inferred" have no test. A work order that acts on one
+  of them must first show it with a failing test.
+* The proof status of the cited Agda results is what their repositories
+  record. This note did not check them again.
+* echidnabot has the same kind of merge in small form (goals that differ only
+  in letter case share one tactic history). It is outside this note.
+
+== When to update this memo
+
+When the owner rules on <<decisions>>, set the status and record each ruling
+here. When a work order shows that an "inferred" result is false, correct the
+table.

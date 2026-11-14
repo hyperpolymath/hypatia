@@ -474,19 +474,37 @@ defmodule Hypatia.Rules.RsrConformance do
   #   (state-v1-decision.adoc, option B, ruled 2026-11-10: the one lifecycle
   #   claim is the (status) clause, and the journal is not translated).
   #
-  # A2ML is retired, so the deed is the successor and the .a2ml the transition
-  # form; 2.3.1 accepts its two carriers the same way. The deed must parse
-  # (Hypatia.Deed is the reader that agrees with the standards gate): a deed
-  # that does not parse declares nothing, and a clause nested inside another
-  # clause is not the descriptile.
+  # A2ML is retired, so the deed is the successor and is read first; the
+  # .a2ml is the fallback a shared reader keeps until its callers migrate
+  # (standards A7 M5 to M7, "new input first"); 2.3.1 accepts its two
+  # carriers the same way. The deed must parse (Hypatia.Deed is the reader
+  # that agrees with the standards gate): a deed that does not parse declares
+  # nothing, and a clause nested inside another clause is not the descriptile.
   defp descriptile(name, clause) do
     a2ml = descriptile(name)
 
     fn repo ->
-      case a2ml.(repo) do
-        :pass -> :pass
-        _ -> if deed_clause?(repo, clause), do: :pass, else: :fail
-      end
+      if deed_clause?(repo, clause), do: :pass, else: a2ml.(repo)
+    end
+  end
+
+  # The top-level chora-deed clauses that carry a descriptile family, one per
+  # criterion 3.1.2-3.1.9 (the mapping specs above; (anchor) by A7 ruling S1).
+  @descriptile_clauses ~w(status meta ecosystem agentic neurosym playbook anchor clade)
+
+  # 3.1.1: the descriptile substrate. The criterion names the directory
+  # `.machine_readable/descriptiles/`, which was the only carrier while the
+  # descriptiles were .a2ml files. A repo that has moved them into its chora
+  # deed has the substrate there: deed first, the chora deed parses and
+  # carries at least one top-level descriptile clause; then the directory,
+  # which still counts (the legacy .a2ml home, and where standards A7 7.1 puts
+  # the ALL-CAPS descriptile deeds). A deed with none of the clauses, or with
+  # them only nested, is not the substrate, and nothing at all is :fail.
+  defp descriptile_carrier do
+    dir = present_mr("descriptiles")
+
+    fn repo ->
+      if Enum.any?(@descriptile_clauses, &deed_clause?(repo, &1)), do: :pass, else: dir.(repo)
     end
   end
 
@@ -561,10 +579,14 @@ defmodule Hypatia.Rules.RsrConformance do
         )
 
     record_files = Enum.filter(candidates, &record_dialect?/1)
+    deed = deed_state(repo)
 
     cond do
       record_files == [] ->
         if deed_parses?(repo), do: :pass, else: :fail
+
+      record_files == [] ->
+        if deed == :ok, do: :pass, else: :fail
 
       Enum.all?(record_files, fn f ->
         match?({:ok, _}, with({:ok, t} <- File.read(f), do: RecordDialect.parse(t)))

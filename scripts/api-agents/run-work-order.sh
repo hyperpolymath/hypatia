@@ -18,7 +18,10 @@
 #
 # The run reads the project settings and the headless profile only
 # (--setting-sources project), so a personal allow rule of the caller does not
-# widen what the unattended run can do.
+# widen what the unattended run can do. The profile has no push rule: this
+# script allows one push command, which names the branch of the work order as
+# its source and its destination. So the run cannot force, delete or push
+# another ref, and a push mapping in the git settings cannot move the push.
 
 set -eu
 
@@ -44,6 +47,10 @@ esac
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null) || die "run this inside a git checkout"
 dir=${WO_DIR:-$repo/docs/operations/e0-closeout/work-orders}
+# An absolute path: git reads a relative path from the top of the checkout,
+# not from the folder of the caller.
+[ -d "$dir" ] || die "no work-order folder $dir"
+dir=$(CDPATH="" cd -- "$dir" && pwd -P)
 ledger=${HYPATIA_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/hypatia/api-ledger.jsonl}
 
 file=""
@@ -63,9 +70,9 @@ attr() {
 # the wrong name would run one work order and record another.
 [ "$(attr id)" = "$id" ] || die "$file declares the id $(attr id), not $id"
 agent=$(attr agent); model=$(attr model); effort=$(attr effort)
-cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo)
-for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo"; do
-  [ -n "$v" ] || die "$file lacks one of the header lines agent, model, effort, cap-usd, max-turns, repo"
+cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo); branch=$(attr branch)
+for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo" "$branch"; do
+  [ -n "$v" ] || die "$file lacks one of the header lines agent, model, effort, cap-usd, max-turns, repo, branch"
 done
 case "$cap$turns" in
   *[!0-9]*) die "cap-usd and max-turns must be whole numbers in $file" ;;
@@ -73,6 +80,13 @@ case "$cap$turns" in
 esac
 case "$agent" in
   *[!A-Za-z0-9-]*) die "the agent name has a character that is not a letter, a digit or a hyphen: $agent" ;;
+  *) ;;
+esac
+
+# The branch goes into a permission rule, so it must be one plain ref name. A
+# value that starts with a hyphen would be an option of git push.
+case "$branch" in
+  -* | *[!A-Za-z0-9/._-]*) die "the branch is not a plain ref name: $branch" ;;
   *) ;;
 esac
 
@@ -100,17 +114,28 @@ if [ -n "$a_effort" ] && [ "$a_effort" != "$effort" ]; then
   die "work order $id names the effort $effort, and the agent $agent is defined with $a_effort"
 fi
 
-prompt="Run work order $id with the e0-work-order skill. The work order is ${file#"$repo"/}. Stop at its cost cap of $cap US dollars."
+skill="$repo/.claude/skills/e0-work-order/SKILL.md"
+[ -f "$skill" ] || die "missing $skill"
+# The full ref on each side: a short name lets remote.origin.push choose
+# another destination. No tags: push.followTags would send them too.
+push="git push --no-follow-tags -u origin refs/heads/$branch:refs/heads/$branch"
+prompt="Run work order $id with the e0-work-order skill. The work order is ${file#"$repo"/}. Stop at its cost cap of $cap US dollars. This run can push with one command only, with nothing after it: $push"
 profile="$repo/.claude/profiles/e0-headless.json"
 [ -f "$profile" ] || die "missing $profile"
 
 if [ "$dry" = "--dry-run" ]; then
-  printf 'claude -p "%s" --agent %s --model %s --effort %s --max-budget-usd %s --max-turns %s --permission-mode dontAsk --setting-sources project --settings %s --output-format json\n' \
-    "$prompt" "$agent" "$model" "$effort" "$cap" "$turns" "$profile"
+  printf 'claude -p "%s" --agent %s --model %s --effort %s --max-budget-usd %s --max-turns %s --permission-mode dontAsk --setting-sources project --settings %s --allowedTools "Bash(%s)" --output-format json\n' \
+    "$prompt" "$agent" "$model" "$effort" "$cap" "$turns" "$profile" "$push"
   exit 0
 fi
 
 [ -n "${ANTHROPIC_API_KEY:-}" ] || die "ANTHROPIC_API_KEY is not set: the run would bill the signed-in plan, not the API credit"
+# Each of these variables sends the run to another account or endpoint, also
+# when the API key is set (authentication precedence of Claude Code).
+for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE \
+  CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; do
+  [ -z "$(printenv "$v" || true)" ] || die "$v is set: the run would not bill the API key. Unset it first"
+done
 # Measured on 2026-11-14: 1 test of the suite fails when the locale is not
 # UTF-8, so a run would stop on a red baseline after it spent credit.
 charmap=$(locale charmap 2>/dev/null) || charmap=""
@@ -119,6 +144,19 @@ case "$charmap" in
   *) die "the locale is $charmap, not UTF-8: 1 test of the suite fails then. Set LANG to a UTF-8 locale, for example C.UTF-8" ;;
 esac
 [ -z "$(git -C "$repo" status --porcelain)" ] || die "the working tree has changes: commit or stash them first"
+# A program that the run starts can read any file, and a deny rule covers only
+# the file tools. So the checkout must hold none of the secret files that
+# .gitignore names (owner ruling, 2026-11-14).
+secret=$(git -C "$repo" ls-files --others --ignored --exclude-standard -- \
+  ":(glob)**/.env" ":(glob)**/.env.*" ":(glob)**/.envrc" ":(glob)**/*.pem" ":(glob)**/*.key" \
+  ":(glob)**/secrets/**" | head -n 1)
+[ -z "$secret" ] || die "the checkout holds a secret file ($secret): start the run in a checkout that has none"
+# The skill reads the work order on origin/main, and the run starts with the
+# agent, the skills and the rules of this checkout. The cap, the model and the
+# ledger line come from this checkout too, so all of them must equal main.
+git -C "$repo" fetch -q origin main || die "cannot fetch main from origin"
+git -C "$repo" diff --quiet origin/main -- "${file#"$repo"/}" .claude scripts/api-agents 2>/dev/null ||
+  die "the work order or the kit (.claude, scripts/api-agents) differs from origin/main: start the run from a checkout of main"
 command -v claude >/dev/null 2>&1 || die "the claude command is not on PATH"
 command -v jq >/dev/null 2>&1 || die "jq is not on PATH"
 
@@ -131,7 +169,8 @@ trap 'rm -f "$out"' EXIT
 status=0
 (cd "$repo" && claude -p "$prompt" --agent "$agent" --model "$model" --effort "$effort" \
   --max-budget-usd "$cap" --max-turns "$turns" --permission-mode dontAsk \
-  --setting-sources project --settings "$profile" --output-format json) > "$out" || status=$?
+  --setting-sources project --settings "$profile" --allowedTools "Bash($push)" \
+  --output-format json) > "$out" || status=$?
 
 ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 line=""

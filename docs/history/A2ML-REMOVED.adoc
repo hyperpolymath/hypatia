@@ -46,7 +46,7 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | `891fefefddd7fde77874e96ddbd87146ecb1811a9db5367b900d40d206d6e216`
 | `38589dc8263b3e4008644e8aa4254897591082b8`
 | ECOSYSTEM descriptile: position, consumers, producers, seven related projects, integration points.
-| `(ecosystem)` per `meta-ecosystem-to-repo-deed.adoc`: project, ecosystem, position-type, purpose, and the seven related-project entries as `(related …)` clauses (name, relationship, description as `:notes`). They were dropped at first because their relationships were outside the closed set; the owner extended the set on 2026-11-14 (standards `clauses/ecosystem.abnf` v1.1.0) and they were restored. Dropped: the sibling/infrastructure group names, consumers, producers, integration points.
+| `(ecosystem)` per `meta-ecosystem-to-repo-deed.adoc`: project, ecosystem, position-type, purpose. Dropped: the seven related-project entries (relationships outside the closed set), consumers, producers, integration points.
 
 | `.machine_readable/descriptiles/AGENTIC.a2ml`
 | 4809
@@ -88,7 +88,7 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | `52c07ad4291ea6fd6dd1ded149a9db1fcd311a684d6226920016f0308e814cd0`
 | `dc3db7f6890ffa4eaf145a5cbe02a86be6842ffe`
 | Anchor: reverse-DNS id, version, clade, status, SSG config, parent boj-server.
-| Deleted. No mapping spec in `1-formats/deed/mappings/`. Under A7 6.4 the id, clade and status are dropped; the source has no `authority`, which the `(anchor)` clause requires and a translator never invents; SSG config belongs to `META.deed` and the parent to `ECOSYSTEM.deed` (modules not yet adopted here).
+| The `(anchor)` clause of `hypatia_chora.deed`, under A7 6.4 (`anchor.abnf` v2.0.0, `:schema "hyperpolymath.anchor/2"`): `version` to `(metadata :version "1.0.0")`. The source had no `authority`, which the clause requires and a translator never invents; the owner supplied it on 2026-11-14: boj-server, written as its chora id `6c7f9305-2a47-8f96-a1ed-bd0940e4d4e6` (boj-server_chora.deed `:repo-uuid #u8"gv-clade-index:github.com/hyperpolymath/boj-server"`, the registry's `uuid_v8` for that repo). Dropped under 6.4: the reverse-DNS id, clade and status. Not translated: the SSG config, which belongs to `META.deed` (J29), and the parent, which belongs to `ECOSYSTEM.deed` `(related :uuid … :relationship parent)` (J26); neither module is adopted here yet.
 
 | `.machine_readable/bot_directives/coverage.a2ml`
 | 2271

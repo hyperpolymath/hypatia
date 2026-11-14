@@ -142,6 +142,20 @@
     (release-process)
     (docs-format)
     (maintenance-operations))
+  ; ANCHOR.a2ml under A7 6.4 (anchor.abnf v2.0.0): its version is
+  ; (metadata :version). The source had no authority, which a translator
+  ; never invents; the owner supplied it on 2026-11-14: boj-server, written
+  ; as boj-server's chora id. That id is boj-server_chora.deed's :repo-uuid
+  ; #u8"gv-clade-index:github.com/hyperpolymath/boj-server" (a pre-V9 id,
+  ; kept in its gv-clade-index domain), and the registry records the same
+  ; uuid_v8 for hyperpolymath/boj-server. Dropped under 6.4: the reverse-DNS
+  ; id, clade and status. Not adopted here: the ssg block (META.deed, J29)
+  ; and the parents list (ECOSYSTEM.deed (related … :relationship parent),
+  ; J26).
+  (anchor
+    :schema "hyperpolymath.anchor/2"
+    :authority "6c7f9305-2a47-8f96-a1ed-bd0940e4d4e6"
+    (metadata :version "1.0.0"))
   (egress
     :policy "standards ADR-009"
     (job

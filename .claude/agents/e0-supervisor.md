@@ -36,7 +36,8 @@ A choice recorded without the option that it rejected is not a design note.
 
 ## A ruling packet
 
-Use it when only the owner can decide. Six decisions at most. Each decision
+Use it when only the owner can decide. Six decisions at most, or the number
+that the work order names. Each decision
 has its options, the result of each option, and the long-term label. Stop
 after you write it. Do not continue on an assumed answer.
 
