@@ -120,6 +120,18 @@ defmodule Hypatia.Rules.GitleaksFullHistoryTest do
     assert [%{rule: "WF031"}] = check(wf)
   end
 
+  test "--all with a revision range on a PR is a range, not all history" do
+    wf =
+      String.replace(
+        @wf,
+        ~s(--log-opts="--all"),
+        ~s(--log-opts="--all ${{ github.event.pull_request.base.sha }}..HEAD")
+      )
+
+    assert wf != @wf
+    assert check(wf) == []
+  end
+
   test "a comment mentioning --all is not a scan" do
     wf =
       String.replace(

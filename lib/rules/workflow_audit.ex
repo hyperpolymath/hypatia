@@ -4534,10 +4534,20 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # `--all` in the --log-opts value, with no revision range or limit beside
+  # it: `--all A..B` (gitleaks' own range example), `^A`, `--since`, `-n`.
   defp all_history_log_opts?(text) do
     @log_opts
     |> Regex.scan(text, capture: :all_but_first)
-    |> Enum.any?(fn groups -> groups |> Enum.join(" ") |> String.match?(~r/(^|\s)--all\b/) end)
+    |> Enum.any?(fn groups ->
+      value = Enum.join(groups, " ")
+
+      String.match?(value, ~r/(^|\s)--all\b/) and
+        not String.match?(
+          value,
+          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|-n)\b/
+        )
+    end)
   end
 
   # Not a PR run when one `&&` conjunct is exactly `github.event_name ==`
@@ -4586,29 +4596,37 @@ defmodule Hypatia.Rules.WorkflowAudit do
   SQ-GEN-05 owns the fix, R1).
 
   A scan is a scanner *step* (a `run` calling gitleaks or trufflehog, or
-  the gitleaks / trufflehog action), or a job calling the estate rail
-  (`#{@secret_history_rail}`). Its events are the workflow's triggers
-  narrowed by the job's and the step's `if:` (`==` and `!=` on
-  `github.event_name` in a flat `&&` chain). A scan counts as full history
-  when it is the rail, or when an earlier `actions/checkout` of this
-  repository with `fetch-depth: 0` feeds it and it is one of:
-  gitleaks with `--log-opts` holding `--all` or with no `--log-opts`
-  range; `trufflehog git` with no `--since-commit`/`--base`/`--head`; the
-  gitleaks or trufflehog action on a schedule or manual run.
+  the gitleaks / trufflehog action), a job calling the estate rail
+  (`#{@secret_history_rail}`), or a scanner step in a local reusable
+  workflow (`uses: ./.github/workflows/x.yml`, one level), which runs on
+  the caller's events. Its events are the workflow's triggers narrowed by
+  each `if:` on the way (`==` and `!=` on `github.event_name` in a flat
+  `&&` chain). A scan counts as full history when it is:
+  the rail; `gitleaks detect` / `gitleaks git` (not `protect`, not
+  `--no-git`) after an earlier `actions/checkout` of this repository with
+  `fetch-depth: 0`, with `--log-opts` holding `--all` and no revision
+  range or limit, or with no `--log-opts`; `trufflehog git` with no
+  `--since-commit`/`--base`/`--head`/`--max-depth`/`--branch`, after that
+  deep checkout or on a URL source it clones itself; the gitleaks or
+  trufflehog action, after the deep checkout, on a schedule or manual run.
 
   When an `if:` is too complex to read (`||`, grouping, negation), the scan
   is taken to run on PRs and not to remain: a referral that asks the owner
   to look is the safer error than a gap left silent.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
-    scans =
+    parsed =
       for {filename, content} <- Enum.sort(workflow_contents),
-          {:ok, %Hypatia.Workflow{triggers: triggers, jobs: jobs}} <- [
-            Hypatia.Workflow.parse(content, filename)
-          ],
+          {:ok, %Hypatia.Workflow{} = wf} <- [Hypatia.Workflow.parse(content, filename)],
+          do: {filename, wf}
+
+    by_name = Map.new(parsed, fn {filename, wf} -> {Path.basename(filename), {filename, wf}} end)
+
+    scans =
+      for {filename, %{triggers: triggers, jobs: jobs}} <- parsed,
           job <- jobs,
-          scan <- job_scans(job),
-          do: Map.merge(scan, %{file: filename, job: job, triggers: triggers})
+          scan <- job_scans(job, filename, triggers, by_name),
+          do: scan
 
     pr_scans =
       Enum.filter(scans, fn sc ->
@@ -4653,18 +4671,45 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   def check_full_history_scan_remains(_), do: []
 
-  # The scans in one job: the rail (job-level `uses`), or scanner steps.
-  defp job_scans(job) do
-    if is_binary(job.uses) and String.contains?(job.uses, @secret_history_rail) do
-      [%{kind: :rail, step: nil, index: nil, line: job.line}]
-    else
-      steps = job.steps || []
+  # The scans in one job: the rail (job-level `uses`), scanner steps, or the
+  # scanner steps of a local reusable workflow it calls
+  # (`uses: ./.github/workflows/x.yml`), which run on the caller's events.
+  # Followed one level deep.
+  defp job_scans(job, filename, triggers, by_name) do
+    base = %{file: filename, job: job, triggers: triggers, guards: [job.if]}
 
-      for {step, i} <- Enum.with_index(steps),
-          kind = scanner_kind(step),
-          kind != nil,
-          do: %{kind: kind, step: step, index: i, line: step.line || job.line}
+    cond do
+      is_binary(job.uses) and String.contains?(job.uses, @secret_history_rail) ->
+        [Map.merge(base, %{kind: :rail, step: nil, index: nil, line: job.line})]
+
+      is_binary(job.uses) and String.starts_with?(job.uses, "./.github/workflows/") ->
+        case Map.get(by_name, Path.basename(String.trim(job.uses))) do
+          {callee_file, %{jobs: callee_jobs}} ->
+            for callee_job <- callee_jobs,
+                scan <- step_scans(callee_job),
+                do:
+                  Map.merge(scan, %{
+                    file: callee_file,
+                    job: callee_job,
+                    triggers: triggers,
+                    guards: [job.if, callee_job.if, scan.step.if]
+                  })
+
+          nil ->
+            []
+        end
+
+      true ->
+        for scan <- step_scans(job),
+            do: Map.merge(scan, %{base | guards: [job.if, scan.step.if]})
     end
+  end
+
+  defp step_scans(job) do
+    for {step, i} <- Enum.with_index(job.steps || []),
+        kind = scanner_kind(step),
+        kind != nil,
+        do: %{kind: kind, step: step, index: i, line: step.line || job.line, job: job}
   end
 
   defp scanner_kind(step) do
@@ -4675,12 +4720,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  # The events a scan can run on: the workflow's triggers narrowed by the
-  # job's and step's `if:`, or :unknown when a condition cannot be read.
-  defp scan_events(%{triggers: triggers, job: job, step: step}) do
-    step_if = if step, do: step.if, else: nil
-
-    Enum.reduce_while([job.if, step_if], triggers, fn cond_text, events ->
+  # The events a scan can run on: the (calling) workflow's triggers narrowed
+  # by each `if:` on the way to the scanner step, or :unknown when a
+  # condition cannot be read.
+  defp scan_events(%{triggers: triggers, guards: guards}) do
+    Enum.reduce_while(guards, triggers, fn cond_text, events ->
       case narrow_events(cond_text, events) do
         :unknown -> {:halt, :unknown}
         narrowed -> {:cont, narrowed}
@@ -4723,23 +4767,23 @@ defmodule Hypatia.Rules.WorkflowAudit do
     deep? = deep_checkout_before?(job, i)
 
     cond do
-      not deep? ->
-        false
-
       kind == :action ->
-        Enum.any?(events, &(&1 in ["schedule", "workflow_dispatch"]))
+        deep? and Enum.any?(events, &(&1 in ["schedule", "workflow_dispatch"]))
 
       Regex.match?(~r/\bgitleaks\b/, step.run) ->
-        cond do
-          String.contains?(step.run, "--no-git") -> false
-          all_history_log_opts?(step.run) -> true
-          Regex.match?(@log_opts, step.run) -> false
-          true -> true
-        end
+        # `protect` reads uncommitted changes only; `--no-git` the tree only.
+        deep? and Regex.match?(~r/\bgitleaks\s+(?:detect|git)\b/, step.run) and
+          not String.contains?(step.run, "--no-git") and
+          (all_history_log_opts?(step.run) or not Regex.match?(@log_opts, step.run))
+
+      Regex.match?(~r/\btrufflehog\s+git\b/, step.run) ->
+        # A URL source is cloned by trufflehog itself; a local one needs the
+        # deep checkout. Every ref is scanned unless a flag limits it.
+        (deep? or Regex.match?(~r/\btrufflehog\s+git\s+(?:https?|ssh|git):\/\//, step.run)) and
+          not Regex.match?(~r/--(?:since-commit|base|head|max-depth|branch)\b/, step.run)
 
       true ->
-        Regex.match?(~r/\btrufflehog\s+git\b/, step.run) and
-          not Regex.match?(~r/--(?:since-commit|base|head)\b/, step.run)
+        false
     end
   end
 

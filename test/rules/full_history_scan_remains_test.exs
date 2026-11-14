@@ -280,6 +280,96 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     assert [%{rule: "WF032", file: "full.yml"}] = check(%{"full.yml" => wf})
   end
 
+  test "a local reusable scanner runs on its caller's events" do
+    callee = """
+    on:
+      workflow_call:
+    jobs:
+      scan:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v7.0.1
+            with:
+              fetch-depth: 0
+          - run: gitleaks git --log-opts="--all" --redact
+    """
+
+    caller = fn trigger ->
+      """
+      on:
+        #{trigger}
+      jobs:
+        secrets:
+          uses: ./.github/workflows/scan.yml
+      """
+    end
+
+    # Called on PRs only: a PR scan and nothing remains.
+    assert [%{rule: "WF032", file: "scan.yml"}] =
+             check(%{"scan.yml" => callee, "pr.yml" => caller.("pull_request:")})
+
+    # Called on push too: the same full scan remains.
+    assert check(%{
+             "scan.yml" => callee,
+             "pr.yml" => @pr_range,
+             "main.yml" => caller.("push:\n    branches: [main]")
+           }) == []
+  end
+
+  test "a trufflehog URL source needs no checkout" do
+    remote =
+      String.replace(
+        @scheduled_full,
+        ~s(gitleaks git --log-opts="--all" --redact),
+        "trufflehog git https://github.com/${{ github.repository }}"
+      )
+
+    remote =
+      String.replace(
+        remote,
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n",
+        ""
+      )
+
+    assert remote =~ "trufflehog git https://"
+    refute remote =~ "actions/checkout"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => remote}) == []
+  end
+
+  test "gitleaks protect is not a full-history scan" do
+    protect =
+      String.replace(
+        @scheduled_full,
+        ~s(gitleaks git --log-opts="--all" --redact),
+        "gitleaks protect --staged --redact"
+      )
+
+    assert protect != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => protect})
+  end
+
+  test "trufflehog --max-depth or --branch limits the history" do
+    for flag <- ["--max-depth 50", "--branch main"] do
+      wf =
+        String.replace(
+          @scheduled_full,
+          ~s(gitleaks git --log-opts="--all" --redact),
+          "trufflehog git file://. " <> flag
+        )
+
+      assert wf != @scheduled_full
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), flag
+    end
+  end
+
+  test "--all with a revision range or limit is a range" do
+    for opts <- ["--all A..B", "--all ^abc123", "--all --since=2026-01-01", "--all -n 50"] do
+      wf = String.replace(@scheduled_full, ~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
+      assert wf != @scheduled_full
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
+    end
+  end
+
   test "no PR scan means nothing to check" do
     assert check(%{"full.yml" => @scheduled_full}) == []
     assert check(%{}) == []
