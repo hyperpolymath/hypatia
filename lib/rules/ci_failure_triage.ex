@@ -1122,6 +1122,18 @@ defmodule Hypatia.Rules.CiFailureTriage do
       %{kind: :seq, items: items} ->
         Enum.flat_map(items, &walk_pins(label, &1))
 
+      # `env: *shared` sets the job's environment from the anchored mapping.
+      # Only an alias under `env:` is followed, so the anchor (read under its
+      # own key) is never counted twice (Codex on #1103).
+      %{kind: :alias} when holder == "env" ->
+        case Hypatia.Kyaml.deref(node) do
+          %{kind: :map, entries: es} ->
+            for e <- es, pin <- env_pin(label, e), do: %{pin | line: elem(node.loc, 0)}
+
+          _ ->
+            []
+        end
+
       _ ->
         []
     end
@@ -1192,8 +1204,52 @@ defmodule Hypatia.Rules.CiFailureTriage do
         sha: yaml |> binary_part(off, len) |> String.downcase(),
         line: line_at(yaml, off)
       }
-    end
+    end ++ checkout_pins_by_text(label, yaml)
   end
+
+  # Fallback for YAML outside the parser's subset (Codex on #1103): a
+  # `repository: hyperpolymath/hypatia` and a sibling `ref:` at the same
+  # indentation, in either order, with nothing shallower between them.
+  defp checkout_pins_by_text(label, yaml) do
+    lines = String.split(yaml, "\n")
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.flat_map(fn {line, n} ->
+      with [_, ind] <-
+             Regex.run(
+               ~r/^([ \t]*)(?:-[ \t]+)?["']?repository["']?[ \t]*:[ \t]*["']?hyperpolymath\/hypatia["']?[ \t]*$/i,
+               line
+             ),
+           {ref, ref_n} <- sibling_ref(lines, n, String.length(ind)) do
+        [%{file: label, key: "checkout ref", sha: String.downcase(ref), line: ref_n}]
+      else
+        _ -> []
+      end
+    end)
+  end
+
+  # The block of `n`'s siblings: lines at least as deep as `depth`, up and
+  # down, stopping at a shallower non-blank line.
+  defp sibling_ref(lines, n, depth) do
+    block = fn range ->
+      range
+      |> Enum.map(&{Enum.at(lines, &1 - 1), &1})
+      |> Enum.take_while(fn {l, _} -> String.trim(l) == "" or indent(l) >= depth end)
+    end
+
+    (block.((n - 1)..1//-1) ++ block.((n + 1)..length(lines)//1))
+    |> Enum.find_value(fn {l, i} ->
+      if indent(l) == depth do
+        case Regex.run(~r/^[ \t]*["']?ref["']?[ \t]*:[ \t]*["']?([0-9a-fA-F]{40})["']?[ \t]*$/, l) do
+          [_, sha] -> {sha, i}
+          _ -> nil
+        end
+      end
+    end)
+  end
+
+  defp indent(line), do: byte_size(line) - byte_size(String.trim_leading(line))
 
   # A checkout of hyperpolymath/hypatia, read from the parsed workflow so a
   # blank line or any number of sibling inputs in `with:` cannot hide it.

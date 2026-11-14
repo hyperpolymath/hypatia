@@ -752,6 +752,31 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert Enum.any?(T.check_hypatia_pin_drift(set), &(&1.key == "scanner.commit"))
     end
 
+    # Codex on #1103, fourth round.
+    test "an env given as an alias is read through it" do
+      wf =
+        "x-shared: &e {HYPATIA_SHA: #{@old}}\njobs:\n  a:\n    env: *e\n    steps:\n      - run: true\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ali.yml", wf))
+
+      assert [%{file: "ali.yml", line: 4, key: "HYPATIA_SHA"}] =
+               Enum.filter(found, &(&1.file == "ali.yml"))
+    end
+
+    test "the text fallback still finds a Hypatia checkout" do
+      # A multi-line double-quoted scalar is outside the parser's subset.
+      wf =
+        "jobs:\n  a:\n    name: \"first\n      second\"\n    steps:\n" <>
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        with:\n\n          repository: hyperpolymath/hypatia\n          path: _h\n          ref: #{@old}\n"
+
+      assert {:error, _} = Hypatia.Kyaml.parse(wf)
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "fb.yml", wf))
+
+      assert [%{file: "fb.yml", key: "checkout ref", line: 11}] =
+               Enum.filter(found, &(&1.file == "fb.yml"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
