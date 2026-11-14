@@ -23,6 +23,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
         "id" => "x",
         "kind" => kind,
         "language" => "zig",
+        "in_proven_run" => true,
         "test_id" => %{"name" => "t"},
         "fixtures" => %{"silence" => "s", "firing" => %{"source" => "f", "defect_class" => "d"}},
         "run" => Map.merge(%{"outcome" => "passed"}, run)
@@ -106,6 +107,14 @@ defmodule Hypatia.Coverage.EvidenceTest do
   end
 
   describe "not counted: general" do
+    test "proven-run membership must be affirmative, whichever collector wrote it" do
+      assert Evidence.counted?(Map.delete(prop(), "in_proven_run")) ==
+               {:not_counted, :not_in_proven_run}
+
+      assert Evidence.counted?(Map.put(prop(), "in_proven_run", "yes")) ==
+               {:not_counted, :not_in_proven_run}
+    end
+
     for outcome <- ["failed", "error", "skipped", nil] do
       test "outcome #{inspect(outcome)}" do
         r = prop() |> put_in(["run", "outcome"], unquote(outcome))

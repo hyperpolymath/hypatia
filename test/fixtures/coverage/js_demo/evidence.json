@@ -83,6 +83,7 @@
       "commit": "0123456789abcdef0123456789abcdef01234567",
       "language": "js",
       "kind": "R",
+      "in_proven_run": true,
       "test_id": {
         "module_path": "test/props.test.js",
         "name": "property: classify says small on 1..100",
@@ -116,6 +117,7 @@
       "commit": "0123456789abcdef0123456789abcdef01234567",
       "language": "js",
       "kind": "R",
+      "in_proven_run": true,
       "test_id": {
         "module_path": "test/props.test.js",
         "name": "property: clamp stays within bounds",

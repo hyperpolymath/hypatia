@@ -243,12 +243,11 @@ defmodule Hypatia.Coverage.Evidence do
 
   defp full_sha?(s), do: is_binary(s) and Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, String.trim(s))
 
-  # A record that would count but says it was not in the proven run produced none of
-  # the proven coverage, so it cannot back it. Absent field (non-Elixir collectors): no
-  # claim either way.
-  defp proven_run_member(:counted, %{"in_proven_run" => false}),
-    do: {:not_counted, :not_in_proven_run}
-
+  # A record counts only if it affirmatively ran in the proven run (`in_proven_run: true`).
+  # Otherwise it produced none of the proven coverage and cannot back it, whichever
+  # collector wrote it.
+  defp proven_run_member(:counted, %{"in_proven_run" => true}), do: :counted
+  defp proven_run_member(:counted, _record), do: {:not_counted, :not_in_proven_run}
   defp proven_run_member(decision, _record), do: decision
 
   @doc "Classify every record: `[{record, decision}]`, in input order (same options as `counted?/2`)."
@@ -278,7 +277,8 @@ defmodule Hypatia.Coverage.Evidence do
   def reason_text(:fixture_debt), do: "FixtureDebt (no silence/firing fixtures)"
 
   def reason_text(:not_in_proven_run),
-    do: "not in the proven run (no @tag :proven), so it produced none of the proven coverage"
+    do:
+      "not shown to be in the proven run (in_proven_run is not true), so it cannot back the proven coverage"
 
   def reason_text(:no_fixtures),
     do: "not admissible: needs silence and firing fixtures, or a cannot-fail-by-design reason"

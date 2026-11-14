@@ -625,6 +625,7 @@ defmodule Hypatia.Coverage.ReportTest do
       "id" => "r",
       "kind" => "R",
       "language" => "zig",
+      "in_proven_run" => true,
       "repo" => "example/demo",
       "commit" => @sha,
       "test_id" => %{"name" => "p"},

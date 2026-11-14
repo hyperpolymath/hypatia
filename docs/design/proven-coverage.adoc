@@ -88,7 +88,9 @@ A piece of evidence *counts* toward coverage only if every line below is true.
 . *Not counted, but recorded and shown:* `E` (example test) and `M` (test that runs against a mock or stub of the code under test).
   These are the "raw" coverage Codecov shows today. They are shown in grey so the gap is visible.
 
-`counted(e) = e.passed && e.admissible && e.kind in {P, R, C, B} && e.kind_requirements_met`.
+`counted(e) = e.passed && e.admissible && e.kind in {P, R, C, B} && e.kind_requirements_met && e.in_proven_run`.
+
+`in_proven_run` must be `true` on the record: every collector sets it for the tests it ran in the proven run. A record without it does not count (the proven coverage cannot be tied to it).
 
 For a *line or branch* to count, a further condition applies (owner ruling Q7): if it is covered only by R, C or B evidence,
 and a mutation tool exists for its language, a mutant at that location must be killed by counted evidence.
