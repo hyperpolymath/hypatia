@@ -173,13 +173,25 @@ the agents and the headless profile are in hypatia only. Put them in
 `gitbot-fleet` before those 2 runs, or run those 2 with a person.
 
 The script reads the header of the work order (`:wo-model:`, `:wo-effort:`,
-`:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`). It refuses to run when the
-key is not set, because Claude Code would then bill the signed-in plan. It
-also refuses a working tree with changes, an argument that it does not know,
-an agent whose model or effort differs from the work order, and a locale that
-is not UTF-8. It reads the project settings and the headless profile only, so
-a personal permission rule does not widen the run. It writes one line to the
-ledger for each run (`docs/operations/e0-closeout/templates/ledger-line.adoc`).
+`:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`, `:wo-branch:`). It refuses to
+run when the key is not set, because Claude Code would then bill the
+signed-in plan. For the same reason it refuses when a variable sends the run
+to another provider or endpoint: `CLAUDE_CODE_USE_BEDROCK` and the 5 other
+provider selectors, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL`. A Claude
+Code cloud session sets `ANTHROPIC_BASE_URL` (measured on 2026-11-14), so the
+script refuses to start there.
+
+It also refuses a working tree with changes, an argument that it does not
+know, an agent whose model or effort differs from the work order, a checkout
+without the `e0-work-order` skill, and a locale that is not UTF-8. It fetches
+`main` and refuses when the work order, `.claude/` or `scripts/api-agents/`
+differs from `origin/main`, so start a run from a checkout of `main`. It reads
+the project settings and the headless profile only, so a personal permission
+rule does not widen the run. The run can push with one command only. That
+command names the branch of its work order as the source and as the
+destination, and it sends no tags. The script writes one
+line to the ledger for each run
+(`docs/operations/e0-closeout/templates/ledger-line.adoc`).
 
 The script, the profile, the agents and the work orders are the other parts
 of the same kit: `scripts/api-agents/`, `.claude/profiles/`, `.claude/agents/`
@@ -223,17 +235,26 @@ once each week.
 
 * `.claude/settings.json` holds the rules for each session in this repository.
   `.claude/profiles/e0-headless.json` adds the rules of an unattended run: it
-  can commit, push a branch and open a draft pull request, and it cannot
-  merge, approve, comment or fetch from the web.
-* A permission rule is not a security boundary. The limits that hold are the
-  scope of the GitHub token and the branch rules.
+  can commit, push the branch of its work order and open a draft pull
+  request. It cannot merge, approve or comment. It cannot use the web tools,
+  `curl` or `wget`, but it is not offline: `git fetch`, `mix deps.get`, the
+  toolchain installer and `gh` use the network. Its
+  file tools cannot read the secret files that `.gitignore` names (`.env`,
+  `.envrc`, `*.pem`, `*.key`, `secrets/`).
+* A permission rule is not a security boundary. A run can edit code and run
+  the tests, so it can run any command as its user, and a program that it
+  starts can read any file of that user. The limits that hold are the scope
+  of the GitHub token, the branch rules, and what is in the checkout. So the
+  launch script refuses a checkout that holds a secret file that
+  `.gitignore` names. Start an unattended run in a clone that has none.
 * Give an unattended run its own fine-grained GitHub token: this repository
   (and `gitbot-fleet` for its 2 work orders), contents and pull requests with
   write access, nothing else. No administration right, and no right to pass
   a branch rule.
 * Put the API key in the environment of the run. Do not write it to a file
   that git tracks, to a pull request or to a chat.
-* A run on a workstation signs its commits with the key of that workstation.
+* A run on a workstation signs its commits only when git is set to sign
+  there (`commit.gpgSign`). The launch script does not check this.
   A run in a cloud container makes commits with no signature. That is a
   platform matter. Do not put a signing key into a container to change it.
 
