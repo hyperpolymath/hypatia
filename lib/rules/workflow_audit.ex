@@ -99,6 +99,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     always_after_cancel = check_always_after_cancel(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
     gitleaks_full_history = check_gitleaks_full_history_on_pr(workflow_contents)
+    full_history_remains = check_full_history_scan_remains(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -141,7 +142,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           moved_reusable_calls ++
           always_after_cancel ++
           mirror_visibility ++
-          gitleaks_full_history,
+          gitleaks_full_history ++
+          full_history_remains,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -4560,6 +4562,132 @@ defmodule Hypatia.Rules.WorkflowAudit do
           &1
         )
       )
+  end
+
+  # ─── WF032: a full-history secret scan remains off the PR path ─────────
+  #
+  # Owner ruling 2026-11-14: PRs scan base..head; the full-history scan
+  # stays on push, schedule or a manual run. cicd-squabbler's SQ-GEN-05
+  # narrows the PR scan and refers when no full-history scan would remain;
+  # this is the check it refers to. `missing_secret_history_scan` covers a
+  # repo with no scan at all and `secret_scan_without_history` a shallow
+  # one; WF032 covers a repo whose only scans are PR-range ones.
+
+  @non_pr_events ["push", "schedule", "workflow_dispatch"]
+
+  @doc """
+  WF032: the repository runs a secret scan on pull requests, but no job
+  runs a full-history scan on push, schedule or workflow_dispatch. A
+  secret committed and later deleted, or on another branch, then has no
+  scan at all. Full history means `--log-opts` with `--all`, a gitleaks
+  run with no `--log-opts` range on a `fetch-depth: 0` checkout, the
+  estate rail (`#{@secret_history_rail}`), or gitleaks-action on a
+  schedule or manual run. One finding per repository, medium, referral
+  only (cicd-squabbler SQ-GEN-05 owns the fix, R1).
+  """
+  def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
+    scans =
+      for {filename, content} <- Enum.sort(workflow_contents),
+          {:ok, %Hypatia.Workflow{triggers: triggers, jobs: jobs}} <- [
+            Hypatia.Workflow.parse(content, filename)
+          ],
+          texts = job_texts(jobs),
+          job <- jobs,
+          text = Map.fetch!(texts, job.id),
+          Regex.match?(@gitleaks, text) or String.contains?(text, @secret_history_rail) do
+        %{file: filename, job: job, text: text, triggers: triggers}
+      end
+
+    pr_scans =
+      Enum.filter(scans, fn sc ->
+        Enum.any?(sc.triggers, &(&1 in @pr_events)) and not non_pr_only?(sc.job.if || "")
+      end)
+
+    remains? =
+      Enum.any?(scans, fn sc ->
+        Enum.any?(sc.triggers, &(&1 in @non_pr_events)) and
+          not event_only?(sc.job.if || "", @pr_events) and full_history_scan?(sc)
+      end)
+
+    case {pr_scans, remains?} do
+      {[first | _], false} ->
+        [
+          %{
+            rule: "WF032",
+            rule_id: "hypatia/workflow_audit/full_history_scan_missing",
+            type: :full_history_scan_missing,
+            file: first.file,
+            line: first.job.line,
+            job: first.job.id,
+            severity: :medium,
+            action: :report,
+            reason:
+              "Secret scans run on pull requests (#{first.file} job `#{first.job.id}`), " <>
+                "but no job runs a full-history scan on push, schedule or " <>
+                "workflow_dispatch. A secret deleted later, or on another branch, is " <>
+                "never scanned. Keep a full-history pass on a non-PR trigger."
+          }
+        ]
+
+      _ ->
+        []
+    end
+  end
+
+  def check_full_history_scan_remains(_), do: []
+
+  defp full_history_scan?(%{text: text, triggers: triggers, job: job}) do
+    cond do
+      String.contains?(text, @secret_history_rail) ->
+        true
+
+      all_history_log_opts?(text) ->
+        true
+
+      Regex.match?(~r/gitleaks\/gitleaks-action/, text) ->
+        Enum.any?(triggers, &(&1 in ["schedule", "workflow_dispatch"]))
+
+      Regex.match?(@log_opts, text) ->
+        false
+
+      String.contains?(text, "--no-git") ->
+        false
+
+      true ->
+        deep_checkout?(job)
+    end
+  end
+
+  # The job checks out all history: an actions/checkout step with
+  # `fetch-depth: 0` (read from the parsed step; the job text holds values,
+  # not keys).
+  defp deep_checkout?(%{steps: steps}) when is_list(steps) do
+    Enum.any?(steps, fn step ->
+      is_binary(step.uses) and String.starts_with?(step.uses, "actions/checkout") and
+        Hypatia.Workflow.input(step, "fetch-depth") == "0"
+    end)
+  end
+
+  defp deep_checkout?(_job), do: false
+
+  # A job gated to one of `events` only: one conjunct of a flat `&&` chain is
+  # exactly `github.event_name == '<event>'`.
+  defp event_only?(cond_text, events) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+
+    not String.contains?(expr, "||") and
+      not Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) and
+      expr
+      |> String.split("&&")
+      |> Enum.any?(fn c ->
+        case Regex.run(~r/^\s*github\.event_name\s*==\s*['"]([a-z_]+)['"]\s*$/, c) do
+          [_, event] -> event in events
+          nil -> false
+        end
+      end)
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
