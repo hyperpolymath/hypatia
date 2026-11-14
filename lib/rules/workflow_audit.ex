@@ -5366,27 +5366,50 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
         not excludes_cancellation?(step.if || "", :step) and
-        (Regex.match?(
-           ~r/\bexit\s+(?:[1-9]|"?\$|")/,
-           Hypatia.Workflow.shell_mask(step.run, quotes: true)
-         ) or
-           bare_test_fails?(Hypatia.Workflow.shell_mask(step.run)))
+        (exits_nonzero?(step.run) or bare_test_fails?(step.run))
+    end)
+  end
+
+  # An `exit` command is found where quotes and comments are blanked; its
+  # argument is read at the same offset with only comments blanked, so
+  # `exit "0"` is a success and `exit "$code"` may not be (Codex on #1110).
+  defp exits_nonzero?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
+    ~r/\bexit\s+/
+    |> Regex.scan(bare, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      arg = binary_part(code, off + len, byte_size(code) - off - len)
+      Regex.match?(~r/\A(?:[1-9]|"?\$|"[1-9])/, arg)
     end)
   end
 
   defp bare_test_fails?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
     @bare_success_test
-    |> Regex.scan(run, return: :index)
+    |> Regex.scan(code, return: :index)
     |> Enum.any?(fn [{off, len}] ->
-      line = binary_part(run, off, len)
-      rest = binary_part(run, off + len, byte_size(run) - off - len)
+      line = binary_part(bare, off, len)
+      rest = binary_part(code, off + len, byte_size(code) - off - len)
 
       cond do
         Regex.match?(~r/\|\||^\s*(?:if|while|until|elif)\b/, line) -> false
-        String.contains?(line, "&&") -> String.trim(rest) == ""
+        # A later `;` or `&` command on the same line sets the status.
+        String.contains?(line, "&&") -> String.trim(rest) == "" and not later_command?(line)
         true -> true
       end
     end)
+  end
+
+  defp later_command?(line) do
+    line
+    |> String.replace("&&", "  ")
+    |> String.split(~r/[;&]/)
+    |> Enum.drop(1)
+    |> Enum.any?(&(String.trim(&1) != ""))
   end
 
   # Cancellation is handled only by a comparison against `cancelled`

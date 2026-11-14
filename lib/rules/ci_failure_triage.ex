@@ -1067,7 +1067,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # rule-order policy's `scanner.commit`. All must name one commit.
   @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/m
   @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/
-  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})(?=["'\s;|&)]|\z)/i
+  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})(?=["'\s;|&)<>]|\z)/i
 
   @doc """
   Hypatia pin drift: Hypatia pinned at different commits across a repo's
@@ -1136,7 +1136,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # line break in a literal script ends the command (a folded scalar has
   # already turned its breaks into spaces). The SHA must end the argument:
   # `<sha>-backup` is not that commit (Codex on #1103).
-  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:[ \t]|\\\n)+)["']?([0-9a-fA-F]{40})(?=["'\s;|&)]|\z)/
+  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:[ \t]|\\\n)+)["']?([0-9a-fA-F]{40})(?=["'\s;|&)<>]|\z)/
 
   # Walks the tree with the key that holds each node. `HYPATIA_SHA` counts
   # only inside an `env:` mapping, and `--hypatia-ref` only inside a `run:`
