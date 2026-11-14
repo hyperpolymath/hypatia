@@ -30,7 +30,11 @@ die() {
 
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 with_idris2=0
-[ "${1:-}" = "--with-idris2" ] && with_idris2=1
+case "$#:${1:-}" in
+  0:) ;;
+  1:--with-idris2) with_idris2=1 ;;
+  *) die "usage: install-toolchain.sh [--with-idris2]" ;;
+esac
 
 # shellcheck source=/dev/null
 . /etc/os-release 2>/dev/null || die "cannot read /etc/os-release"
@@ -45,6 +49,9 @@ else def_root="$HOME/.local/hypatia-tools"; def_bin="$HOME/.local/bin"; fi
 root=${HYPATIA_TOOLS:-$def_root}
 bin=${HYPATIA_BIN:-$def_bin}
 mkdir -p "$root" "$bin"
+# Absolute paths: a link with a relative target resolves from the link directory.
+root=$(CDPATH='' cd -- "$root" && pwd)
+bin=$(CDPATH='' cd -- "$bin" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 path_before=$PATH
@@ -160,10 +167,12 @@ if [ "$with_idris2" = 1 ]; then
     *)
       want=$(sum_for "idris2-$tag")
       [ -n "$want" ] || die "no pinned commit for Idris 2 $tag: add it to sum_for() before you build it"
-      # The bootstrap needs Chez Scheme and the GMP headers (GitHub runners ship both).
-      if ! command -v chezscheme >/dev/null 2>&1 || [ ! -f /usr/include/x86_64-linux-gnu/gmp.h ]; then
-        { as_root apt-get update -qq && as_root apt-get install -y -qq chezscheme libgmp-dev; } >/dev/null ||
-          die "Idris 2 needs chezscheme and libgmp-dev: install them as root, then run this script again"
+      # The bootstrap needs Chez Scheme, the GMP headers, GNU make and a C
+      # compiler (GitHub runners ship all 4).
+      if ! command -v chezscheme >/dev/null 2>&1 || ! command -v make >/dev/null 2>&1 ||
+        ! command -v cc >/dev/null 2>&1 || [ ! -f /usr/include/x86_64-linux-gnu/gmp.h ]; then
+        { as_root apt-get update -qq && as_root apt-get install -y -qq chezscheme libgmp-dev make gcc; } >/dev/null ||
+          die "Idris 2 needs chezscheme, libgmp-dev, make and gcc: install them as root, then run this script again"
       fi
       git -c advice.detachedHead=false clone -q --depth 1 --branch "$tag" \
         https://github.com/idris-lang/Idris2 "$work/idris2"
