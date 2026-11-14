@@ -70,7 +70,7 @@ acceptance criteria for closing the underlying roadmap item.
 
 == Integration
 
-* link:integration/a2ml.adoc[`a2ml.adoc`] — A2ML machine-readable metadata integration.
+* link:integration/a2ml.adoc[`a2ml.adoc`] — A2ML machine-readable metadata integration (historical: A2ML is retired; see `hypatia_chora.deed`).
 * link:integration/k9.adoc[`k9.adoc`] — K9 coordination service integration.
 * link:integration/a2ml-k9.adoc[`a2ml-k9.adoc`] — combined integration notes.
 * link:integration/github-registry.adoc[`github-registry.adoc`] — GitHub registry integration.

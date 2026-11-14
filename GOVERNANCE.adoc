@@ -80,7 +80,7 @@ Architecture Decision Record (ADR) in `docs/decisions/`.
   and standards enforcement.
 * Bot actions are subject to the same quality and review standards as human
   contributions.
-* Configure bots in `.machine_readable/bot_directives/`.
+* Configure bots in the `(bot-directives …)` clause of `hypatia_chora.deed`.
 
 == Becoming a Maintainer
 
