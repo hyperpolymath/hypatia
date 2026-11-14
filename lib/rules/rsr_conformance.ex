@@ -391,13 +391,13 @@ defmodule Hypatia.Rules.RsrConformance do
         ]),
       "2.3.1" => any_of(["0-AI-MANIFEST.a2ml", "0-AI-MANIFEST.deed"]),
       "3.1.1" => present_mr("descriptiles"),
-      "3.1.2" => descriptile("STATE"),
-      "3.1.3" => descriptile("META"),
-      "3.1.4" => descriptile("ECOSYSTEM"),
+      "3.1.2" => descriptile("STATE", "status"),
+      "3.1.3" => descriptile("META", "meta"),
+      "3.1.4" => descriptile("ECOSYSTEM", "ecosystem"),
       "3.1.5" => descriptile("AGENTIC", "agentic"),
       "3.1.6" => descriptile("NEUROSYM", "neurosym"),
       "3.1.7" => descriptile("PLAYBOOK", "playbook"),
-      "3.1.8" => any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"]),
+      "3.1.8" => anchor_present(),
       "3.1.9" => descriptile("CLADE", "clade"),
       "3.2.1" => &descriptiles_parse/1,
       "3.2.2" => profile_present(),
@@ -462,16 +462,23 @@ defmodule Hypatia.Rules.RsrConformance do
   defp descriptile(name),
     do: present_mr(Path.join(["descriptiles", name <> ".a2ml"]))
 
-  # A descriptile whose family has a ruled mapping spec into the repo deed
-  # (metadatastician/standards 1-formats/deed/mappings/, ruled 2026-10-27:
-  # AGENTIC / NEUROSYM / PLAYBOOK -> (agentic) (neurosym) (playbook), and
-  # CLADE -> (clade), the estate clade the chora deed carries) is satisfied
-  # by either carrier: the legacy .a2ml, or that clause at the top level of the
-  # repo's one `<repo>_chora.deed`. A2ML is retired, so the deed is the
-  # successor and the .a2ml the transition form; 2.3.1 accepts its two
-  # carriers the same way. The deed must parse (Hypatia.Deed is the reader
-  # that agrees with the standards gate): a deed that does not parse declares
-  # nothing, and a clause nested inside another clause is not the descriptile.
+  # A descriptile whose family has a mapping spec into the repo deed
+  # (metadatastician/standards 1-formats/deed/mappings/) is satisfied by either
+  # carrier: the legacy .a2ml, or that clause at the top level of the repo's
+  # one `<repo>_chora.deed`. The families and their clauses:
+  #
+  #   AGENTIC / NEUROSYM / PLAYBOOK -> (agentic) (neurosym) (playbook), and
+  #   CLADE -> (clade), the estate clade the chora deed carries (ruled
+  #   2026-10-27); META / ECOSYSTEM -> (meta) (ecosystem)
+  #   (meta-ecosystem-to-repo-deed.adoc); STATE -> (status)
+  #   (state-v1-decision.adoc, option B, ruled 2026-11-10: the one lifecycle
+  #   claim is the (status) clause, and the journal is not translated).
+  #
+  # A2ML is retired, so the deed is the successor and the .a2ml the transition
+  # form; 2.3.1 accepts its two carriers the same way. The deed must parse
+  # (Hypatia.Deed is the reader that agrees with the standards gate): a deed
+  # that does not parse declares nothing, and a clause nested inside another
+  # clause is not the descriptile.
   defp descriptile(name, clause) do
     a2ml = descriptile(name)
 
@@ -501,6 +508,30 @@ defmodule Hypatia.Rules.RsrConformance do
     end
   end
 
+  # 3.1.8: the anchor. The legacy ANCHOR.a2ml still counts; its successor is
+  # the (anchor …) clause at the top level of the chora deed (standards A7
+  # ruling S1; grammar clauses/anchor.abnf). There is no ANCHOR.deed file.
+  defp anchor_present do
+    legacy = any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"])
+
+    fn repo ->
+      case legacy.(repo) do
+        :pass -> :pass
+        _ -> if deed_clause?(repo, "anchor"), do: :pass, else: :fail
+      end
+    end
+  end
+
+  defp deed_parses?(repo) do
+    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
+         {:ok, text} <- File.read(path),
+         {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
+      true
+    else
+      _ -> false
+    end
+  end
+
   defp deed_clause?(repo, clause) do
     with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
          {:ok, text} <- File.read(path),
@@ -515,9 +546,12 @@ defmodule Hypatia.Rules.RsrConformance do
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
   # / prose rather than a `[section]` header) are a DIFFERENT A2ML surface and
   # are not validated by the record-dialect reader — requiring them to parse as
-  # record dialect would false-fail every conformant repo. An absent substrate,
-  # or no record-dialect file at all, is :fail — nothing to validate is not
-  # valid.
+  # record dialect would false-fail every conformant repo. With no
+  # record-dialect file at all, the successor carrier decides: a repo whose
+  # descriptiles moved into its chora deed passes when that deed parses
+  # (Hypatia.Deed, the reader that agrees with the standards gate). Neither a
+  # record-dialect file nor a parseable deed is :fail — nothing to validate is
+  # not valid.
   defp descriptiles_parse(repo) do
     candidates =
       Path.wildcard(Hypatia.Paths.machine_tree_join(repo, ["descriptiles", "*.a2ml"])) ++
@@ -530,7 +564,7 @@ defmodule Hypatia.Rules.RsrConformance do
 
     cond do
       record_files == [] ->
-        :fail
+        if deed_parses?(repo), do: :pass, else: :fail
 
       Enum.all?(record_files, fn f ->
         match?({:ok, _}, with({:ok, t} <- File.read(f), do: RecordDialect.parse(t)))

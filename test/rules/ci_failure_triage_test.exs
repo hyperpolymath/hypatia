@@ -803,6 +803,65 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
                Enum.filter(found, &(&1.file == "fb.yml"))
     end
 
+    # Codex on #1103, fifth round.
+    test "a literal line break does not carry the flag to the next line" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n          grid --hypatia-ref\n          #{@old}\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "nl.yml", wf)) == []
+    end
+
+    test "a SHA with a suffix is not the flag's argument" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: grid --hypatia-ref #{@old}-backup\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "sfx.yml", wf)) == []
+    end
+
+    test "a quoted hash does not hide a live flag" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n          grid --label \"foo # bar\" --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "qh.yml", wf))
+      assert [%{file: "qh.yml", line: 5}] = Enum.filter(found, &(&1.file == "qh.yml"))
+    end
+
+    test "a folded match is mapped to its own source line" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: >\n          echo one\n          echo two;\n" <>
+          "          grid --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "fl.yml", wf))
+      assert [%{file: "fl.yml", line: 7}] = Enum.filter(found, &(&1.file == "fl.yml"))
+    end
+
+    test "the text fallback reads only checkout steps" do
+      wf =
+        "jobs:\n  a:\n    name: \"first\n      second\"\n    steps:\n" <>
+          "      - uses: x/deploy@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        with:\n          repository: hyperpolymath/hypatia\n          ref: #{@old}\n"
+
+      assert {:error, _} = Hypatia.Kyaml.parse(wf)
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "nf.yml", wf)) == []
+    end
+
+    # Codex on #1110.
+    test "a redirection right after the SHA ends the argument" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: grid --hypatia-ref #{@old}>/dev/null\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "rd.yml", wf))
+      assert [%{file: "rd.yml", line: 4}] = Enum.filter(found, &(&1.file == "rd.yml"))
+    end
+
+    test "the text fallback reads a checkout with other step keys before with:" do
+      wf =
+        "jobs:\n  a:\n    name: \"first\n      second\"\n    steps:\n" <>
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+          "        name: Fetch Hypatia\n        id: hyp\n" <>
+          "        with:\n          repository: hyperpolymath/hypatia\n          ref: #{@old}\n"
+
+      assert {:error, _} = Hypatia.Kyaml.parse(wf)
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "sk.yml", wf))
+      assert [%{file: "sk.yml", key: "checkout ref"}] = Enum.filter(found, &(&1.file == "sk.yml"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
