@@ -101,7 +101,7 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/runner_cancelled + static WF029 always_after_cancel [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/actions/using-jobs/using-concurrency",
   "seed": 1,
-  "sq_id": null,
+  "sq_id": "SQ-GEN-03 (static WF029; detection is Hypatia's) / SQ-NOI-01 (noise)",
   "route": "unrouted"
  },
  {
@@ -1753,7 +1753,7 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/actions_lock_unresolvable_pin [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "sq_id": null,
+  "sq_id": "SQ-LOCK-02",
   "route": "unrouted"
  },
  {
@@ -1813,7 +1813,7 @@
   "evidence": "hypatia#1064 hypatia/workflow_audit/actions_lock_stale (replaces :unpinned_action misfire) [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "sq_id": null,
+  "sq_id": "SQ-LOCK-02",
   "route": "unrouted"
  },
  {

@@ -28,3 +28,11 @@ exists in this tree and is verified; the reconciliation thread reports them as d
 
 == Owner ruling needed
 Two rules disagree: the dictask canon-lockstep gate demands `rsr-profile.a2ml`, while the estate no-new-A2ML policy forbids it (row `standards/rsr-profile.a2ml vs no-new-A2ML`).
+
+== Squabbler rows (cicd-squabbler)
+Rows with `source` `cicd-squabbler` and the `sq_id` field are keyed from
+`crates/squabble-core/data/first-line-rules.tsv` on cicd-squabbler `main`, which is authoritative
+(48 rules at e34a7dc: 21 FIX, 5 ACT, 3 REFER, 16 OWNER, 3 NOISE); ADR 0004's row ids match it.
+Only SQ-LOCK-01 has an executor (`squabble relock`). Every other FIX or ACT row is a described
+action, not automated, so no squabbler row here uses `fixst` `autofix`. Detection for SQ-GEN-03
+and SQ-GEN-05 is Hypatia's (WF029, WF031), not the squabbler's.
