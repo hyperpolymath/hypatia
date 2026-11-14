@@ -15,9 +15,9 @@
 # Notes for review:
 #  - B2 (major -> review) is left to the existing human-review path; it can be added
 #    later via dependabot/fetch-metadata.
-#  - panic-attack is built from source (public clone). Production hardening: a released
-#    binary, or -- to match estate convention -- a hyperpolymath/standards reusable
-#    workflow. Offered as a follow-up.
+#  - panic-attack is built from source (public clone, pinned to PA_SHA and verified).
+#    Production hardening: a released binary, or -- to match estate convention --
+#    a hyperpolymath/standards reusable workflow. Offered as a follow-up.
 #  - github context is passed via env: only (no ${{ }} in run lines) per estate rules.
 name: bridge-gate
 on:
@@ -57,8 +57,21 @@ jobs:
           fi
 
       - name: Build panic-attack (Patch-Bridge)
+        env:
+          # Pinned, not HEAD: this job builds and runs panic-attack on every
+          # dependency-bump PR. Bump deliberately, after reviewing
+          # panic-attack's changes. Kept equal to estate-rescan.yml's PA_SHA,
+          # the standards Hypatia lane (hypatia-scan-reusable.yml panic-ref)
+          # and every other lane; owner ruling 2026-11-13. Check with
+          # `mix hypatia.ci_triage pins` (scanner_pin_drift, hypatia#1064).
+          PA_SHA: cbf2b935ef4260cc3ae66010f4ffc91385ff8f8c
         run: |
-          git clone --depth 1 https://github.com/hyperpolymath/panic-attack /tmp/pa
+          set -euo pipefail
+          git clone --depth 1 https://github.com/hyperpolymath/panic-attack.git /tmp/pa
+          git -C /tmp/pa fetch --depth 1 origin "$PA_SHA"
+          git -C /tmp/pa checkout --detach "$PA_SHA"
+          # Refuse to build anything but the pinned commit.
+          test "$(git -C /tmp/pa rev-parse HEAD)" = "$PA_SHA"
           cargo build --release --features http --manifest-path /tmp/pa/Cargo.toml
           echo "/tmp/pa/target/release" >> "$GITHUB_PATH"
 
