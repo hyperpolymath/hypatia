@@ -50,7 +50,7 @@ No gate is set by this design. The experiment owner session measures real number
   Gaps: coverage ignores the tier (an Unproven test still lights a cell); nearly all cells use `FixtureDebt`
   yet still light cells; there is no property-test machinery (no seed, no case count); benchmarks carry no tier;
   the Idris emitter writes JSON v1 while the contract is v2.
-* *proven* (the library) has proofs in `src/Proven/<M>/Proofs.idr` and `OWED:` markers for missing ones.
+* *proven* (the library) has proofs in `proven/src/Proven/<M>/Proofs.idr` (in the proven repo) and `OWED:` markers for missing ones.
   Tests are not linked to proofs. The only join is by module name (`SafeX` to `SafeXUnit`, `SafeXProps`, `SafeXBench`).
   `MODULE-STATUS.txt` is dated and disagrees with `PROOF-NEEDS.adoc`.
 * *proven-servers* has 88 protocol packages. Tests are Zig `test` blocks under `protocols/proven-<x>/ffi/zig/test/`.
