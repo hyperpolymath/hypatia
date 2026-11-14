@@ -46,7 +46,7 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | `891fefefddd7fde77874e96ddbd87146ecb1811a9db5367b900d40d206d6e216`
 | `38589dc8263b3e4008644e8aa4254897591082b8`
 | ECOSYSTEM descriptile: position, consumers, producers, seven related projects, integration points.
-| `(ecosystem)` per `meta-ecosystem-to-repo-deed.adoc`: project, ecosystem, position-type, purpose. Dropped: the seven related-project entries (relationships outside the closed set), consumers, producers, integration points.
+| `(ecosystem)` per `meta-ecosystem-to-repo-deed.adoc`: project, ecosystem, position-type, purpose, and the seven related-project entries as `(related …)` clauses (name, relationship, description as `:notes`). They were dropped at first because their relationships were outside the closed set; the owner extended the set on 2026-11-14 (standards `clauses/ecosystem.abnf` v1.1.0) and they were restored. Dropped: the sibling/infrastructure group names, consumers, producers, integration points.
 
 | `.machine_readable/descriptiles/AGENTIC.a2ml`
 | 4809
