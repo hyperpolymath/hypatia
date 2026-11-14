@@ -276,7 +276,7 @@ defmodule Hypatia.Workflow do
   # `$(…)`, so it ends the word and pops nothing (Codex on #1129).
   @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?<, ?>]
   # What may follow the words `case` and `esac`.
-  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?), ?<, ?>]
+  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(, ?), ?<, ?>]
 
   defp mask(<<>>, _q, _ws?, _cmt?, _qs?, _parens, acc),
     do: acc |> Enum.reverse() |> IO.iodata_to_binary()
@@ -345,11 +345,13 @@ defmodule Hypatia.Workflow do
   # After only blanks since a newline, `;`, `&`, `|`, `(`, the start, or a
   # reserved word that a command follows (`then`, `do`, `else`, ...; Codex
   # on #1143).
-  @command_words ~w(then do else elif if while until ! {)
+  @command_words ~w(then do else elif if while until ! { time coproc)
 
   defp command_start?(acc) do
     case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
       [] -> true
+      # A separator escaped with a backslash is a literal (Codex on #1143).
+      [c, ?\\ | _] when c in [?\n, ?;, ?&, ?|, ?(] -> false
       [c | _] when c in [?\n, ?;, ?&, ?|, ?(] -> true
       rest -> previous_word(rest) in @command_words and word_start_before?(rest)
     end

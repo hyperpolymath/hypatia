@@ -923,6 +923,32 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [%{file: "cr2.yml"}] = Enum.filter(found, &(&1.file == "cr2.yml"))
     end
 
+    test "a case after time opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(time case x in x)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ct.yml", wf)) == []
+    end
+
+    test "an escaped ; does not make case a command" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: v=$(echo \\; case x in x)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce2.yml", wf))
+      assert [%{file: "ce2.yml"}] = Enum.filter(found, &(&1.file == "ce2.yml"))
+    end
+
+    test "in( with no blank still enters the case body" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in(x) echo yes;; esac)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ci.yml", wf))
+      assert [%{file: "ci.yml"}] = Enum.filter(found, &(&1.file == "ci.yml"))
+    end
+
     test "the word case as an argument does not open a case" do
       wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
       found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
