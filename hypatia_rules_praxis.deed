@@ -3327,11 +3327,11 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
-    ;; defaulted: text class excusable-at scope-form
+    ;; defaulted: text excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/actions_lock_tag_keyed"
       :text "hypatia/workflow_audit/actions_lock_tag_keyed in lib/rules/workflow_audit.ex."
-      :class gate
+      :class advisory
       :severity minor
       :excusable-at repo
       :scope-form exact-paths

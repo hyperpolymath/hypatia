@@ -99,6 +99,15 @@ defmodule Hypatia.Rules.ActionsLockTest do
 
     assert {:ok, _} = ActionsLock.parse(sha_keyed)
     assert WorkflowAudit.check_actions_lock_tag_keys(sha_keyed) == []
+    # Advisory: shown at --severity info, never blocking.
+    [finding] = WorkflowAudit.check_actions_lock_tag_keys(@valid_lock)
+    assert finding.advisory == true
+
+    {shown, blocking} =
+      Hypatia.CLI.report_sets([%{severity: "info", advisory: true}], %{severity: "info"})
+
+    assert length(shown) == 1 and blocking == []
+
     assert WorkflowAudit.check_actions_lock_tag_keys(nil) == []
     assert WorkflowAudit.check_actions_lock_tag_keys("not a lock") == []
   end

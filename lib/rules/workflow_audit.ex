@@ -543,6 +543,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
             rule_id: "hypatia/workflow_audit/actions_lock_tag_keyed",
             file: "actions.lock",
             severity: :info,
+            # Report-only: never counts toward the CLI's exit code, even at
+            # `--severity info` (see Hypatia.CLI.report_sets/2).
+            advisory: true,
             action: :report,
             keys: Enum.sort(keys),
             detail:
