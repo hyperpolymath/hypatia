@@ -11,7 +11,7 @@
 (praxis-deed
   :schema-version "1.0.0"
   :canonical-name "hypatia-rules"
-  :beholding-chora #u5"estate/chora"
+  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
   (rule-domain :name "hypatia" :owner "hyperpolymath/hypatia")
   (rules
     ;; defaulted: class excusable-at scope-form
