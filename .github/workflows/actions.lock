@@ -124,6 +124,8 @@ workflows:
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'taiki-e/install-action@v2.90.3'
         - 'trufflesecurity/trufflehog@v3.99.8'
+    '.github/workflows/sq-map-source-check.yml':
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/standards-integration.yml': []
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'

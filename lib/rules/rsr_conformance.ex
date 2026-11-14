@@ -134,12 +134,25 @@ defmodule Hypatia.Rules.RsrConformance do
      }}
   end
 
+  # The assessor written into every scorecard: this tool and hypatia's version
+  # from mix.exs, fixed at compile time (as Hypatia.Verdict does).
+  @assessor "hypatia rsr_score #{Mix.Project.config()[:version]}"
+
+  @doc "The `:assessor` `to_deed/2` writes: `\"hypatia rsr_score <version>\"`."
+  @spec assessor() :: String.t()
+  def assessor, do: @assessor
+
   @doc """
   Serialize a scorecard as an RSR scorecard deed: the one `(rsr-scorecard …)`
   clause of a `praxis-deed` with `:profile rsr-scorecard` (standards
-  `1-formats/deed/spec/abnf/clauses/rsr-scorecard.abnf` v0.1.0, DRAFT;
-  owner ruling 2026-11-14). It replaces the A2ML `rsr.scorecard.a2ml`: A2ML is
-  retired, and the oracle no longer produces it.
+  `1-formats/deed/spec/abnf/clauses/rsr-scorecard.abnf` v0.2.0; owner ruling
+  2026-11-14, ratified the same day with `:assessor` and `:assessed-at`). It
+  replaces the A2ML `rsr.scorecard.a2ml`: A2ML is retired, and the oracle no
+  longer produces it.
+
+  Always written: `:assessor`, hypatia's name and version (`assessor/0`), and
+  `:assessed-at`, the run time as an RFC 3339 UTC timestamp with whole seconds
+  (`"2026-11-14T19:33:12Z"`), the one spelling the standards checker accepts.
 
   Options, all optional:
 
@@ -148,6 +161,9 @@ defmodule Hypatia.Rules.RsrConformance do
     * `:beholding_chora` — the scored repo's estate chora, as a deed literal
       (`#uuid"…"` or `#u8"…"`), copied from its chora deed.
     * `:source_commit` — the scored commit, 40 lowercase hex characters.
+    * `:assessed_at` — the run time as a `DateTime` (default
+      `DateTime.utc_now/0`). Any offset is converted to UTC and the fraction
+      dropped; inject a fixed one for a deterministic file.
 
   Every criterion is written, `na` included, so a reader can recompute the
   score and coverage from the criteria, which the standards checker does.
@@ -159,6 +175,7 @@ defmodule Hypatia.Rules.RsrConformance do
     repo = Keyword.get(opts, :repo) || sc.repo
     beholding = Keyword.get(opts, :beholding_chora)
     commit = Keyword.get(opts, :source_commit)
+    assessed_at = deed_timestamp(Keyword.get_lazy(opts, :assessed_at, &DateTime.utc_now/0))
 
     header = [
       ";; SPDX-License-Identifier: MPL-2.0\n",
@@ -174,6 +191,8 @@ defmodule Hypatia.Rules.RsrConformance do
       "    :repo #{deed_string(repo)}\n",
       "    :spec rsr-criteria-v2\n",
       "    :spec-version #{deed_string(sc.spec_version || "unknown")}\n",
+      "    :assessor #{deed_string(@assessor)}\n",
+      "    :assessed-at #{deed_string(assessed_at)}\n",
       "    :tier #{sc.tier}\n",
       "    :score #{deed_decimal(sc.score, 2)}\n",
       "    :provisional #{deed_bool(sc.provisional)}\n",
@@ -224,6 +243,15 @@ defmodule Hypatia.Rules.RsrConformance do
     else
       _ -> []
     end
+  end
+
+  # sc-timestamp: RFC 3339 in UTC, whole seconds, "Z". Going through Unix
+  # seconds converts any offset without a time-zone database.
+  defp deed_timestamp(%DateTime{} = dt) do
+    dt
+    |> DateTime.to_unix()
+    |> DateTime.from_unix!()
+    |> DateTime.to_iso8601()
   end
 
   # A deed string: the four escapes the grammar allows, and nothing else.
@@ -603,20 +631,15 @@ defmodule Hypatia.Rules.RsrConformance do
     legacy = any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"])
 
     fn repo ->
-      case legacy.(repo) do
-        :pass -> :pass
-        _ -> if deed_clause?(repo, "anchor"), do: :pass, else: :fail
-      end
+      if deed_clause?(repo, "anchor"), do: :pass, else: legacy.(repo)
     end
   end
 
-  # :ok (the chora deed parses), :none (the repo has no chora deed) or
-  # :broken (it has one that does not read or parse: it declares nothing).
+  # The chora deed's state: :absent (no deed file), :ok (it parses as a
+  # repo-deed) or :broken (present but unreadable, unparsable, misnamed or
+  # ambiguous).
   defp deed_state(repo) do
     case Hypatia.Deed.repo_deed_path(repo) do
-      :none ->
-        :none
-
       {:ok, path} ->
         with {:ok, text} <- File.read(path),
              {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
@@ -624,6 +647,9 @@ defmodule Hypatia.Rules.RsrConformance do
         else
           _ -> :broken
         end
+
+      :none ->
+        :absent
 
       _ ->
         :broken
@@ -644,12 +670,15 @@ defmodule Hypatia.Rules.RsrConformance do
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
   # / prose rather than a `[section]` header) are a DIFFERENT A2ML surface and
   # are not validated by the record-dialect reader — requiring them to parse as
-  # record dialect would false-fail every conformant repo. With no
-  # record-dialect file at all, the successor carrier decides: a repo whose
-  # descriptiles moved into its chora deed passes when that deed parses
-  # (Hypatia.Deed, the reader that agrees with the standards gate). Neither a
-  # record-dialect file nor a parseable deed is :fail — nothing to validate is
-  # not valid.
+  # record dialect would false-fail every conformant repo.
+  #
+  # The chora deed is read first, as the successor carrier: when the repo has
+  # one it must parse (Hypatia.Deed, the reader that agrees with the standards
+  # gate), whatever .a2ml remains, because a broken deed declares nothing and
+  # "all carriers valid" cannot pass over it. Then every record-dialect file
+  # left must parse too. A repo whose descriptiles all moved into its deed
+  # passes on the deed alone. Neither a record-dialect file nor a deed is
+  # :fail: nothing to validate is not valid.
   defp descriptiles_parse(repo) do
     candidates =
       Path.wildcard(Hypatia.Paths.machine_tree_join(repo, ["descriptiles", "*.a2ml"])) ++
@@ -662,8 +691,8 @@ defmodule Hypatia.Rules.RsrConformance do
     deed = deed_state(repo)
 
     cond do
-      # A chora deed that exists but does not parse fails, even when the
-      # remaining record-dialect files parse (#1117: stricter than before).
+      # The deed first: a broken chora deed fails 3.2.1 even when the
+      # remaining .a2ml files parse (#1117).
       deed == :broken ->
         :fail
 
