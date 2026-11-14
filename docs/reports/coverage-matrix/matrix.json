@@ -57,7 +57,7 @@
   "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
   "seed": 1,
   "sq_id": "SQ-RUN-01 + SQ-PIN-03",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -72,7 +72,7 @@
   "url": "https://docs.github.com/en/rest/pulls/pulls",
   "seed": 1,
   "sq_id": "SQ-NOI-02 (noise)",
-  "route": "unrouted"
+  "route": "noise"
  },
  {
   "source": "actions-annotation",
@@ -102,7 +102,7 @@
   "url": "https://docs.github.com/en/actions/using-jobs/using-concurrency",
   "seed": 1,
   "sq_id": "SQ-GEN-03 (static WF029; detection is Hypatia's) / SQ-NOI-01 (noise)",
-  "route": "unrouted"
+  "route": "noise"
  },
  {
   "source": "actions-annotation",
@@ -147,7 +147,7 @@
   "url": "https://www.githubstatus.com/",
   "seed": 1,
   "sq_id": "SQ-RUN-03",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -155,10 +155,10 @@
   "sev": "info",
   "problem": "CodeRabbit comment: rate limit hit / review paused / credits exhausted",
   "fix": "wait and `@coderabbitai review`; owner tops up plan",
-  "detect": "none",
+  "detect": "detected",
   "fixst": "none",
   "gap": "person",
-  "evidence": "no hits (only unrelated tooling)",
+  "evidence": "hypatia/ci_failure_triage/review_rate_limited (lib/rules/ci_failure_triage.ex; fixture test/rules/ci_failure_triage_test.exs coderabbit-review-limit.txt); advisory per R7",
   "url": "https://docs.coderabbit.ai",
   "seed": 1,
   "sq_id": null,
@@ -171,10 +171,10 @@
   "sev": "info",
   "problem": "Codex review comment says usage limit/credits reached",
   "fix": "owner action; re-request later",
-  "detect": "none",
+  "detect": "detected",
   "fixst": "none",
   "gap": "person",
-  "evidence": "no hits",
+  "evidence": "hypatia/ci_failure_triage/review_quota_exhausted (lib/rules/ci_failure_triage.ex; fixture codex-credits.txt); advisory per R7",
   "url": "https://developers.openai.com/codex",
   "seed": 1,
   "sq_id": null,
@@ -443,13 +443,13 @@
   "problem": "Pages jekyll/deploy errors, missing CNAME/https",
   "fix": "fix source/config",
   "detect": "none",
-  "fixst": "escalate",
-  "gap": "person",
+  "fixst": "none",
+  "gap": "symbolic",
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
-  "sq_id": "SQ-OWN-01 (OWNER, Get Pages site failed)",
-  "route": "owner-only"
+  "sq_id": null,
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -1724,7 +1724,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-OWN-09",
-  "route": "unrouted"
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1739,7 +1739,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-RUN-03",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1754,7 +1754,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-LOCK-02",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1769,7 +1769,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-RUN-04",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1799,7 +1799,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-OWN-12",
-  "route": "unrouted"
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1814,7 +1814,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-LOCK-02",
-  "route": "unrouted"
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -1828,8 +1828,8 @@
   "evidence": "hypatia#1064 pages_not_enabled [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/pages",
   "seed": 0,
-  "sq_id": null,
-  "route": "unrouted"
+  "sq_id": "SQ-OWN-01 (OWNER, Get Pages site failed)",
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1859,7 +1859,7 @@
   "url": "",
   "seed": 0,
   "sq_id": "SQ-OWN-11",
-  "route": "unrouted"
+  "route": "owner-only"
  },
  {
   "source": "hypatia",
@@ -2048,10 +2048,10 @@
   "sev": "error",
   "problem": "gitleaks on a pull_request run scans full history and fails on a finding not in the PR commits (Hypatia WF031 detects)",
   "fix": "scan base..head on PRs; keep full-history scan on non-PR triggers",
-  "detect": "unassessed",
+  "detect": "detected",
   "fixst": "recipe",
   "gap": "-",
-  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "evidence": "Hypatia WF031: WorkflowAudit.check_gitleaks_full_history_on_pr/1 (lib/rules/workflow_audit.ex; test/rules/gitleaks_full_history_test.exs); fix is the squabbler's (ADR 0004 FIX)",
   "url": "https://github.com/hyperpolymath/cicd-squabbler",
   "seed": 0,
   "sq_id": "SQ-GEN-05",
