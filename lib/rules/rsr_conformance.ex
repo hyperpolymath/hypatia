@@ -460,7 +460,7 @@ defmodule Hypatia.Rules.RsrConformance do
           ".well-known/humans.txt"
         ]),
       "2.3.1" => any_of(["0-AI-MANIFEST.a2ml", "0-AI-MANIFEST.deed"]),
-      "3.1.1" => present_mr("descriptiles"),
+      "3.1.1" => descriptile_carrier(),
       "3.1.2" => descriptile("STATE", "status"),
       "3.1.3" => descriptile("META", "meta"),
       "3.1.4" => descriptile("ECOSYSTEM", "ecosystem"),
@@ -610,13 +610,24 @@ defmodule Hypatia.Rules.RsrConformance do
     end
   end
 
-  defp deed_parses?(repo) do
-    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
-         {:ok, text} <- File.read(path),
-         {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
-      true
-    else
-      _ -> false
+  # The chora deed's state: :absent (no deed file), :ok (it parses as a
+  # repo-deed) or :broken (present but unreadable, unparsable, misnamed or
+  # ambiguous).
+  defp deed_state(repo) do
+    case Hypatia.Deed.repo_deed_path(repo) do
+      {:ok, path} ->
+        with {:ok, text} <- File.read(path),
+             {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
+          :ok
+        else
+          _ -> :broken
+        end
+
+      :none ->
+        :absent
+
+      _ ->
+        :broken
     end
   end
 
@@ -652,8 +663,10 @@ defmodule Hypatia.Rules.RsrConformance do
     deed = deed_state(repo)
 
     cond do
-      record_files == [] ->
-        if deed_parses?(repo), do: :pass, else: :fail
+      # The deed first: a broken chora deed fails 3.2.1 even when the
+      # remaining .a2ml files parse (#1117).
+      deed == :broken ->
+        :fail
 
       record_files == [] ->
         if deed == :ok, do: :pass, else: :fail
