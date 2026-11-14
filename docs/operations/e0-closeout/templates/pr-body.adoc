@@ -30,12 +30,12 @@ An empty "Not done" part is not permitted: write "Nothing" and say why.
 
 ## Cost
 
-- Work order `<id>`, model `<model>`, effort `<effort>`, <n> turns, $<amount> (client estimate).
+- Work order `<id>`, <n> turns, $<amount> (client estimate), cap $<cap>.
 ----
 
 == Rules
 
 * State a result only with its evidence. "Verified" needs a command and its output.
-* Do not write a model name in a commit message. The "Cost" line of the body
-  is the one place for it.
+* Do not write a model name in a commit message or in the body. The work
+  order sets the model, and the cost ledger records it.
 * Do not close an issue from the body. The owner closes issues.
