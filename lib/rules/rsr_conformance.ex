@@ -460,7 +460,7 @@ defmodule Hypatia.Rules.RsrConformance do
           ".well-known/humans.txt"
         ]),
       "2.3.1" => any_of(["0-AI-MANIFEST.a2ml", "0-AI-MANIFEST.deed"]),
-      "3.1.1" => present_mr("descriptiles"),
+      "3.1.1" => descriptile_carrier(),
       "3.1.2" => descriptile("STATE", "status"),
       "3.1.3" => descriptile("META", "meta"),
       "3.1.4" => descriptile("ECOSYSTEM", "ecosystem"),
@@ -603,20 +603,21 @@ defmodule Hypatia.Rules.RsrConformance do
     legacy = any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"])
 
     fn repo ->
-      case legacy.(repo) do
-        :pass -> :pass
-        _ -> if deed_clause?(repo, "anchor"), do: :pass, else: :fail
-      end
+      if deed_clause?(repo, "anchor"), do: :pass, else: legacy.(repo)
     end
   end
 
-  defp deed_parses?(repo) do
+  # The repo's chora deed: :absent (none at the root), :ok (it parses as a
+  # repo-deed), or :broken (it does not parse, is not a repo-deed, has an
+  # illegal name, or there is more than one).
+  defp deed_state(repo) do
     with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
          {:ok, text} <- File.read(path),
          {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
-      true
+      :ok
     else
-      _ -> false
+      :none -> :absent
+      _ -> :broken
     end
   end
 
@@ -634,12 +635,15 @@ defmodule Hypatia.Rules.RsrConformance do
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
   # / prose rather than a `[section]` header) are a DIFFERENT A2ML surface and
   # are not validated by the record-dialect reader — requiring them to parse as
-  # record dialect would false-fail every conformant repo. With no
-  # record-dialect file at all, the successor carrier decides: a repo whose
-  # descriptiles moved into its chora deed passes when that deed parses
-  # (Hypatia.Deed, the reader that agrees with the standards gate). Neither a
-  # record-dialect file nor a parseable deed is :fail — nothing to validate is
-  # not valid.
+  # record dialect would false-fail every conformant repo.
+  #
+  # The chora deed is read first, as the successor carrier: when the repo has
+  # one it must parse (Hypatia.Deed, the reader that agrees with the standards
+  # gate), whatever .a2ml remains, because a broken deed declares nothing and
+  # "all carriers valid" cannot pass over it. Then every record-dialect file
+  # left must parse too. A repo whose descriptiles all moved into its deed
+  # passes on the deed alone. Neither a record-dialect file nor a deed is
+  # :fail: nothing to validate is not valid.
   defp descriptiles_parse(repo) do
     candidates =
       Path.wildcard(Hypatia.Paths.machine_tree_join(repo, ["descriptiles", "*.a2ml"])) ++
@@ -652,8 +656,8 @@ defmodule Hypatia.Rules.RsrConformance do
     deed = deed_state(repo)
 
     cond do
-      record_files == [] ->
-        if deed_parses?(repo), do: :pass, else: :fail
+      deed == :broken ->
+        :fail
 
       record_files == [] ->
         if deed == :ok, do: :pass, else: :fail
