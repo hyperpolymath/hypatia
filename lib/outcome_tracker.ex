@@ -611,7 +611,8 @@ defmodule Hypatia.OutcomeTracker do
   Per-recipe verification rate.
 
   Returns `{:ok, %{verified, still_present, scan_failed, unverified, total,
-  rate}}` where `rate` is the fraction of *verifiable* successes that were
+  claimed, rate}}` (`claimed` equals `total`: the claimed successes, which are
+  the intended denominator here) where `rate` is the fraction of *verifiable* successes that were
   actually verified clean by post-fix re-scan. `scan_failed` and
   `unverified` records are excluded from the denominator so a recipe is
   not penalised for being run in environments without panic-attack.
@@ -647,6 +648,7 @@ defmodule Hypatia.OutcomeTracker do
         {:ok,
          Map.merge(counts, %{
            total: length(successes),
+           claimed: length(successes),
            rate: :insufficient_data,
            verifiable: verifiable
          })}
@@ -657,6 +659,7 @@ defmodule Hypatia.OutcomeTracker do
         {:ok,
          Map.merge(counts, %{
            total: length(successes),
+           claimed: length(successes),
            rate: rate,
            verifiable: verifiable
          })}
@@ -675,10 +678,12 @@ defmodule Hypatia.OutcomeTracker do
     %{
       recipe_id: String.t(),
       dispatches: non_neg_integer(),
-      successes: non_neg_integer(),
+      successes: non_neg_integer(),          # claimed: "outcome" == "success"
+      claimed_successes: non_neg_integer(),  # the same number, named for what it is
+      qualified: %{successes, failures, false_positives, ignored},
       failures: non_neg_integer(),
       false_positives: non_neg_integer(),
-      success_rate: float() | :no_data,
+      success_rate: float() | :no_data,      # claimed rate
       verification: %{
         verified: non_neg_integer(),
         still_present: non_neg_integer(),
@@ -756,6 +761,8 @@ defmodule Hypatia.OutcomeTracker do
         recipe_id: recipe_id,
         dispatches: dispatches,
         successes: successes,
+        claimed_successes: successes,
+        qualified: qualified_outcome_counts(outcomes),
         failures: failures,
         false_positives: false_positives,
         success_rate: success_rate,
