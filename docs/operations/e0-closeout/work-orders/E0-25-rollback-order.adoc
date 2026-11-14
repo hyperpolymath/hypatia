@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-25: A batch rollback reverts in reverse order, once
+:wo-id: E0-25
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 100
+:wo-branch: fix/e0-25-rollback-order
+:wo-depends: none
+
+== Goal
+
+The rollback manifest of a batch lists its revert instructions from the
+newest outcome to the oldest. A second rollback of the same batch adds no
+outcome and no instruction.
+
+== Authority
+
+Owner ruling of 2026-11-14, through the selector, on the second theory recon:
+"New work order now". This work order corrects the module only. It does not
+put the module on the dispatch path: the E0 README places that in Waves 2
+and 3 of the ultraplan.
+
+== Facts measured
+
+Commit `85cc775`, read on 2026-11-14. Nothing was run.
+
+* `lib/safety/batch_rollback.ex`, `rollback/2` (line 49): the instructions
+  (lines 81 to 88) follow the order of `find_batch_outcomes/1` (line 111),
+  which is the order of `File.ls/1` and then the order of the lines. Each
+  instruction has `repo`, `file` and the text `git revert`. It names no commit.
+* `rollback/2` writes one `false_positive` outcome for each row that it
+  finds, with `"batch_id"` set to the batch (lines 56 to 72).
+* Inferred, no test: those new rows carry the batch id, so a second
+  rollback of the same batch finds them and writes them again.
+* No other code in `lib/` writes `"batch_id"` to an outcome row
+  (`grep -rn '"batch_id"' lib`: `outcome_tracker.ex` line 501 reads it).
+  `create_batch/2` has no caller in `lib/`.
+* `lib/kin/contingency.ex`, `attempt_rollback/1` (line 234) passes a
+  repository name as the batch id.
+* `test/safety_test.exs` has tests for `create_batch/2` and
+  `list_batches/1`. It has no test for `rollback/2`.
+
+== Theory inputs
+
+Read on 2026-11-14 at januskey `b503488`. No prover was run for this work
+order. Use the result as a design rule. Its match to the Elixir is assumed.
+
+* An undo of a list of steps in reverse order restores the start state, when
+  each single undo restores its own step (`TransactionAtomicity.agda`,
+  `rollback-restores`, line 123). The premise for each single undo is tested
+  only in januskey. Here it is the fleet that runs `git revert`, so the
+  premise is outside this work order.
+* januskey records "undo twice is safe" as open. So this work order makes
+  the second rollback a no-op. It does not rely on a second undo.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/safety_test.exs`, with outcome rows of
+  their own in the test store. Each test must fail today.
+. The order of the outcome log is the order in which the outcomes were
+  recorded. It is the best order that the log gives. `File.ls/1` returns
+  names in no fixed order (`find_batch_outcomes/1`, line 114), so sort the
+  file names explicitly (one file for each month, so a name sort is a time
+  sort), and keep the order of the lines inside a file. List the outcomes of
+  the batch from the last position in the log to the first. Do not sort by
+  `timestamp`, and do not sort by `repo` or `file`: neither gives an order,
+  and a tie would then revert dependent changes in the wrong order.
+. Leave out each row that a rollback wrote (`"caused_by"` is
+  `"batch_rollback"`) when the outcomes of a batch are collected.
+. A batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing.
+. Read the result of each write in `rollback/2` (the outcome rows and
+  `rollbacks.jsonl`). Set the status `rolled_back` only after each write
+  succeeds. When a write fails, return `{:error, reason}` and leave the
+  status as it was, so that a later call can do the rollback again.
+. A retry writes no second outcome row. No stable id exists for an outcome,
+  and 2 original outcomes can share the same `batch_id`, `recipe_id`, `repo`
+  and `file`. So count by key. For each key, let N be the number of original
+  outcomes and M the number of rollback rows already in the log. The retry
+  writes N minus M rows for that key (none when M is N or more), and it
+  skips the first M originals of that key in the order of the log. The retry
+  still lists every original outcome in the manifest, so the manifest is
+  complete and has each instruction once.
+
+== Acceptance
+
+* A test shows 3 outcomes of 1 batch, written oldest first, and a manifest
+  that lists them newest first.
+* A test shows 2 outcomes with the same `timestamp`, written in the order
+  `b` then `a` (against the order of `repo` and `file`), and a manifest that
+  lists `a` before `b`: the reverse of the order in the log.
+* A test shows outcomes of 1 batch in 2 monthly files, written so that the
+  names do not come in the order of the months from `File.ls/1`, and a
+  manifest that lists the later month first.
+* A test shows that a failed write of `rollbacks.jsonl` returns an error
+  and does not set the status `rolled_back`.
+* A test shows that, after successful outcome writes and a failed write of
+  `rollbacks.jsonl`, a retry completes the rollback, writes no second
+  outcome row for any original outcome, and gives a manifest with each
+  instruction once.
+* A test shows a retry with 2 original outcomes that share the same `batch_id`,
+  `recipe_id`, `repo` and `file`, where the first rollback row was written and
+  the second write failed: the retry writes exactly 1 more row, so the log
+  holds 2 rollback rows for that key.
+* A test shows that a second `rollback/2` of the same batch adds 0 rows to
+  the outcome log and 0 lines to `rollbacks.jsonl`.
+* The diff touches `lib/safety/batch_rollback.ex` and `test/safety_test.exs` only.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Out of scope
+
+* The order of execution. An outcome is recorded after the fix and after its
+  verification, so a delayed or concurrent report can be in the log out of
+  execution order. No row records the start of an attempt today. `E0-12`
+  gives each attempt an event id and a start record, and a later work order
+  can then use them. Until then the manifest follows the order of recording,
+  and the pull request body says so.
+* 2 callers that roll back the same batch at the same time. The JSONL
+  store has no lock, so "once" here means once for calls in sequence. A
+  lock or an atomic claim for each batch is a design choice for the owner.
+* The commit of each fix. No outcome row records it today, so an
+  instruction cannot name it. That needs a producer first (`E0-12` gives
+  the event id of an attempt).
+* A caller that sets `"batch_id"` on an outcome row, and the call in
+  `lib/kin/contingency.ex`. Report what you find. Do not change them.
+
+== Stop and ask
+
+* A test of step 2 passes today. Then an inferred fact is false: report it.
+* A test needs the order of the log, and the test store does not keep it.
+* The cost reaches the cap before the acceptance checks pass.
