@@ -57,6 +57,28 @@ defmodule Hypatia.Coverage.ReportTest do
   defp files(map), do: Facts.new(map)
   defp lines(path, map), do: files(%{path => %{lines: map, branches: %{}}})
 
+  describe "COV-E014 proven run must be exactly the counted tests" do
+    test "a non-counted test in the proven run makes the verdict UNJUDGED" do
+      example = %{
+        "id" => "ex",
+        "kind" => "E",
+        "in_proven_run" => true,
+        "test_id" => %{"name" => "example in proven run"},
+        "fixtures" => %{"cannot_fail_by_design" => "example"},
+        "run" => %{"outcome" => "passed"}
+      }
+
+      {:ok, records} = evidence()
+      v = build(%{evidence: {:ok, records ++ [example]}})
+      assert v["outcome"] == "UNJUDGED" and "COV-E014" in codes(v)
+      assert one(v, "COV-E014")["detail"]["tests"] == ["example in proven run"]
+    end
+
+    test "records without the field (other languages) are unaffected" do
+      refute "COV-E014" in codes(build(%{}))
+    end
+  end
+
   describe "binding to the judged commit" do
     test "missing sidecar: UNJUDGED COV-E013" do
       v = build(%{raw_meta: {:error, {:missing, "r.meta.json", "enoent"}}})
@@ -88,6 +110,11 @@ defmodule Hypatia.Coverage.ReportTest do
         v = build(%{raw_meta: m})
         assert v["outcome"] == "UNJUDGED" and "COV-E007" in codes(v)
       end
+    end
+
+    test "repo names compare case-insensitively" do
+      v = build(%{raw_meta: meta("raw", %{"repo" => "Example/Demo"})})
+      refute "COV-E007" in codes(v)
     end
 
     test "mismatched run ids: UNJUDGED COV-E007" do
@@ -598,6 +625,7 @@ defmodule Hypatia.Coverage.ReportTest do
       "id" => "r",
       "kind" => "R",
       "language" => "zig",
+      "in_proven_run" => true,
       "repo" => "example/demo",
       "commit" => @sha,
       "test_id" => %{"name" => "p"},

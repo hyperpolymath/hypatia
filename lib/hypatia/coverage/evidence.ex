@@ -94,7 +94,10 @@ defmodule Hypatia.Coverage.Evidence do
     :proof_check_not_passed,
     :no_covers_decls,
     :unapproved_checker,
-    :no_generator
+    :no_generator,
+    :no_vectors,
+    :inconsistent_vectors,
+    :incomplete_benchmark
   ]
 
   @mutation_languages ~w(rust js ts javascript typescript elixir julia)
@@ -207,7 +210,7 @@ defmodule Hypatia.Coverage.Evidence do
       dig(record, ["run", "outcome"]) != "passed" -> {:not_counted, :not_passed}
       debt?(record) -> {:not_counted, :fixture_debt}
       not admissible?(record) -> {:not_counted, :no_fixtures}
-      true -> bound_by_kind(record, opts, min_cases)
+      true -> record |> bound_by_kind(opts, min_cases) |> proven_run_member(record)
     end
   end
 
@@ -240,6 +243,13 @@ defmodule Hypatia.Coverage.Evidence do
 
   defp full_sha?(s), do: is_binary(s) and Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, String.trim(s))
 
+  # A record counts only if it affirmatively ran in the proven run (`in_proven_run: true`).
+  # Otherwise it produced none of the proven coverage and cannot back it, whichever
+  # collector wrote it.
+  defp proven_run_member(:counted, %{"in_proven_run" => true}), do: :counted
+  defp proven_run_member(:counted, _record), do: {:not_counted, :not_in_proven_run}
+  defp proven_run_member(decision, _record), do: decision
+
   @doc "Classify every record: `[{record, decision}]`, in input order (same options as `counted?/2`)."
   @spec classify_all([record()], keyword()) :: [{record(), decision()}]
   def classify_all(records, opts \\ []), do: Enum.map(records, &{&1, counted?(&1, opts)})
@@ -266,6 +276,10 @@ defmodule Hypatia.Coverage.Evidence do
   def reason_text(:not_passed), do: "did not pass in this run"
   def reason_text(:fixture_debt), do: "FixtureDebt (no silence/firing fixtures)"
 
+  def reason_text(:not_in_proven_run),
+    do:
+      "not shown to be in the proven run (in_proven_run is not true), so it cannot back the proven coverage"
+
   def reason_text(:no_fixtures),
     do: "not admissible: needs silence and firing fixtures, or a cannot-fail-by-design reason"
 
@@ -276,7 +290,10 @@ defmodule Hypatia.Coverage.Evidence do
   def reason_text(:too_few_cases), do: "property test below the minimum case count"
   def reason_text(:no_spec), do: "conformance test with no spec id"
   def reason_text(:no_version), do: "conformance test with no spec version"
-  def reason_text(:no_vectors_sha256), do: "conformance test with no vector-set hash"
+
+  def reason_text(:no_vectors_sha256),
+    do: "conformance test with no valid vector-set sha256 (64 hex)"
+
   def reason_text(:conformance_failures), do: "conformance vectors failed"
 
   def reason_text(:no_vectors),
@@ -323,6 +340,14 @@ defmodule Hypatia.Coverage.Evidence do
 
   # -- kind rules -----------------------------------------------------------
 
+  # A seed must replay the run: a non-empty string or an integer, nothing else.
+  defp replayable_seed?(s) when is_integer(s), do: true
+  defp replayable_seed?(s) when is_binary(s), do: String.trim(s) != ""
+  defp replayable_seed?(_), do: false
+
+  defp sha256_hex?(h) when is_binary(h), do: String.match?(h, ~r/\A[0-9a-fA-F]{64}\z/)
+  defp sha256_hex?(_), do: false
+
   defp by_kind("E", _r, _m), do: {:not_counted, :example_test}
   defp by_kind("M", _r, _m), do: {:not_counted, :mock_test}
 
@@ -331,7 +356,7 @@ defmodule Hypatia.Coverage.Evidence do
     cases = dig(r, ["run", "property", "cases"])
 
     cond do
-      not present?(seed) ->
+      not replayable_seed?(seed) ->
         {:not_counted, :no_seed}
 
       not present_string?(dig(r, ["run", "property", "generator"])) ->
@@ -351,7 +376,7 @@ defmodule Hypatia.Coverage.Evidence do
     cond do
       not present?(dig(c, ["spec"])) -> {:not_counted, :no_spec}
       not present?(dig(c, ["version"])) -> {:not_counted, :no_version}
-      not present?(dig(c, ["vectors_sha256"])) -> {:not_counted, :no_vectors_sha256}
+      not sha256_hex?(dig(c, ["vectors_sha256"])) -> {:not_counted, :no_vectors_sha256}
       true -> conformance_vectors(c, r)
     end
   end

@@ -145,11 +145,13 @@ defmodule Hypatia.Coverage.LlvmCov do
        when is_binary(name) and is_list(segs) do
     with :ok <- check_segments(segs),
          {:ok, branches} <- branches(Map.get(file, "branches", [])),
-         :ok <- check_declared(file, Map.get(file, "branches")) do
+         :ok <- check_declared(file, Map.get(file, "branches")),
+         lines = line_counts(segs),
+         :ok <- check_lines(file, map_size(lines)) do
       path = Facts.relativise(name, root)
 
       {:ok,
-       Facts.new(%{path => %{lines: line_counts(segs), branches: branches}},
+       Facts.new(%{path => %{lines: lines, branches: branches}},
          branch_measurable: false
        )}
     end
@@ -165,8 +167,8 @@ defmodule Hypatia.Coverage.LlvmCov do
 
   defp segment?([l, c, n, hc, e, g]),
     do:
-      is_integer(l) and is_integer(c) and is_integer(n) and is_boolean(hc) and is_boolean(e) and
-        is_boolean(g)
+      is_integer(l) and l >= 1 and is_integer(c) and c >= 1 and is_integer(n) and n >= 0 and
+        is_boolean(hc) and is_boolean(e) and is_boolean(g)
 
   defp segment?(_), do: false
 
@@ -223,6 +225,33 @@ defmodule Hypatia.Coverage.LlvmCov do
       true ->
         {:error,
          "summary declares #{declared} branch arms but \"branches\" has #{length(entries)} entries (#{2 * length(entries)} arms)"}
+    end
+  end
+
+  # Truncation guard for lines. llvm-cov's JSON `summary.lines.count` can be a little
+  # higher than its own per-line result (one line on the real fixture, which matches
+  # `cargo llvm-cov --text`), so equality would reject genuine reports. Only clear
+  # truncation is an error: a positive summary with no executable lines parsed, or
+  # parsed lines short of the summary by more than max(2, 1%).
+  @doc false
+  def line_shortfall_allowed(declared), do: max(2, div(declared + 99, 100))
+
+  defp check_lines(file, parsed) do
+    declared = get_in(file, ["summary", "lines", "count"])
+
+    cond do
+      not positive?(declared) ->
+        :ok
+
+      parsed == 0 ->
+        {:error, "summary declares #{declared} lines but no executable lines were parsed"}
+
+      declared - parsed > line_shortfall_allowed(declared) ->
+        {:error,
+         "summary declares #{declared} lines but only #{parsed} were parsed (segments look truncated)"}
+
+      true ->
+        :ok
     end
   end
 

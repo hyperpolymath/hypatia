@@ -43,6 +43,7 @@ defmodule Hypatia.Coverage.Report do
   | COV-E011 | proven run covers something the raw run does not (proven must be a subset of raw) |
   | COV-E012 | raw and proven runs were instrumented differently (branch data in one only) |
   | COV-E013 | coverage report is not bound to a commit (no readable metadata sidecar) |
+  | COV-E014 | a test ran in the proven run but does not count (proven run must be exactly the counted tests) |
 
   COV-E012 is raised when exactly one of the raw and proven runs has branch data.
 
@@ -63,7 +64,8 @@ defmodule Hypatia.Coverage.Report do
     "COV-E007",
     "COV-E011",
     "COV-E012",
-    "COV-E013"
+    "COV-E013",
+    "COV-E014"
   ]
 
   # -- loading -------------------------------------------------------------
@@ -263,7 +265,8 @@ defmodule Hypatia.Coverage.Report do
   defp binding_reason(name, meta, repo, sha) do
     problems =
       [
-        meta["repo"] != repo && {:repo, meta["repo"], repo},
+        String.downcase(to_string(meta["repo"])) != String.downcase(to_string(repo)) &&
+          {:repo, meta["repo"], repo},
         String.downcase(to_string(meta["commit"])) != String.downcase(to_string(sha)) &&
           {:commit, meta["commit"], sha},
         meta["role"] != name && {:role, meta["role"], name}
@@ -356,7 +359,23 @@ defmodule Hypatia.Coverage.Report do
           )
         ]
 
-    zero ++ overclaim
+    # COV-E014: the proven run must be exactly the counted tests. A record that says it
+    # ran in the proven run but does not count put unproven coverage into that run.
+    intruders =
+      for {r, d} <- classified, r["in_proven_run"] == true, d != :counted, do: Evidence.name(r)
+
+    mixed =
+      if intruders == [],
+        do: [],
+        else: [
+          reason(
+            "COV-E014",
+            "#{length(intruders)} test(s) ran in the proven run but do not count; proven coverage would include their lines",
+            %{tests: Enum.take(intruders, 50)}
+          )
+        ]
+
+    zero ++ overclaim ++ mixed
   end
 
   # COV-E003: report paths that do not exist under the root.

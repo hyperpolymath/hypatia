@@ -167,6 +167,52 @@ defmodule Hypatia.Coverage.LlvmCovTest do
     end
   end
 
+  describe "out-of-range segment values" do
+    test "line 0, negative line or negative count is a parse error" do
+      for seg <- [
+            [0, 1, 1, true, true, false],
+            [-3, 1, 1, true, true, false],
+            [2, 1, -1, true, true, false]
+          ] do
+        doc = %{"data" => [%{"files" => [%{"filename" => "a.rs", "segments" => [seg]}]}]}
+        assert {:error, {:parse, _}} = LlvmCov.from_document(doc, []), inspect(seg)
+      end
+    end
+  end
+
+  describe "declared lines: tolerant truncation guard (COV-E002)" do
+    defp with_file(fun) do
+      doc = @fixtures |> Path.join("llvm_raw_nobranch.json") |> File.read!() |> Jason.decode!()
+
+      LlvmCov.from_document(
+        update_in(doc, ["data", Access.at(0), "files", Access.at(0)], fun),
+        []
+      )
+    end
+
+    test "the real export passes although its summary is one line higher than --text" do
+      assert {:ok, _} = with_file(& &1)
+    end
+
+    test "empty segments with a positive line summary is a parse error" do
+      assert {:error, {:parse, msg}} = with_file(&Map.put(&1, "segments", []))
+      assert msg =~ "no executable lines were parsed"
+    end
+
+    test "segments cut well short of the summary are a parse error" do
+      assert {:error, {:parse, msg}} =
+               with_file(fn f -> Map.update!(f, "segments", &Enum.take(&1, 4)) end)
+
+      assert msg =~ "look truncated"
+    end
+
+    test "allowed shortfall is max(2, 1%)" do
+      assert LlvmCov.line_shortfall_allowed(40) == 2
+      assert LlvmCov.line_shortfall_allowed(1000) == 10
+      assert LlvmCov.line_shortfall_allowed(1001) == 11
+    end
+  end
+
   describe "real cargo +nightly llvm-cov --branch export" do
     test "yields two arms per branch entry, keyed by line, column and arm" do
       facts = load("llvm_raw_branch.json")

@@ -23,6 +23,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
         "id" => "x",
         "kind" => kind,
         "language" => "zig",
+        "in_proven_run" => true,
         "test_id" => %{"name" => "t"},
         "fixtures" => %{"silence" => "s", "firing" => %{"source" => "f", "defect_class" => "d"}},
         "run" => Map.merge(%{"outcome" => "passed"}, run)
@@ -105,7 +106,26 @@ defmodule Hypatia.Coverage.EvidenceTest do
     end
   end
 
+  describe "malformed conformance hash" do
+    test "vectors_sha256 must be 64 hex characters" do
+      for bad <- ["x", %{}, String.duplicate("g", 64), String.duplicate("a", 63)],
+          do:
+            assert(
+              Evidence.counted?(conf(%{"vectors_sha256" => bad})) ==
+                {:not_counted, :no_vectors_sha256}
+            )
+    end
+  end
+
   describe "not counted: general" do
+    test "proven-run membership must be affirmative, whichever collector wrote it" do
+      assert Evidence.counted?(Map.delete(prop(), "in_proven_run")) ==
+               {:not_counted, :not_in_proven_run}
+
+      assert Evidence.counted?(Map.put(prop(), "in_proven_run", "yes")) ==
+               {:not_counted, :not_in_proven_run}
+    end
+
     for outcome <- ["failed", "error", "skipped", nil] do
       test "outcome #{inspect(outcome)}" do
         r = prop() |> put_in(["run", "outcome"], unquote(outcome))
@@ -162,6 +182,10 @@ defmodule Hypatia.Coverage.EvidenceTest do
     test "no seed" do
       assert Evidence.counted?(prop(%{"seed" => nil})) == {:not_counted, :no_seed}
       assert Evidence.counted?(prop(%{"seed" => ""})) == {:not_counted, :no_seed}
+
+      for bad <- [true, [], %{}, 1.5, "  "],
+          do: assert(Evidence.counted?(prop(%{"seed" => bad})) == {:not_counted, :no_seed})
+
       assert Evidence.counted?(rec("R")) == {:not_counted, :no_seed}
     end
 
@@ -347,6 +371,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
 
       assert Evidence.counted?(lang(prop(), "idris2")) == :counted
       refute Evidence.overclaim?({:not_counted, :unknown_language})
+
+      for why <- [:no_vectors, :inconsistent_vectors, :incomplete_benchmark],
+          do: assert(Evidence.overclaim?({:not_counted, why}))
     end
 
     test "R needs a generator (overclaim)" do
@@ -500,6 +527,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
           conf(%{"version" => nil}),
           conf(%{"vectors_sha256" => nil}),
           conf(%{"failed" => 1}),
+          conf(%{"vectors" => 0}),
+          conf(%{"failed" => nil}),
+          rec("B"),
           bench(false),
           proof([]),
           proof([%{}]),
@@ -516,6 +546,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
           rec("Z"),
           Map.put(rec("R"), "fixtures", %{"debt" => "x"}),
           Map.delete(rec("R"), "fixtures"),
+          Map.put(prop(), "in_proven_run", false),
           rec("R", %{"outcome" => "failed"})
         ]
         |> Enum.map(fn r ->
@@ -528,6 +559,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
                  [
                    :fixture_debt,
                    :no_fixtures,
+                   :not_in_proven_run,
                    :example_test,
                    :mock_test,
                    :unknown_kind,
