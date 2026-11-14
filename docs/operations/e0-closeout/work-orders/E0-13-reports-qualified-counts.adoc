@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-13: Reports count qualified evidence
+:wo-id: E0-13
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 160
+:wo-branch: fix/e0-13-reports-qualified-counts
+:wo-depends: none
+
+== Goal
+
+Each report that shows a success count also shows the qualified count, with
+names that a reader cannot confuse. No report presents a claimed success as a
+verified one.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A5:
+missing evidence is "a visible failure or unknown, never a silent success".
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14. These readers count the raw value
+`"outcome" == "success"`:
+
+* `lib/vcl/query.ex`: `outcome_timeline/1` (line 328), `recipe_effectiveness/1`
+  (lines 351 and 360), `pipeline_health/0` (line 509).
+* `lib/outcome_tracker.ex`: `confidence_trend/1` (line 562),
+  `verification_rate/2` (line 588), `recipe_health/1` (line 668).
+* `lib/hypatia/watcher/anomaly_detector.ex`, line 114, from the telemetry
+  event `[:hypatia, :outcome, :recorded]`.
+* `lib/mix/tasks/hypatia.strategy_effectiveness.ex`, line 232.
+
+`verification_rate/2` and `recipe_health/1` divide verified fixes by claimed
+successes. For them the raw count is the intended denominator.
+
+`confidence_trend/1` returns an atom (`:improving`, `:declining`, `:stable` or
+`:insufficient_data`), not a report with keys. It has no caller in `lib/`.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. For each reader, write down in the pull request body which case it is:
+.. the raw count is the intended denominator (keep it, name it `claimed`);
+.. the raw count stands for success (add the qualified count beside it);
+.. the reader returns a classification and no counts. That is
+   `confidence_trend/1`. Do not change it in this work order. List it in the
+   pull request body as an open item with 2 options for the owner: remove
+   the function, or compute it from the qualified rows.
+. Write the tests first, with a fixture that has 3 claimed successes and 1
+  verified success.
+. Add the qualified count with `OutcomeTracker.qualified_outcome_counts/1`.
+  Keep each existing key, so that a consumer does not break. Add new keys.
+. For the anomaly detector, add the verification value to the telemetry
+  metadata only if the event already carries the row. Do not add a file read.
+
+== Acceptance
+
+* Each reader of case 2 returns `claimed` and `qualified` counts, and a test
+  shows 3 and 1 for the fixture.
+* No existing key of a report disappears. A test or a grep shows it.
+* `confidence_trend/1` has no change, and the pull request body lists it as
+  an open item.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The diff touches only the 5 files above and test files.
+
+== Stop and ask
+
+* A dashboard, a metric name or a VCL result needs an existing key to change
+  its meaning.
+* The telemetry event does not carry the verification value.
+* The cost reaches the cap before the acceptance checks pass.
