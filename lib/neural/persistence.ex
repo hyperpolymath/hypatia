@@ -106,7 +106,8 @@ defmodule Hypatia.Neural.Persistence do
     end)
   end
 
-  def collect_named(_source, _networks), do: {:error, {:cohort_source_mismatch, :all, :invalid_cohort}}
+  def collect_named(_source, _networks),
+    do: {:error, {:cohort_source_mismatch, :all, :invalid_cohort}}
 
   defp encode_states(state, named) do
     snapshots = %{

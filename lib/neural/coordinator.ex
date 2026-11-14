@@ -115,7 +115,9 @@ defmodule Hypatia.Neural.Coordinator do
              ensure_cohort!(state)
              {:ok, state}
            end) do
-        {:ok, :ok, ready} -> ready
+        {:ok, :ok, ready} ->
+          ready
+
         {:error, reason, incomplete} ->
           Logger.warning("Neural initialization refused: #{inspect(reason)}")
           # Even a retryable runtime outage cannot qualify a startup whose
@@ -164,7 +166,10 @@ defmodule Hypatia.Neural.Coordinator do
     Enum.each([:gnn, :vae, :sequence], fn name ->
       case Map.get(persisted, name) do
         {:ok, data} ->
-          SourceStore.call!(Map.fetch!(state.named_networks, name), {:restore, state.source_store, data})
+          SourceStore.call!(
+            Map.fetch!(state.named_networks, name),
+            {:restore, state.source_store, data}
+          )
 
         _ ->
           :ok
@@ -175,7 +180,9 @@ defmodule Hypatia.Neural.Coordinator do
   defp ensure_cohort!(state) do
     SourceStore.accept!(SourceStore.check(state, state.source_store))
     SourceStore.accept!(Persistence.collect_named(state.source_store, state.named_networks))
-    identity = SourceStore.accept!(Blackboard.identity_source(state.source_store, state.blackboard))
+
+    identity =
+      SourceStore.accept!(Blackboard.identity_source(state.source_store, state.blackboard))
 
     unless SourceStore.snapshot_matches?(identity, state.source_store) do
       raise SourceStore.Refusal,
@@ -504,7 +511,8 @@ defmodule Hypatia.Neural.Coordinator do
         [Map.get(finding, "recipe_id"), Map.get(finding, "pattern_id"), Map.get(finding, "id")]
         |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
 
-      strategy = Hypatia.OutcomeTracker.annealed_strategy_from_store(recipe_id, raw_strategy, source)
+      strategy =
+        Hypatia.OutcomeTracker.annealed_strategy_from_store(recipe_id, raw_strategy, source)
 
       recommendation = %{
         strategy: strategy,
@@ -573,9 +581,16 @@ defmodule Hypatia.Neural.Coordinator do
            ensure_cohort!(state)
            {report.(), state}
          end) do
-      {:ok, result, ready} -> {:reply, result, ready}
+      {:ok, result, ready} ->
+        {:reply, result, ready}
+
       {:error, reason, refused} ->
-        details = Map.merge(SourceStore.diagnostic(refused), %{reason: reason, cycle_count: state.cycle_count})
+        details =
+          Map.merge(SourceStore.diagnostic(refused), %{
+            reason: reason,
+            cycle_count: state.cycle_count
+          })
+
         {:reply, {:error, {:neural_source_unavailable, details}}, refused}
     end
   end
@@ -663,7 +678,8 @@ defmodule Hypatia.Neural.Coordinator do
 
     # Feed decision to sequence model for trace learning
     SourceStore.call!(state.named_networks.sequence, {
-      :observe, state.source_store,
+      :observe,
+      state.source_store,
       %{finding: finding, outcome: outcome, confidence: confidence}
     })
 
@@ -700,7 +716,8 @@ defmodule Hypatia.Neural.Coordinator do
       )
 
     # Train RBF on pattern registry data
-    trained_rbf = Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf, data_path: state.source_store)
+    trained_rbf =
+      Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf, data_path: state.source_store)
 
     updated_state = %{
       state
@@ -789,7 +806,10 @@ defmodule Hypatia.Neural.Coordinator do
       end),
       guarded_task(fn ->
         # GNN: agent interaction patterns (calls the GNN GenServer)
-        SourceStore.call!(state.named_networks.gnn, {:analyse, state.source_store, finding, state.blackboard})
+        SourceStore.call!(
+          state.named_networks.gnn,
+          {:analyse, state.source_store, finding, state.blackboard}
+        )
       end)
     ]
 
@@ -862,11 +882,17 @@ defmodule Hypatia.Neural.Coordinator do
 
   # Named models receive both the captured source and this cohort's board.
   defp run_phase_5_vae(finding, state) do
-    SourceStore.call!(state.named_networks.vae, {:cluster, state.source_store, finding, state.blackboard})
+    SourceStore.call!(
+      state.named_networks.vae,
+      {:cluster, state.source_store, finding, state.blackboard}
+    )
   end
 
   defp run_phase_6_sequence(finding, state) do
-    SourceStore.call!(state.named_networks.sequence, {:predict, state.source_store, finding, state.blackboard})
+    SourceStore.call!(
+      state.named_networks.sequence,
+      {:predict, state.source_store, finding, state.blackboard}
+    )
   end
 
   defp write_board!(state, network, key, value) do

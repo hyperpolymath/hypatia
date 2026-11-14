@@ -134,7 +134,8 @@ defmodule Hypatia.CrossRepoLearning do
   # --- Public API ---
 
   @doc false
-  def qualified_rows(rows) when is_list(rows), do: Enum.filter(rows, &Hypatia.OutcomeTracker.qualified_outcome?/1)
+  def qualified_rows(rows) when is_list(rows),
+    do: Enum.filter(rows, &Hypatia.OutcomeTracker.qualified_outcome?/1)
 
   @doc """
   Get blended confidence for a recipe in a specific repo.
@@ -260,7 +261,7 @@ defmodule Hypatia.CrossRepoLearning do
             end)
             |> Stream.reject(&is_nil/1)
             |> Stream.filter(&Hypatia.OutcomeTracker.qualified_outcome?/1)
-             |> Enum.reduce(acc, fn record, idx ->
+            |> Enum.reduce(acc, fn record, idx ->
               repo = Map.get(record, "repo", "unknown")
               recipe = Map.get(record, "recipe_id", Map.get(record, "pattern", "unknown"))
               outcome = Map.get(record, "outcome", "unknown")
