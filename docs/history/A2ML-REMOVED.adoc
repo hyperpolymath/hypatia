@@ -88,7 +88,7 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | `52c07ad4291ea6fd6dd1ded149a9db1fcd311a684d6226920016f0308e814cd0`
 | `dc3db7f6890ffa4eaf145a5cbe02a86be6842ffe`
 | Anchor: reverse-DNS id, version, clade, status, SSG config, parent boj-server.
-| Deleted. No mapping spec in `1-formats/deed/mappings/`. Under A7 6.4 the id, clade and status are dropped; the source has no `authority`, which the `(anchor)` clause requires and a translator never invents; SSG config belongs to `META.deed` and the parent to `ECOSYSTEM.deed` (modules not yet adopted here).
+| The `(anchor)` clause of `hypatia_chora.deed`, under A7 6.4 (`anchor.abnf` v2.0.0, `:schema "hyperpolymath.anchor/2"`): `version` to `(metadata :version "1.0.0")`. The source had no `authority`, which the clause requires and a translator never invents; the owner supplied it on 2026-11-14: boj-server, written as its chora id `6c7f9305-2a47-8f96-a1ed-bd0940e4d4e6` (boj-server_chora.deed `:repo-uuid #u8"gv-clade-index:github.com/hyperpolymath/boj-server"`, the registry's `uuid_v8` for that repo). Dropped under 6.4: the reverse-DNS id, clade and status. Not translated: the SSG config, which belongs to `META.deed` (J29), and the parent, which belongs to `ECOSYSTEM.deed` `(related :uuid … :relationship parent)` (J26); neither module is adopted here yet.
 
 | `.machine_readable/bot_directives/coverage.a2ml`
 | 2271
@@ -240,13 +240,6 @@ control still needs exactly that input, and it has no deed form to move to.
 [cols="3,5",options="header"]
 |===
 | Path | Why it stays
-
-| `audits/assail-classifications.a2ml`
-| panic-attack (>= 2.5.5, `load_user_classifications` in its assail module,
-in the panic-attack repository) reads only `audits/assail-classifications.a2ml` or
-`.panic-attack-classifications.a2ml`. No mapping spec covers it and
-panic-attack has no deed reader, so deleting it would unsuppress the audited
-findings it records. It goes when panic-attack reads a deed form first.
 
 | `test/fixtures/a2ml/rsr-criteria-v2.a2ml`
 | A dogfood copy of the RSR v2.0 criteria, whose canon

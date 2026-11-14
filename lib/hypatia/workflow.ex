@@ -252,4 +252,46 @@ defmodule Hypatia.Workflow do
   end
 
   defp walk(_scalar, _alias_line), do: []
+
+  @doc """
+  A `run:` script with each shell comment blanked to spaces, byte for byte,
+  so an offset in the result is the same offset in `script` and line breaks
+  stay where they were. With `quotes: true` the text inside quotes is blanked
+  too; the quote marks stay.
+
+  The shell's rules, not YAML's: a quote opens anywhere outside quotes and
+  carries across lines; a `#` opens a comment only where a word starts
+  (line start, or after a blank or `; & | ( ) < >`); a backslash escapes the
+  next byte outside single quotes.
+  """
+  def shell_mask(script, opts \\ []) when is_binary(script),
+    do: mask(script, nil, true, false, Keyword.get(opts, :quotes, false), [])
+
+  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
+
+  defp mask(<<>>, _q, _ws?, _cmt?, _qs?, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+  defp mask(<<?\n, r::binary>>, q, _, _, qs?, acc), do: mask(r, q, true, false, qs?, [?\n | acc])
+  defp mask(<<_, r::binary>>, q, ws?, true, qs?, acc), do: mask(r, q, ws?, true, qs?, [?\s | acc])
+
+  defp mask(<<?#, r::binary>>, nil, true, _, qs?, acc),
+    do: mask(r, nil, true, true, qs?, [?\s | acc])
+
+  defp mask(<<c, r::binary>>, nil, _, _, qs?, acc) when c in [?', ?"],
+    do: mask(r, c, false, false, qs?, [c | acc])
+
+  defp mask(<<c, r::binary>>, c, _, _, qs?, acc), do: mask(r, nil, false, false, qs?, [c | acc])
+
+  defp mask(<<?\\, c, r::binary>>, q, _, _, qs?, acc) when q != ?' do
+    kept = if q != nil and qs?, do: [blank(c), ?\s], else: [c, ?\\]
+    mask(r, q, false, false, qs?, kept ++ acc)
+  end
+
+  defp mask(<<c, r::binary>>, nil, _, _, qs?, acc),
+    do: mask(r, nil, c in @word_breaks, false, qs?, [c | acc])
+
+  defp mask(<<c, r::binary>>, q, _, _, qs?, acc),
+    do: mask(r, q, false, false, qs?, [if(qs?, do: blank(c), else: c) | acc])
+
+  defp blank(?\n), do: ?\n
+  defp blank(_), do: ?\s
 end

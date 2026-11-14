@@ -485,7 +485,16 @@ yields `+"X"+`); `+docs/api/cli-reference.adoc+` documents six commands
 
 === 8. Machine-readable / metadata debt
 
-==== M-1 · HIGH · The descriptiles set is in the wrong directory per Hypatia’s own oracle · UNTRACKED
+==== M-1 · HIGH · The descriptiles set is in the wrong directory per Hypatia’s own oracle · superseded 2026-11-14
+
+_Superseded._ The descriptiles are no longer files: the A2ML migration moved
+them into `+hypatia_chora.deed+` clauses, and the oracle reads those first,
+with the `+.a2ml+` as the fallback (A7 M5): 3.1.2-3.1.9 by clause, 3.1.1 by
+the deed carrying any descriptile clause, and 3.2.1 by every carrier parsing,
+the deed first. Against the bundled criteria hypatia now fails 1.2.4, 2.1.4,
+2.2.1, 3.1.8 (no `+(anchor)+` clause: the source anchor had no `+authority+`)
+and 3.2.2 (no `+(rsr-profile)+` clause). The record below is the 2026-08
+state.
 
 RSR v2.0 criteria 3.1.1-3.1.9 require
 `+.machine_readable/descriptiles/+`; the files live in

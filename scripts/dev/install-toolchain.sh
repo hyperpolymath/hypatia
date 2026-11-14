@@ -43,6 +43,8 @@ esac
 for tool in curl tar unzip xz sha256sum; do
   command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
+# The Idris 2 build clones its source, so it needs git. Say so before any download.
+[ "$with_idris2" = 0 ] || command -v git >/dev/null 2>&1 || die "missing required tool: git (--with-idris2 needs it)"
 
 if [ "$(id -u)" = 0 ]; then def_root=/opt/hypatia-tools; def_bin=/usr/local/bin
 else def_root="$HOME/.local/hypatia-tools"; def_bin="$HOME/.local/bin"; fi
@@ -160,11 +162,17 @@ if [ "$with_idris2" = 1 ]; then
   tag=$(awk '/IDRIS2_VERSION:/ { print $2; exit }' "$repo/.github/workflows/verify-proofs.yml")
   [ -n "$tag" ] || die "verify-proofs.yml names no IDRIS2_VERSION"
   idris="$HOME/.idris2/bin/idris2"
+  # `make install` puts the launcher in place before the libraries. The marker
+  # is written after it ends, so an install that stopped part-way is built
+  # again. An Idris 2 tree that has no marker is built again once.
+  mark="$HOME/.idris2/.installed-$tag"
   have=""
-  [ -x "$idris" ] && have=$("$idris" --version 2>/dev/null || true)
+  [ -f "$mark" ] && [ -x "$idris" ] && have=$("$idris" --version 2>/dev/null || true)
   case "$have" in
     *"version ${tag#v}"*) ;; # the pinned release is already there
     *)
+      # A marker from an earlier install must not stand for this build.
+      rm -f "$mark"
       want=$(sum_for "idris2-$tag")
       [ -n "$want" ] || die "no pinned commit for Idris 2 $tag: add it to sum_for() before you build it"
       # The bootstrap needs Chez Scheme, the GMP headers, GNU make and a C
@@ -180,6 +188,7 @@ if [ "$with_idris2" = 1 ]; then
       [ "$got" = "$want" ] || die "Idris 2 $tag is commit $got, want $want"
       make -C "$work/idris2" bootstrap SCHEME=chezscheme >/dev/null
       make -C "$work/idris2" install PREFIX="$HOME/.idris2" >/dev/null
+      : > "$mark"
       ;;
   esac
   # A wrapper, not a link: the launcher finds idris2_app beside its own path.

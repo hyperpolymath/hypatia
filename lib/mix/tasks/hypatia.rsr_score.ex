@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
   repository tree and reports its capability-gated score, tier, and — crucially —
   its automatable coverage and provisional flag.
 
-      mix hypatia.rsr_score REPO_PATH [--ssot PATH] [--write] [--fail-under TIER]
+      mix hypatia.rsr_score REPO_PATH [--ssot PATH] [--write [--source-commit SHA]] [--fail-under TIER]
 
   Options:
 
@@ -16,7 +16,13 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
       `0-canon/rsr/rsr-criteria-v2.a2ml` under `--standards` (post-reorg home; the pre-reorg path was moved in the September 2026 reorg),
       else the bundled test fixture)
     * `--standards P` root of a checked-out `hyperpolymath/standards` (for the SSOT)
-    * `--write`       write `REPO/.machine_readable/scorecards/rsr.scorecard.a2ml`
+    * `--write`       write `REPO/.machine_readable/scorecards/rsr-scorecard_praxis.deed`,
+      the RSR scorecard deed (standards `clauses/rsr-scorecard.abnf`, DRAFT; owner
+      ruling 2026-11-14). It replaced `rsr.scorecard.a2ml`: A2ML is retired, so the
+      oracle no longer writes one, and leaves any already in the repo alone (its
+      removal is the repo's own migration PR)
+    * `--source-commit SHA` record the scored commit (40 lowercase hex) in the
+      scorecard; only with `--write`
     * `--fail-under T` exit non-zero unless tier >= T (`bronze|silver|gold|rhodium`);
       the dogfood gate uses `--fail-under gold`. A *provisional* scorecard never
       satisfies `--fail-under` (no firm tier claim from partial coverage).
@@ -34,7 +40,13 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
   def run(argv) do
     {opts, args, _} =
       OptionParser.parse(argv,
-        strict: [ssot: :string, standards: :string, write: :boolean, fail_under: :string]
+        strict: [
+          ssot: :string,
+          standards: :string,
+          write: :boolean,
+          source_commit: :string,
+          fail_under: :string
+        ]
       )
 
     repo = List.first(args) || File.cwd!()
@@ -43,7 +55,7 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
     with {:ok, catalogue} <- RsrCriteria.load(ssot),
          {:ok, sc} <- RsrConformance.score(catalogue, repo) do
       report(sc)
-      if opts[:write], do: write_scorecard(repo, sc)
+      if opts[:write], do: write_scorecard(repo, sc, opts[:source_commit])
       enforce(sc, opts[:fail_under])
     else
       {:error, reason} ->
@@ -114,12 +126,30 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
     end
   end
 
-  defp write_scorecard(repo, sc) do
+  @scorecard_file "rsr-scorecard_praxis.deed"
+  @legacy_scorecard_file "rsr.scorecard.a2ml"
+
+  defp write_scorecard(repo, sc, commit) do
+    if commit != nil and not Regex.match?(~r/\A[0-9a-f]{40}\z/, commit) do
+      Mix.shell().error("rsr_score: --source-commit must be a full 40-character lowercase SHA")
+      exit({:shutdown, 1})
+    end
+
     dir = Path.join([repo, ".machine_readable", "scorecards"])
     File.mkdir_p!(dir)
-    path = Path.join(dir, "rsr.scorecard.a2ml")
-    File.write!(path, RsrConformance.to_record_dialect(sc))
+    path = Path.join(dir, @scorecard_file)
+    opts = RsrConformance.deed_context(repo) ++ if(commit, do: [source_commit: commit], else: [])
+    File.write!(path, RsrConformance.to_deed(sc, opts))
     Mix.shell().info("  wrote #{path}")
+
+    legacy = Path.join(dir, @legacy_scorecard_file)
+
+    if File.exists?(legacy) do
+      Mix.shell().info(
+        "  note: #{legacy} is a legacy A2ML scorecard; it is no longer written or " <>
+          "updated, and is left for the repo's own migration to remove"
+      )
+    end
   end
 
   defp enforce(_sc, nil), do: :ok

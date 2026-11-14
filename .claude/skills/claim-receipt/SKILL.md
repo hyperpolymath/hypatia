@@ -26,7 +26,9 @@ The template with its rules is
 
 ## Rules
 
-- `verified` needs each check under "Ran" to pass on the commit under "Head".
+- `verified` needs each check under "Ran" to pass on the commit under "Head",
+  and nothing under "Not run". A claim with a check under "Not run" is
+  `partly verified` at most.
 - Copy the result line from the tool output. Do not write it from memory.
 - List a check that did not run under "Not run". Do not leave it out.
 - A skipped gate is not a pass. A zero exit code alone is not a pass. A test

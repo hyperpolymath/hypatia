@@ -17,11 +17,16 @@ Work order to run: `$ARGUMENTS`
 
 1. **Get on the branch of the work order.** Run `git fetch origin`. Find the
    work order in `docs/operations/e0-closeout/work-orders/` on `origin/main`.
-   Its `:wo-branch:` line names the branch.
+   Its `:wo-branch:` line names the branch, and its `:wo-repo:` line names
+   the repository. If that is not the repository of this checkout, stop:
+   this procedure runs a work order only in its own repository.
    - First run (the branch does not exist, here or on `origin`): start it
      from `origin/main` with `git switch -c <branch> origin/main`.
    - Continued run (the branch exists): `git switch <branch>`. Keep its
-     commits. Do not start it again from `main`, and do not reset it.
+     commits. Do not start it again from `main`, and do not reset it. Then
+     run `git merge --no-edit origin/main`, so that the branch has each
+     dependency that merged after the branch started. If the merge stops
+     with a conflict, stop and report it.
 
    Do each later step on this branch, so that the code that you measure is
    the code that you change.
@@ -45,8 +50,8 @@ Work order to run: `$ARGUMENTS`
 7. **Check.** Run, in this order, and copy each result line:
    - the test files that "Acceptance" names;
    - `mix format --check-formatted <file>` for each changed file that was
-     formatted before your change, and for each new file (see the note on
-     formatting below);
+     formatted before your change, and for each new Elixir file (`.ex`,
+     `.exs`; see the note on formatting below);
    - `mix test` (about 1 minute);
    - `bash scripts/check-verdicts.sh`, only when you changed `src/Hypatia/ABI/`;
    - `mix escript.build && ./hypatia scan . --format json`, and look for
@@ -54,8 +59,14 @@ Work order to run: `$ARGUMENTS`
 8. **Gate.** Go through the `estate-gates` skill.
 9. **Commit and push.** Commit in the form that part 5 of `estate-gates`
    gives. Then run `git status --short`: it must print nothing, so that the
-   commit holds exactly what the checks ran on. Push the branch with
-   `git push -u origin <branch>`. Record `git rev-parse HEAD` for the receipts.
+   commit holds exactly what the checks ran on. If a commit hook changes a
+   file, add the change, commit, run the checks of step 7 again, and run
+   `git status --short` again. Do not push until it prints nothing. Push
+   with this exact command, with nothing after it:
+   `git push --no-follow-tags -u origin refs/heads/<branch>:refs/heads/<branch>`.
+   An unattended run has no other push rule. The full ref on each side
+   keeps a push mapping in the git settings from moving the push. Record
+   `git rev-parse HEAD` for the receipts.
 10. **Report.** Open one draft pull request. Use
     `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
     `claim-receipt` skill for each claim. Then stop. Do not merge. Do not mark

@@ -5356,23 +5356,60 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # Only a step that can turn the job red counts, on a step that is not
   # `continue-on-error: true`: a non-zero `exit`, or a bare `[ … success … ]`
   # / `test … success` line, which fails the step by its own status under
-  # `bash -e` (Codex on #1105). A test inside `if`, `&&` or `||` is a
-  # condition, not a failure. `::error` alone is an annotation and does not
-  # fail the step (CodeRabbit on #1105).
+  # `bash -e` (Codex on #1105). A test inside `if` or `||` is a condition,
+  # not a failure; so is one in an `&&` list, unless that list ends the
+  # script, whose status is then the step's (Codex on #1105). `::error` alone
+  # is an annotation and does not fail the step (CodeRabbit on #1105). An
+  # `exit` in quotes or a shell comment is text, not a command (Codex on
+  # #1105); `exit "$code"` still counts.
   defp can_fail?(job) do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
         not excludes_cancellation?(step.if || "", :step) and
-        (Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run) or bare_test_fails?(step.run))
+        (exits_nonzero?(step.run) or bare_test_fails?(step.run))
+    end)
+  end
+
+  # An `exit` command is found where quotes and comments are blanked; its
+  # argument is read at the same offset with only comments blanked, so
+  # `exit "0"` is a success and `exit "$code"` may not be (Codex on #1110).
+  defp exits_nonzero?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
+    ~r/\bexit\s+/
+    |> Regex.scan(bare, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      arg = binary_part(code, off + len, byte_size(code) - off - len)
+      Regex.match?(~r/\A(?:[1-9]|"?\$|"[1-9])/, arg)
     end)
   end
 
   defp bare_test_fails?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
     @bare_success_test
-    |> Regex.scan(run)
-    |> Enum.any?(fn [line] ->
-      not Regex.match?(~r/&&|\|\||^\s*(?:if|while|until|elif)\b/, line)
+    |> Regex.scan(code, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      line = binary_part(bare, off, len)
+      rest = binary_part(code, off + len, byte_size(code) - off - len)
+
+      cond do
+        Regex.match?(~r/\|\||^\s*(?:if|while|until|elif)\b/, line) -> false
+        # A later `;` or `&` command on the same line sets the status.
+        String.contains?(line, "&&") -> String.trim(rest) == "" and not later_command?(line)
+        true -> true
+      end
     end)
+  end
+
+  defp later_command?(line) do
+    line
+    |> String.replace("&&", "  ")
+    |> String.split(~r/[;&]/)
+    |> Enum.drop(1)
+    |> Enum.any?(&(String.trim(&1) != ""))
   end
 
   # Cancellation is handled only by a comparison against `cancelled`
@@ -5411,7 +5448,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
   # but it only protects x (CodeRabbit on #1105). It is a guard when every
   # need the job judges has its own success conjunct, in property or index
-  # form; a wildcard read judges every direct need (Codex on #1105). Same
+  # form, on either side of `==` (Codex on #1105); a wildcard read judges every direct need (Codex on #1105). Same
   # structural reading as excludes_cancellation?/1: `||` or grouping make it
   # uncertain.
   defp judged_needs_must_succeed?(cond_text, reads, needs) do
@@ -5426,7 +5463,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           m <-
             [
               Regex.run(
-                ~r/\Aneeds(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")\z/,
+                ~r/\A(?:needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")|(?:'success'|"success")==needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\]))\z/,
                 c,
                 capture: :all_but_first
               )
