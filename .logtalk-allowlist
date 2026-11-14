@@ -34,5 +34,6 @@ docs/rules/migration/standards-deed-mapping-issue.md | sibling coordination pack
 # standards packet above). Never edit these to diverge from standards.
 test/fixtures/deed_egress/rsr-template-repo_chora.deed | vendored upstream fixture | remove when the standards fixture re-sync no longer carries the retired value
 test/fixtures/deed_egress/template-main/rsr-template-repo_chora.deed | vendored upstream fixture | remove when the standards fixture re-sync no longer carries the retired value
+test/fixtures/deed/standards/valid/rsr-template-repo_chora.deed | vendored upstream fixture | remove when the standards fixture re-sync no longer carries the retired value
 # The guard itself contains the pattern definitions it enforces.
 scripts/check-no-active-logtalk.sh | enforcement definition | remove only with the guard itself

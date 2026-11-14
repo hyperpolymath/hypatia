@@ -43,8 +43,16 @@ test/fixtures/deed_egress/valid/hyphenated-host_chora.deed
 test/fixtures/deed_egress/valid/no-egress_chora.deed
 test/fixtures/deed_egress/valid/template-pair_chora.deed
 
+# Core grammar fixtures copied verbatim from metadatastician/standards
+# 1-formats/deed/tools/fixtures/ (see test/fixtures/deed/standards/UPSTREAM.adoc).
+# Each carries the identity-literal defect it is there to be refused for.
+test/fixtures/deed/standards/invalid/inu5-identity_chora.deed
+test/fixtures/deed/standards/invalid/inuuid-no-string_chora.deed
+test/fixtures/deed/standards/invalid/inuuid-uppercase_chora.deed
+
 # Tests that write small deed texts inline, in the form these readers must
 # still accept, to test Hypatia.Deed and the rules that read deeds.
+test/deed_conformance_test.exs
 test/deed_test.exs
 test/egress_decision_mirror_test.exs
 test/research_extensions_equivalence_test.exs
