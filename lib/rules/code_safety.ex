@@ -613,18 +613,25 @@ defmodule Hypatia.Rules.CodeSafety do
       #     node:child_process ({exec}, {exec as run}, {exec: run}) --
       #     a local function named exec is not a shell;
       #   * <ns>.exec( / <ns>.execSync( where <ns> is the name the file binds
-      #     node:child_process to (import * as ns / import ns / require), and
+      #     node:child_process to (import * as ns / import ns / require /
+      #     await import), and
       #     require('child_process').exec( -- any argument shape;
-      #   * spawn/spawnSync/execFile/execFileSync/fork called with a `shell`
-      #     option (bare or quoted key) set to true or to a shell path.
+      #   * spawn/spawnSync/execFile/execFileSync (or a name the file imports
+      #     them as) called with a `shell` option (bare or quoted key) set to
+      #     true or to a shell path. fork() ignores `shell`, so it is not here.
       # Importing node:child_process is not a finding, nor is a shell-free
       # call with an argv array, RegExp.exec, or a `shell` key outside a
       # process call. The <ns> calls are matched per file by
       # pattern_for/2 (`bound_calls`), so every call counts, on its own line.
-      # Not covered: a shell option passed through a variable, and tainted
-      # argv to a shell-free call -- a pattern cannot trace values (mathesis#90).
+      # Not covered: a shell option passed through a variable, tainted argv to
+      # a shell-free call, and call arguments nested more than two
+      # parentheses deep -- a pattern cannot trace values (mathesis#90).
+      # Known false positive: a `shell` key nested inside another option of a
+      # process call (`spawn(c, a, {env: {shell: 'x'}})`) is reported; telling
+      # object depth apart needs a parser, and a rare false alarm is the safer
+      # error for a high-severity rule.
       pattern:
-        ~r/\bexecSync\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
+        ~r/\bexecSync\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync)\s*\((?:[^;()]|\((?:[^()]|\([^()]*\))*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
       bound_calls: :child_process,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
@@ -1647,40 +1654,58 @@ defmodule Hypatia.Rules.CodeSafety do
   #   * namespaces (`import * as cp from`, `import cp from`,
   #     `const cp = require(...)`) add `cp.exec(` and `cp.execSync(`;
   #   * destructured exec or execSync (`import {exec, execSync as run}
-  #     from`, `const {exec: run} = require(...)`) adds `exec(` / `run(`.
+  #     from`, `const {exec: run} = require(...)`) adds `exec(` / `run(`;
+  #   * a renamed spawn/spawnSync/execFile/execFileSync (`{spawn as run}`)
+  #     adds `run(` with a `shell` option, like the unrenamed names.
+  # `require(...)` may also be `import(...)` or `await import(...)`.
   # Regex sources, compiled at call time: a compiled regex in a module
   # attribute does not survive OTP 28.
   @cp_source ~S|['"](?:node:)?child_process['"]|
+  @cp_load ~S/(?:require|(?:await\s+)?import)\(\s*/
   @cp_namespace ~S|(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*| <>
                   @cp_source <>
-                  ~S/|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*/ <>
-                  @cp_source <> ~S|\s*\))|
+                  ~S/|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*/ <>
+                  @cp_load <> @cp_source <> ~S|\s*\))|
   @cp_destructured ~S|(?:import\s*\{([^}]*)\}\s*from\s*| <>
                      @cp_source <>
-                     ~S/|(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*/ <>
-                     @cp_source <> ~S|\s*\))|
+                     ~S/|(?:const|let|var)\s*\{([^}]*)\}\s*=\s*/ <>
+                     @cp_load <> @cp_source <> ~S|\s*\))|
+  # The argument span of a call up to a `shell` option set to true or to a
+  # shell path; arguments may nest parentheses two deep.
+  @shell_option_tail ~S/\s*\((?:[^;()]|\((?:[^()]|\([^()]*\))*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/
 
   @doc false
   def pattern_for(%{bound_calls: :child_process} = rule, content) do
     namespaces = captures(Regex.compile!(@cp_namespace), content)
 
-    execs =
+    bindings =
       @cp_destructured
       |> Regex.compile!()
       |> captures(content)
       |> Enum.flat_map(&String.split(&1, ","))
       |> Enum.flat_map(fn entry ->
-        case Regex.run(~r/^\s*(exec(?:Sync)?)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/, entry) do
-          [_, _name, local] -> [local]
-          [_, name] -> [name]
+        case Regex.run(
+               ~r/^\s*(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/,
+               entry
+             ) do
+          [_, name, local] -> [{name, local}]
+          [_, name] -> [{name, name}]
           nil -> []
         end
       end)
       |> Enum.uniq()
 
+    # exec/execSync run a shell whatever the arguments; the spawn family
+    # does only with a `shell` option (unrenamed names are in the pattern).
+    execs = for {name, local} <- bindings, name in ["exec", "execSync"], do: local
+
+    spawns =
+      for {name, local} <- bindings, name not in ["exec", "execSync"], local != name, do: local
+
     extra =
       Enum.map(namespaces, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\.exec(?:Sync)?\\s*\\(")) ++
-        Enum.map(execs, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\s*\\("))
+        Enum.map(execs, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\s*\\(")) ++
+        Enum.map(spawns, &("(?<![\\w$.])" <> Regex.escape(&1) <> @shell_option_tail))
 
     case extra do
       [] -> rule.pattern

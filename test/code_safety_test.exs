@@ -951,6 +951,30 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert exec_sync?("spawnSync(cmd, args, {\"shell\": true});\n")
       assert exec_sync?("spawn(path.join(dir, 'x'), [a], {\n  shell: true\n});\n")
       refute exec_sync?("spawnSync(cmd, args, {shell: false});\n")
+      assert exec_sync?("spawn(resolve(path.join(dir, 'x')), args, {shell: true});\n")
+    end
+
+    test "fork ignores the shell option" do
+      refute exec_sync?(
+               "import {fork} from 'node:child_process';\nfork(mod, args, {shell: true});\n"
+             )
+    end
+
+    test "a renamed spawn or execFile with a shell option is a shell call" do
+      assert exec_sync?(
+               "import {spawn as run} from 'node:child_process';\nrun(cmd, a, {shell: true});\n"
+             )
+
+      assert exec_sync?(
+               "const {execFileSync: x} = require('child_process');\nx(cmd, a, {shell: true});\n"
+             )
+
+      refute exec_sync?("import {spawn as run} from 'node:child_process';\nrun(cmd, a);\n")
+    end
+
+    test "a dynamic import binds child_process too" do
+      assert exec_sync?("const cp = await import('node:child_process');\ncp.exec(command);\n")
+      assert exec_sync?("const {exec: sh} = await import('child_process');\nsh(command);\n")
     end
   end
 end
