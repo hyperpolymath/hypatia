@@ -28,9 +28,12 @@ toolchain. It reads the skills, the agents and the settings of this repository.
 |The cost cap of a run is a client estimate. The hard stop is in the Console.
 
 |Message Batches API
-|Many independent items that need no tool loop: labels, judgements, summaries.
-Half price. The answer comes within 24 hours.
-|No agent loop. No tools in the middle of a request.
+|Many independent items that need no tool loop of your own: labels,
+judgements, summaries. Half price. Most batches end within 1 hour.
+|Your own tools cannot answer in the middle of a request. The server tools
+(web search, web fetch, code execution) do work. A batch that is not finished
+after 24 hours expires, and a request in it then ends as `expired`. Check
+each result, and send the expired requests again.
 
 |Managed Agents
 |An unattended session in a sandbox that Anthropic hosts, with a hard dollar
@@ -172,8 +175,16 @@ the agents and the headless profile are in hypatia only. Put them in
 The script reads the header of the work order (`:wo-model:`, `:wo-effort:`,
 `:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`). It refuses to run when the
 key is not set, because Claude Code would then bill the signed-in plan. It
-refuses a working tree with changes. It writes one line to the ledger
-(`docs/operations/e0-closeout/templates/ledger-line.adoc`).
+also refuses a working tree with changes, an argument that it does not know,
+an agent whose model or effort differs from the work order, and a locale that
+is not UTF-8. It reads the project settings and the headless profile only, so
+a personal permission rule does not widen the run. It writes one line to the
+ledger for each run (`docs/operations/e0-closeout/templates/ledger-line.adoc`).
+
+The script, the profile, the agents and the work orders are the other parts
+of the same kit: `scripts/api-agents/`, `.claude/profiles/`, `.claude/agents/`
+and `docs/operations/e0-closeout/`. The command works when those parts are in
+the checkout.
 
 Sum of the current month:
 
@@ -205,7 +216,7 @@ once each week.
   for the same pass rate on Anthropic's coding runs.
 * *A run that reaches its cap is a finding about the work order.* Make the
   work order smaller or clearer. Do not raise the cap and run again.
-* *Work with no tool loop goes to the Batches API.* Classification of review
+* *Work with no tool loop of your own goes to the Batches API.* Classification of review
   comments (experiment E4 of the ultraplan) is such work.
 
 == Permissions and secrets
@@ -237,6 +248,7 @@ All read on 2026-11-14.
 * Headless mode and the command-line flags: https://code.claude.com/docs/en/headless
   and https://code.claude.com/docs/en/cli-reference
 * Permission rules: https://code.claude.com/docs/en/permissions
+* Batches: https://platform.claude.com/docs/en/build-with-claude/batch-processing
 * Exchange rate: the reference rate of 2026-11-13 from https://www.frankfurter.dev
 
 == When to update this memo
