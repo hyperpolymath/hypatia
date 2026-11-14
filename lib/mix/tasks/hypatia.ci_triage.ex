@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
       mix hypatia.ci_triage log JOB.log [--exit-code N] [--conclusion C]
                                         [--pr-state open|merged|closed] [--attempts N]
       mix hypatia.ci_triage gate --required A --required B --reported B --reported C
-      mix hypatia.ci_triage pins WORKFLOW.yml...
+      mix hypatia.ci_triage pins WORKFLOW.yml... [hypatia-rule-order.json]
       mix hypatia.ci_triage rules
 
   Prints one JSON object per finding (JSONL). For `log`, the first line is the
@@ -99,7 +99,8 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
   end
 
   defp pins(paths) do
-    findings = paths |> Map.new(&{&1, read!(&1)}) |> T.check_scanner_pin_drift()
+    contents = Map.new(paths, &{&1, read!(&1)})
+    findings = T.check_scanner_pin_drift(contents) ++ T.check_hypatia_pin_drift(contents)
     Enum.each(findings, &emit/1)
     if findings != [], do: exit({:shutdown, 3})
   end

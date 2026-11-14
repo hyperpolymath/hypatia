@@ -1,0 +1,9 @@
+{
+  "schema": "hypatia.proven-coverage.report-meta/1",
+  "repo": "example/js-demo",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "run_id": "local-js-demo",
+  "role": "raw",
+  "tool": "c8",
+  "tool_version": "10.1.3"
+}

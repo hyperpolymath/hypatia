@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-12: The fleet writes an event id for each attempt
+:wo-id: E0-12
+:wo-repo: hyperpolymath/gitbot-fleet
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 140
+:wo-branch: fix/e0-12-event-id
+:wo-depends: E0-08, E0-11
+
+== Goal
+
+`scripts/dispatch-runner.sh` gives each fix attempt one `event_id`, writes a
+start record with that id before the fix runs, and writes the id in the
+outcome row of the attempt. The automation quarantine does not change.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[hypatia issue 984], step 6:
+"append an identifiable attempt_id with stable producer identity and source
+event provenance before execution". The id format is the one that the owner
+rules on in the packet of `E0-08`.
+
+== Facts measured
+
+gitbot-fleet commit `7fc2778`, read on 2026-11-14.
+
+* `scripts/dispatch-runner.sh`, `record_outcome()` (line 283) writes these
+  fields: `pattern_id`, `recipe_id`, `repo`, `file`, `outcome`, `verdict`,
+  `exit_code`, `before_hits`, `after_hits`, `timestamp`, `bot`. It writes no id.
+* One attempt makes 1 call of `record_outcome()` and so 1 outcome row. The
+  function writes that row to the primary log, and to the central log too
+  when the 2 stores differ (lines 323 to 330). The 2 copies are 1 event.
+* The script exits with code 78 at line 152, before it reads the manifest.
+* The estate rule for a new identifier is ADR-008. A random version 4 UUID
+  from `uuidgen` does not meet it.
+
+== Steps
+
+. Confirm the ruled id format of `E0-08` and that `E0-11` is merged. Stop if not.
+. Measure the facts again.
+. Mint the id once for each attempt, before the fix script starts. Use the
+  estate tool that the ruling names. Do not write a new id generator in shell.
+. Write the start record before the fix script starts, in the place and the
+  form that the ruled design names. An attempt that never ends then still
+  has a durable identity.
+. Write the id as `event_id` in the outcome row of the attempt. Both copies
+  of that row (primary log and central log) carry the same id, because they
+  are 1 event. Build the JSON with `jq`.
+. Extend `tests/outcome-verdict-test.sh`:
+.. 2 attempts with the same input give 2 different ids;
+.. the 2 copies of 1 outcome row carry the same id;
+.. an attempt that is stopped after the start record leaves the start record
+   and no outcome row.
+
+== Acceptance
+
+* `bash tests/outcome-verdict-test.sh` and `bash tests/automation-quarantine-test.sh` pass.
+* A row from the test passes the import tests of `E0-11` (run them in a
+  hypatia checkout and give the output).
+* `scripts/dispatch-runner.sh` still exits with code 78 before the manifest.
+* The licence refusal gate has no change.
+
+== Stop and ask
+
+* The ruling names no tool that can mint the id in this repository.
+* The design does not say where the start record goes or what it looks like.
+* An attempt writes 2 different outcome rows. Then each row needs its own id,
+  and the design must say how.
+* Any step needs a change to the quarantine.
+* The cost reaches the cap before the acceptance checks pass.
