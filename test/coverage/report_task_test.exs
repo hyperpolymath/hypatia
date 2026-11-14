@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
 
   import ExUnit.CaptureIO
 
+  alias Hypatia.Coverage.ReportMeta
   alias Mix.Tasks.Hypatia.Coverage.Report, as: Task
 
   @fixtures Path.expand("../fixtures/coverage", __DIR__)
@@ -26,7 +27,25 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
       )
     end
 
+    for {n, role} <- [{"raw_branch", "raw"}, {"proven_branch", "proven"}] do
+      ReportMeta.write!(Path.join(tmp, "#{n}.json.meta.json"), meta(role))
+    end
+
     %{tmp: tmp}
+  end
+
+  defp meta(role, extra \\ %{}) do
+    Map.merge(
+      %{
+        repo: "example/demo",
+        commit: @sha,
+        run_id: "r1",
+        role: role,
+        tool: "cargo-llvm-cov",
+        tool_version: "0.6"
+      },
+      extra
+    )
   end
 
   defp args(tmp, extra \\ []) do
@@ -61,6 +80,19 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
     assert out =~ "| Lines | 20/38 (52.6%) | 32/38 (84.2%) |"
   end
 
+  test "a missing default sidecar is UNJUDGED COV-E013", %{tmp: tmp} do
+    File.rm!(Path.join(tmp, "raw_branch.json.meta.json"))
+    {{:ok, 2, out}, _} = run(args(tmp))
+    assert out =~ "COV-E013"
+  end
+
+  test "--raw-meta/--proven-meta override the default; a wrong commit is COV-E007", %{tmp: tmp} do
+    other = Path.join(tmp, "elsewhere.json")
+    ReportMeta.write!(other, meta("raw", %{commit: String.duplicate("b", 40)}))
+    {{:ok, 2, out}, _} = run(args(tmp, ["--raw-meta", other]))
+    assert out =~ "COV-E007"
+  end
+
   test "--shadow forces exit 0 but prints the true verdict", %{tmp: tmp} do
     {{:ok, 0, _}, out} = run(args(tmp, ["--shadow"]))
     assert out =~ "## Hypatia coverage — FAIL"
@@ -81,8 +113,12 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
 
   test "judged pass: exit 0 (LCOV inputs)", %{tmp: tmp} do
     lcov = Path.join(tmp, "all.info")
+    lcov2 = Path.join(tmp, "counted.info")
     File.write!(lcov, "SF:src/lib.rs\nDA:1,1\nDA:2,4\nend_of_record\n")
-    {{:ok, 0, _}, out} = run(["--raw", lcov, "--proven", lcov] ++ Enum.drop(args(tmp), 4))
+    File.cp!(lcov, lcov2)
+    ReportMeta.write!(lcov <> ".meta.json", meta("raw"))
+    ReportMeta.write!(lcov2 <> ".meta.json", meta("proven"))
+    {{:ok, 0, _}, out} = run(["--raw", lcov, "--proven", lcov2] ++ Enum.drop(args(tmp), 4))
     assert out =~ "— PASS"
     assert out =~ "| Lines | 2/2 (100.0%) | 2/2 (100.0%) |"
     assert out =~ "| Branches | not measurable | not measurable |"

@@ -12,13 +12,15 @@ defmodule Hypatia.Coverage.Report do
     * `:evidence` — result of `load_evidence/1` (or `{:ok, records}`)
     * `:repo` — `"owner/name"`, `:sha` — commit, `:root` — optional checkout dir
     * `:min_cases` — property-test floor (default 100)
+    * `:raw_meta`, `:proven_meta` — `{:ok, map}` or `{:error, _}` from `load_meta/1`
+      (`Hypatia.Coverage.ReportMeta`); an absent key counts as missing (COV-E013)
 
   Each of `:raw`, `:proven`, `:evidence` is `{:ok, value}` or
   `{:error, {:missing, path}}` / `{:error, {:parse, path, where}}`.
 
   ## Outcome
 
-  `UNJUDGED` if any of COV-E001, E002, E003, E005, E011 applies. Otherwise
+  `UNJUDGED` if any of COV-E001, E002, E003, E005, E007, E011, E012, E013 applies. Otherwise
   `PASS` when proven lines are 100% of the raw run's executable lines and (if
   branches are measurable) proven branches are 100% too, else `FAIL`. That is
   the design's Stage-2 rule applied to a single run; in this increment it is
@@ -37,8 +39,10 @@ defmodule Hypatia.Coverage.Report do
   | COV-E003 | report paths not found under the root (sample shown) |
   | COV-E005 | zero counted evidence |
   | COV-E010 | evidence record claims a kind it cannot back (flagged, not fatal) |
+  | COV-E007 | a report's sidecar names a different repo, commit, role or run than the one judged |
   | COV-E011 | proven run covers something the raw run does not (proven must be a subset of raw) |
   | COV-E012 | raw and proven runs were instrumented differently (branch data in one only) |
+  | COV-E013 | coverage report is not bound to a commit (no readable metadata sidecar) |
 
   COV-E012 is raised when exactly one of the raw and proven runs has branch data.
 
@@ -48,9 +52,19 @@ defmodule Hypatia.Coverage.Report do
 
   alias Hypatia.Coverage.{Evidence, Facts, LlvmCov, Lcov}
 
+  @different "coverage report is from a different repo, commit or run"
   @cap 50
   @sample 5
-  @unjudging ["COV-E001", "COV-E002", "COV-E003", "COV-E005", "COV-E011", "COV-E012"]
+  @unjudging [
+    "COV-E001",
+    "COV-E002",
+    "COV-E003",
+    "COV-E005",
+    "COV-E007",
+    "COV-E011",
+    "COV-E012",
+    "COV-E013"
+  ]
 
   # -- loading -------------------------------------------------------------
 
@@ -157,9 +171,12 @@ defmodule Hypatia.Coverage.Report do
         ],
         else: []
 
+    meta_reasons = meta_reasons(input, repo, sha)
+
     reasons =
       raw_reasons ++
-        proven_reasons ++ ev_reasons ++ path_reasons ++ incons_reasons ++ instr_reasons
+        proven_reasons ++
+        ev_reasons ++ path_reasons ++ incons_reasons ++ instr_reasons ++ meta_reasons
 
     unjudged? = Enum.any?(reasons, &(&1.code in @unjudging))
 
@@ -198,6 +215,69 @@ defmodule Hypatia.Coverage.Report do
       "evidence" => evidence_summary(records, classified),
       "notes" => notes
     }
+  end
+
+  @doc "Load a report sidecar (see `Hypatia.Coverage.ReportMeta.read/1`)."
+  defdelegate load_meta(path), to: Hypatia.Coverage.ReportMeta, as: :read
+
+  defp meta_reasons(input, repo, sha) do
+    raw = Map.get(input, :raw_meta)
+    proven = Map.get(input, :proven_meta)
+
+    per =
+      for {name, m} <- [{"raw", raw}, {"proven", proven}] do
+        case m do
+          {:ok, %{} = meta} -> binding_reason(name, meta, repo, sha)
+          other -> [unbound(name, other)]
+        end
+      end
+
+    run_ids =
+      case {raw, proven} do
+        {{:ok, %{"run_id" => a}}, {:ok, %{"run_id" => b}}} when a != b ->
+          [
+            reason("COV-E007", @different, %{
+              input: "raw/proven",
+              raw_run_id: a,
+              proven_run_id: b
+            })
+          ]
+
+        _ ->
+          []
+      end
+
+    List.flatten(per) ++ run_ids
+  end
+
+  defp unbound(name, other) do
+    detail =
+      case other do
+        {:error, {kind, path, why}} -> %{input: name, path: path, why: "#{kind}: #{why}"}
+        _ -> %{input: name, why: "no metadata supplied"}
+      end
+
+    reason("COV-E013", "coverage report is not bound to a commit (no metadata sidecar)", detail)
+  end
+
+  defp binding_reason(name, meta, repo, sha) do
+    problems =
+      [
+        meta["repo"] != repo && {:repo, meta["repo"], repo},
+        String.downcase(to_string(meta["commit"])) != String.downcase(to_string(sha)) &&
+          {:commit, meta["commit"], sha},
+        meta["role"] != name && {:role, meta["role"], name}
+      ]
+      |> Enum.filter(& &1)
+
+    if problems == [],
+      do: [],
+      else: [
+        reason("COV-E007", @different, %{
+          input: name,
+          mismatches: Enum.map(problems, fn {k, got, want} -> "#{k}: #{got} != #{want}" end)
+        })
+      ]
   end
 
   defp take({:ok, v}, _name), do: {v, []}

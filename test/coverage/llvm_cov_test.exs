@@ -136,6 +136,37 @@ defmodule Hypatia.Coverage.LlvmCovTest do
     end
   end
 
+  describe "declared branches must match parsed arms (COV-E002)" do
+    defp mutated(fun) do
+      doc = @fixtures |> Path.join("llvm_raw_branch.json") |> File.read!() |> Jason.decode!()
+
+      LlvmCov.from_document(
+        update_in(doc, ["data", Access.at(0), "files", Access.at(0)], fun),
+        []
+      )
+    end
+
+    test "a dropped branch entry is a parse error" do
+      assert {:error, {:parse, msg}} = mutated(&Map.update!(&1, "branches", fn b -> tl(b) end))
+      assert msg =~ "declares 10 branch arms"
+    end
+
+    test "a missing branches array is a parse error" do
+      assert {:error, {:parse, _}} = mutated(&Map.delete(&1, "branches"))
+    end
+
+    test "totals that disagree with the files are a parse error" do
+      doc = @fixtures |> Path.join("llvm_raw_branch.json") |> File.read!() |> Jason.decode!()
+      doc = put_in(doc, ["data", Access.at(0), "totals", "branches", "count"], 12)
+      assert {:error, {:parse, msg}} = LlvmCov.from_document(doc, [])
+      assert msg =~ "totals"
+    end
+
+    test "the real fixtures are consistent" do
+      assert {:ok, _} = mutated(& &1)
+    end
+  end
+
   describe "real cargo +nightly llvm-cov --branch export" do
     test "yields two arms per branch entry, keyed by line, column and arm" do
       facts = load("llvm_raw_branch.json")

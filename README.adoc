@@ -76,7 +76,7 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 
 [cols="1,3"]
 |===
-| `lib/` | 165 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
+| `lib/` | 166 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
 | `lib/rules/` | 44 source files: rule modules and their helpers; see link:docs/rules/catalogue.adoc[the catalogue]
 | `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
 | `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation

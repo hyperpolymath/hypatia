@@ -11,13 +11,16 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
       mix hypatia.coverage.report \\
         --raw cov-all.json --proven cov-counted.json --evidence evidence.json \\
         --repo OWNER/NAME --sha SHA \\
-        [--root DIR] [--min-cases N] [--format markdown|json] [--out PATH] [--shadow]
+        [--raw-meta PATH] [--proven-meta PATH] [--root DIR] [--min-cases N] [--format markdown|json] [--out PATH] [--shadow]
 
   ## Options
 
     * `--raw PATH`      coverage of the run of ALL tests (llvm-cov JSON or LCOV)
     * `--proven PATH`   coverage of the run of only the COUNTED tests
     * `--evidence PATH` evidence list (`hypatia.proven-coverage.evidence/1`)
+    * `--raw-meta PATH`, `--proven-meta PATH`  sidecars (`hypatia.proven-coverage.report-meta/1`) binding
+                        each report to repo, commit, run and role; default `<report path>.meta.json`.
+                        Missing: COV-E013; mismatching: COV-E007 (both UNJUDGED)
     * `--repo OWNER/NAME`, `--sha SHA`   used for permalinks
     * `--root DIR`      repo checkout (expanded to an absolute path); strips it from report paths and checks
                         that every reported file exists under it (COV-E003)
@@ -35,7 +38,7 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
 
   use Mix.Task
 
-  alias Hypatia.Coverage.Report
+  alias Hypatia.Coverage.{Report, ReportMeta}
 
   @shortdoc "SHADOW proven-vs-raw coverage report (not a gate)"
 
@@ -43,6 +46,8 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
     raw: :string,
     proven: :string,
     evidence: :string,
+    raw_meta: :string,
+    proven_meta: :string,
     repo: :string,
     sha: :string,
     root: :string,
@@ -88,6 +93,9 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
           raw: Report.load_coverage(opts[:raw], load_opts),
           proven: Report.load_coverage(opts[:proven], load_opts),
           evidence: Report.load_evidence(opts[:evidence]),
+          raw_meta: Report.load_meta(opts[:raw_meta] || ReportMeta.default_path(opts[:raw])),
+          proven_meta:
+            Report.load_meta(opts[:proven_meta] || ReportMeta.default_path(opts[:proven])),
           repo: opts[:repo],
           sha: opts[:sha],
           root: root,
@@ -148,7 +156,7 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
     #{message}
 
     Usage: mix hypatia.coverage.report --raw PATH --proven PATH --evidence PATH \\
-             --repo OWNER/NAME --sha SHA [--root DIR] [--min-cases N] \\
+             --repo OWNER/NAME --sha SHA [--raw-meta PATH] [--proven-meta PATH] [--root DIR] [--min-cases N] \\
              [--format markdown|json] [--out PATH] [--shadow]
     """)
 

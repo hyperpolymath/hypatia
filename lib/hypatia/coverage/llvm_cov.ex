@@ -60,8 +60,10 @@ defmodule Hypatia.Coverage.LlvmCov do
     |> Enum.reduce_while({:ok, []}, fn {entry, i}, {:ok, acc} ->
       case entry do
         %{"files" => files} when is_list(files) ->
-          case file_list(files, root, "data[#{i}]") do
-            {:ok, facts} -> {:cont, {:ok, [facts | acc]}}
+          with {:ok, facts} <- file_list(files, root, "data[#{i}]"),
+               :ok <- check_totals(entry, files, "data[#{i}]") do
+            {:cont, {:ok, [facts | acc]}}
+          else
             {:error, _} = e -> {:halt, e}
           end
 
@@ -142,7 +144,8 @@ defmodule Hypatia.Coverage.LlvmCov do
   defp file_facts(%{"filename" => name, "segments" => segs} = file, root)
        when is_binary(name) and is_list(segs) do
     with :ok <- check_segments(segs),
-         {:ok, branches} <- branches(Map.get(file, "branches", [])) do
+         {:ok, branches} <- branches(Map.get(file, "branches", [])),
+         :ok <- check_declared(file, Map.get(file, "branches")) do
       path = Facts.relativise(name, root)
 
       {:ok,
@@ -184,6 +187,44 @@ defmodule Hypatia.Coverage.LlvmCov do
   end
 
   defp branches(_), do: {:error, "\"branches\" is not a list"}
+
+  # llvm's `summary.branches.count` counts arms: each `branches` entry is two (true, false).
+  defp check_totals(entry, files, where) do
+    declared = get_in(entry, ["totals", "branches", "count"])
+
+    arms =
+      Enum.reduce(files, 0, fn f, n ->
+        case is_map(f) && Map.get(f, "branches") do
+          l when is_list(l) -> n + 2 * length(l)
+          _ -> n
+        end
+      end)
+
+    if positive?(declared) and declared != arms,
+      do:
+        {:error,
+         {:parse, "#{where}.totals declares #{declared} branch arms but files carry #{arms}"}},
+      else: :ok
+  end
+
+  defp check_declared(file, entries) do
+    declared = get_in(file, ["summary", "branches", "count"])
+
+    cond do
+      not positive?(declared) ->
+        :ok
+
+      not is_list(entries) ->
+        {:error, "summary declares #{declared} branch arms but \"branches\" is missing"}
+
+      2 * length(entries) == declared ->
+        :ok
+
+      true ->
+        {:error,
+         "summary declares #{declared} branch arms but \"branches\" has #{length(entries)} entries (#{2 * length(entries)} arms)"}
+    end
+  end
 
   defp measurable(facts, data) do
     declared =

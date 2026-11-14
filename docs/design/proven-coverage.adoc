@@ -383,9 +383,10 @@ Each error says: what happened, why, what to run locally, and who owns it (repo 
 | COV-E004 | Unit not measurable by this tool (branch in Elixir, Julia, Zig; all of Idris2) | Per owner ruling Q2. Owner: owner-only until ruled.
 | COV-E005 | Zero counted evidence: tests ran but none qualified | Panel lists each test and why. Usually: examples only, FixtureDebt, no seed.
 | COV-E006 | Proof is stale: covered declaration changed since check | Re-run the proof checker.
-| COV-E007 | Upload is from a different commit than the head | Re-run on the head. Owner: squabbler first-line (re-run category).
+| COV-E007 | Upload is from a different repo, commit, role or run than the head (checked against the report's metadata sidecar; raw and proven run_ids must agree) | Re-run on the head. Owner: squabbler first-line (re-run category).
 | COV-E008 | Carried-forward result older than 14 days | Run the flag's suite.
 | COV-E009 | Exclusion invalid (no reason, no review date, range moved) | Fix the exclusion file.
+| COV-E013 | Coverage report is not bound to a commit (no readable metadata sidecar `hypatia.proven-coverage.report-meta/1`) | Have the collector write the sidecar (`Hypatia.Coverage.ReportMeta.write!/2`). Unjudged.
 | COV-E010 | Evidence claims a kind it cannot back (e.g. P with no checker result) | Overclaim. The record is downgraded and flagged.
 |===
 

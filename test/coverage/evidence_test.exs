@@ -49,8 +49,20 @@ defmodule Hypatia.Coverage.EvidenceTest do
     rec("C", %{"conformance" => Map.merge(base, overrides)})
   end
 
-  defp bench(checksum),
-    do: rec("B", %{"benchmark" => %{"iterations" => 10, "checksum" => checksum}})
+  defp bench(checksum, overrides \\ %{}) do
+    base = %{
+      "workload" => "parse 1MiB",
+      "iterations" => 10,
+      "samples_ns" => [100, 110, 105],
+      "median_ns" => 105,
+      "runner" => "ubuntu-24.04 x86_64",
+      "toolchain" => "rustc 1.80",
+      "baseline" => "main@abc",
+      "checksum" => checksum
+    }
+
+    rec("B", %{"benchmark" => Map.merge(base, overrides)})
+  end
 
   defp proof(ladder, decls \\ ["Proven.SafeJson.parseTotal"]),
     do: rec("P", %{"proof" => %{"ladder" => ladder, "covers_decls" => decls}})
@@ -182,7 +194,31 @@ defmodule Hypatia.Coverage.EvidenceTest do
 
     test "any failed vector, or an unknown failure count" do
       assert Evidence.counted?(conf(%{"failed" => 1})) == {:not_counted, :conformance_failures}
-      assert Evidence.counted?(conf(%{"failed" => nil})) == {:not_counted, :conformance_failures}
+      assert Evidence.counted?(conf(%{"failed" => nil})) == {:not_counted, :inconsistent_vectors}
+    end
+
+    test "vectors must be an integer >= 1; failed within 0..vectors" do
+      for v <- [0, nil, "64", -1],
+          do: assert(Evidence.counted?(conf(%{"vectors" => v})) == {:not_counted, :no_vectors})
+
+      for f <- [-1, 65, "0"],
+          do:
+            assert(
+              Evidence.counted?(conf(%{"failed" => f})) == {:not_counted, :inconsistent_vectors}
+            )
+    end
+
+    test "a per-vector results list must agree with vectors and failed" do
+      ok = List.duplicate(%{"passed" => true}, 64)
+      assert Evidence.counted?(conf(%{"results" => ok})) == :counted
+
+      assert Evidence.counted?(conf(%{"results" => Enum.take(ok, 63)})) ==
+               {:not_counted, :inconsistent_vectors}
+
+      bad = [%{"passed" => false} | tl(ok)]
+
+      assert Evidence.counted?(conf(%{"results" => bad})) ==
+               {:not_counted, :inconsistent_vectors}
     end
 
     test "no conformance block at all" do
@@ -195,7 +231,28 @@ defmodule Hypatia.Coverage.EvidenceTest do
       assert Evidence.counted?(bench(false)) == {:not_counted, :no_checksum}
       assert Evidence.counted?(bench(nil)) == {:not_counted, :no_checksum}
       assert Evidence.counted?(bench("yes")) == {:not_counted, :no_checksum}
-      assert Evidence.counted?(rec("B")) == {:not_counted, :no_checksum}
+      assert Evidence.counted?(rec("B")) == {:not_counted, :incomplete_benchmark}
+    end
+
+    test "incomplete benchmark" do
+      for {k, v} <- [
+            {"workload", " "},
+            {"iterations", 0},
+            {"samples_ns", []},
+            {"samples_ns", [1, 0]},
+            {"median_ns", 0},
+            {"runner", nil},
+            {"toolchain", ""},
+            {"baseline", nil}
+          ] do
+        assert Evidence.counted?(bench(true, %{k => v})) == {:not_counted, :incomplete_benchmark}
+      end
+    end
+
+    test "runner and toolchain may sit under run.*" do
+      r = bench(true, %{"runner" => nil, "toolchain" => nil})
+      r = put_in(r, ["run", "runner"], "ci") |> put_in(["run", "toolchain"], "rustc")
+      assert Evidence.counted?(r) == :counted
     end
   end
 

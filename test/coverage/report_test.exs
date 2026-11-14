@@ -17,6 +17,22 @@ defmodule Hypatia.Coverage.ReportTest do
 
   defp evidence, do: Evidence.load(Path.join(@fixtures, "evidence.json"))
 
+  defp meta(role, overrides \\ %{}) do
+    {:ok,
+     Map.merge(
+       %{
+         "schema" => "hypatia.proven-coverage.report-meta/1",
+         "repo" => "example/demo",
+         "commit" => @sha,
+         "run_id" => "run-1",
+         "role" => role,
+         "tool" => "cargo-llvm-cov",
+         "tool_version" => "0.6"
+       },
+       overrides
+     )}
+  end
+
   defp build(overrides \\ %{}) do
     Report.build(
       Map.merge(
@@ -24,6 +40,8 @@ defmodule Hypatia.Coverage.ReportTest do
           raw: cov("llvm_raw_branch.json"),
           proven: cov("llvm_proven_branch.json"),
           evidence: evidence(),
+          raw_meta: meta("raw"),
+          proven_meta: meta("proven"),
           repo: "example/demo",
           sha: @sha,
           root: @demo_root
@@ -38,6 +56,46 @@ defmodule Hypatia.Coverage.ReportTest do
 
   defp files(map), do: Facts.new(map)
   defp lines(path, map), do: files(%{path => %{lines: map, branches: %{}}})
+
+  describe "binding to the judged commit" do
+    test "missing sidecar: UNJUDGED COV-E013" do
+      v = build(%{raw_meta: {:error, {:missing, "r.meta.json", "enoent"}}})
+      assert v["outcome"] == "UNJUDGED" and "COV-E013" in codes(v)
+      assert one(v, "COV-E013")["message"] =~ "not bound to a commit"
+      assert "COV-E013" in codes(build(%{proven_meta: {:error, {:invalid, "p", "bad"}}}))
+    end
+
+    test "absent metadata is treated as missing" do
+      v =
+        Report.build(%{
+          raw: cov("llvm_raw_branch.json"),
+          proven: cov("llvm_proven_branch.json"),
+          evidence: evidence(),
+          repo: "example/demo",
+          sha: @sha,
+          root: @demo_root
+        })
+
+      assert v["outcome"] == "UNJUDGED" and "COV-E013" in codes(v)
+    end
+
+    test "wrong commit, repo or role: UNJUDGED COV-E007" do
+      for m <- [
+            meta("raw", %{"commit" => String.duplicate("a", 40)}),
+            meta("raw", %{"repo" => "other/demo"}),
+            meta("proven")
+          ] do
+        v = build(%{raw_meta: m})
+        assert v["outcome"] == "UNJUDGED" and "COV-E007" in codes(v)
+      end
+    end
+
+    test "mismatched run ids: UNJUDGED COV-E007" do
+      v = build(%{proven_meta: meta("proven", %{"run_id" => "run-2"})})
+      assert v["outcome"] == "UNJUDGED" and "COV-E007" in codes(v)
+      assert one(v, "COV-E007")["detail"]["raw_run_id"] == "run-1"
+    end
+  end
 
   describe "the real fixture pair (judged)" do
     setup do: %{v: build()}

@@ -278,6 +278,18 @@ defmodule Hypatia.Coverage.Evidence do
   def reason_text(:no_version), do: "conformance test with no spec version"
   def reason_text(:no_vectors_sha256), do: "conformance test with no vector-set hash"
   def reason_text(:conformance_failures), do: "conformance vectors failed"
+
+  def reason_text(:no_vectors),
+    do: "conformance run with no vectors (vectors must be an integer >= 1)"
+
+  def reason_text(:inconsistent_vectors),
+    do:
+      "conformance vector counts are inconsistent (failed outside 0..vectors, or results disagree)"
+
+  def reason_text(:incomplete_benchmark),
+    do:
+      "benchmark missing workload, iterations, samples_ns, median_ns, runner, toolchain or baseline"
+
   def reason_text(:no_checksum), do: "benchmark whose checksum does not assert a property"
   def reason_text(:empty_ladder), do: "proof claim with an empty proof ladder"
 
@@ -340,15 +352,19 @@ defmodule Hypatia.Coverage.Evidence do
       not present?(dig(c, ["spec"])) -> {:not_counted, :no_spec}
       not present?(dig(c, ["version"])) -> {:not_counted, :no_version}
       not present?(dig(c, ["vectors_sha256"])) -> {:not_counted, :no_vectors_sha256}
-      dig(c, ["failed"]) != 0 -> {:not_counted, :conformance_failures}
-      true -> mutation(r)
+      true -> conformance_vectors(c, r)
     end
   end
 
   defp by_kind("B", r, _m) do
-    if dig(r, ["run", "benchmark", "checksum"]) == true,
-      do: mutation(r),
-      else: {:not_counted, :no_checksum}
+    b = dig(r, ["run", "benchmark"])
+
+    cond do
+      not is_map(b) -> {:not_counted, :incomplete_benchmark}
+      b["checksum"] != true -> {:not_counted, :no_checksum}
+      not complete_benchmark?(r, b) -> {:not_counted, :incomplete_benchmark}
+      true -> mutation(r)
+    end
   end
 
   defp by_kind("P", r, _m) do
@@ -370,6 +386,53 @@ defmodule Hypatia.Coverage.Evidence do
   end
 
   defp by_kind(_other, _r, _m), do: {:not_counted, :unknown_kind}
+
+  defp conformance_vectors(c, r) do
+    vectors = dig(c, ["vectors"])
+    failed = dig(c, ["failed"])
+    results = dig(c, ["results"])
+
+    cond do
+      not (is_integer(vectors) and vectors >= 1) ->
+        {:not_counted, :no_vectors}
+
+      not (is_integer(failed) and failed >= 0 and failed <= vectors) ->
+        {:not_counted, :inconsistent_vectors}
+
+      failed != 0 ->
+        {:not_counted, :conformance_failures}
+
+      results != nil and not consistent_results?(results, vectors, failed) ->
+        {:not_counted, :inconsistent_vectors}
+
+      true ->
+        mutation(r)
+    end
+  end
+
+  defp consistent_results?(results, vectors, failed) when is_list(results) do
+    length(results) == vectors and Enum.count(results, &vector_failed?/1) == failed
+  end
+
+  defp consistent_results?(_, _, _), do: false
+
+  defp vector_failed?(%{"passed" => p}), do: p != true
+  defp vector_failed?(%{"outcome" => o}), do: o != "passed"
+  defp vector_failed?(%{"status" => s}), do: s not in ["passed", "pass", "ok"]
+  defp vector_failed?(%{"failed" => f}), do: f == true
+  defp vector_failed?(p) when is_boolean(p), do: not p
+  defp vector_failed?(_), do: true
+
+  defp complete_benchmark?(r, b) do
+    pos_int = fn n -> is_integer(n) and n > 0 end
+    samples = b["samples_ns"]
+
+    present_string?(b["workload"]) and is_integer(b["iterations"]) and b["iterations"] >= 1 and
+      is_list(samples) and samples != [] and Enum.all?(samples, pos_int) and
+      pos_int.(b["median_ns"]) and present_string?(b["baseline"]) and
+      present_string?(b["runner"] || dig(r, ["run", "runner"])) and
+      present_string?(b["toolchain"] || dig(r, ["run", "toolchain"]))
+  end
 
   defp complete_rung?(rung) when is_map(rung) do
     Enum.all?(~w(theorem file checker checker_version), &present_string?(rung[&1])) and
