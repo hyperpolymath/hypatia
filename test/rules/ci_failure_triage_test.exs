@@ -44,6 +44,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"hypatia-critical-findings.txt", "security_findings_reported", :owner},
     {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
     {"lock-missing-pin.txt", "actions_lock_missing_ref", :fix},
+    # Tsunami-breaker, 2026-11-14: tag-keyed lock records refused by the
+    # standards pin-contract gate (ZeroInflatedCounts.jl, ResidualEvidenceTypes.jl).
+    {"lock-tag-keyed.txt", "actions_lock_tag_keyed", :owner},
     {"canon-lockstep-broken.txt", "canon_lockstep", :owner},
     {"canon-pin-needs-profile.txt", "canon_lockstep", :owner},
     {"repo-map-stale.txt", "repository_map_stale", :fix},

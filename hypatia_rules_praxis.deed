@@ -347,6 +347,14 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/ci_failure_triage/actions_lock_tag_keyed"
+      :text "The pin-contract gate (standards check-lock-pin-contract.sh, canon rule 10) refused actions.lock records keyed by a tag instead of a commit SHA, the form gh actions-lock writes by default."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/ci_failure_triage/actions_lock_unresolvable_pin"
       :text "actions.lock pins an action to a commit GitHub cannot resolve (a stale or deleted pin; DEBT-REGISTER CI-1)."
       :class gate
@@ -3316,6 +3324,15 @@
       :text "hypatia/workflow_audit/actions_lock_stale in lib/rules/workflow_audit.ex."
       :class gate
       :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/actions_lock_tag_keyed"
+      :text "hypatia/workflow_audit/actions_lock_tag_keyed in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity minor
       :excusable-at repo
       :scope-form exact-paths
       :status active)

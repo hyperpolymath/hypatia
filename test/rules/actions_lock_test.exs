@@ -44,6 +44,65 @@ defmodule Hypatia.Rules.ActionsLockTest do
     refute ActionsLock.pinned?(lock, "ci.yml", "actions/checkout@v6.0.0")
   end
 
+  test "tag_keyed_keys lists records keyed by a tag, not a SHA" do
+    assert {:ok, lock} = ActionsLock.parse(@valid_lock)
+    assert ActionsLock.tag_keyed_keys(lock) == ["actions/checkout@v7.0.1"]
+  end
+
+  test "a tag-keyed lock is one info referral per audit, outside the pinning check" do
+    alias Hypatia.Rules.WorkflowAudit
+
+    assert [
+             %{
+               type: :actions_lock_tag_keyed,
+               rule_id: "hypatia/workflow_audit/actions_lock_tag_keyed",
+               severity: :info,
+               action: :report,
+               keys: ["actions/checkout@v7.0.1"]
+             }
+           ] = WorkflowAudit.check_actions_lock_tag_keys(@valid_lock)
+
+    # Not a pinning finding: Scorecard Pinned-Dependencies and per-file scans
+    # read check_unpinned_actions/2, which stays clean for this lock.
+    assert WorkflowAudit.check_unpinned_actions(%{"ci.yml" => @workflow},
+             actions_lock: @valid_lock
+           ) == []
+
+    %{findings: fs} =
+      WorkflowAudit.audit(["ci.yml"], %{"ci.yml" => @workflow}, actions_lock: @valid_lock)
+
+    assert Enum.count(fs, &(&1[:type] == :actions_lock_tag_keyed)) == 1
+
+    %{findings: partial} =
+      WorkflowAudit.audit(["ci.yml"], %{"ci.yml" => @workflow},
+        actions_lock: @valid_lock,
+        partial: true
+      )
+
+    refute Enum.any?(partial, &(&1[:type] == :actions_lock_tag_keyed))
+
+    # A SHA-keyed record naming its reviewed tag is the contract's form.
+    sha = String.duplicate("a", 40)
+
+    sha_keyed = """
+    version: 'v0.0.2'
+    workflows:
+        '.github/workflows/ci.yml':
+            - 'actions/checkout@#{sha}'
+    dependencies:
+        'actions/checkout@#{sha}':
+            ref: 'v7.0.1'
+            commit: 'sha1-#{sha}'
+            owner_id: 44036562
+            repo_id: 197814629
+    """
+
+    assert {:ok, _} = ActionsLock.parse(sha_keyed)
+    assert WorkflowAudit.check_actions_lock_tag_keys(sha_keyed) == []
+    assert WorkflowAudit.check_actions_lock_tag_keys(nil) == []
+    assert WorkflowAudit.check_actions_lock_tag_keys("not a lock") == []
+  end
+
   test "accepts uppercase hexadecimal commit suffixes" do
     lock =
       String.replace(

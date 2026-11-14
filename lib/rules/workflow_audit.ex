@@ -104,6 +104,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     full_history_remains =
       if opts[:partial], do: [], else: check_full_history_scan_remains(workflow_contents)
 
+    # The lock is repository-wide too: once per audit, not per file.
+    lock_tag_keys =
+      if opts[:partial], do: [], else: check_actions_lock_tag_keys(opts[:actions_lock])
+
     %{
       # `flawed_regexes` was computed at the top of this function and
       # counted into `flawed_regex_count:` below, but was never added to
@@ -146,7 +150,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           always_after_cancel ++
           mirror_visibility ++
           gitleaks_full_history ++
-          full_history_remains,
+          full_history_remains ++
+          lock_tag_keys,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -503,6 +508,52 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   defp incomplete_context_findings(_lock, _complete?), do: []
+
+  @doc """
+  Records in `actions.lock` keyed by a tag or branch, not a commit SHA. They
+  are valid for gh actions-lock, which writes them by default, but the estate
+  pin contract (standards `check-lock-pin-contract.sh`, canon rule 10)
+  refuses them. One `:info` finding per repository, referral only: the cure
+  (the standards repair order from relock-sha-keys.sh on) re-pins workflows.
+
+  Kept out of `check_unpinned_actions/2`, whose findings feed the Scorecard
+  Pinned-Dependencies pattern and per-file scans. A lock that does not parse
+  is `invalid_actions_lock`'s, so nothing is reported here for it.
+  """
+  def check_actions_lock_tag_keys(nil), do: []
+
+  def check_actions_lock_tag_keys(lock_content) when is_binary(lock_content) do
+    case Hypatia.Rules.ActionsLock.parse(lock_content) do
+      {:ok, lock} -> tag_keyed_findings(lock)
+      {:error, _reason} -> []
+    end
+  end
+
+  def check_actions_lock_tag_keys(_), do: []
+
+  defp tag_keyed_findings(%Hypatia.Rules.ActionsLock{} = lock) do
+    case Hypatia.Rules.ActionsLock.tag_keyed_keys(lock) do
+      [] ->
+        []
+
+      keys ->
+        [
+          %{
+            type: :actions_lock_tag_keyed,
+            rule_id: "hypatia/workflow_audit/actions_lock_tag_keyed",
+            file: "actions.lock",
+            severity: :info,
+            action: :report,
+            keys: Enum.sort(keys),
+            detail:
+              "#{length(keys)} actions.lock record(s) are keyed by a tag or branch, not a " <>
+                "commit SHA (e.g. #{keys |> Enum.sort() |> hd()}). The estate pin contract " <>
+                "(standards check-lock-pin-contract.sh, canon rule 10) refuses these keys. " <>
+                "Referral: relock with the standards repair order."
+          }
+        ]
+    end
+  end
 
   defp parse_actions_lock(nil, _workflow_contents, _complete?), do: {:usable, nil}
 
