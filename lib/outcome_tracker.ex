@@ -316,8 +316,14 @@ defmodule Hypatia.OutcomeTracker do
   after recording the outcome. The verification verdict is persisted
   on every branch (verified / still_present / scan_failed / unverified)
   so `recipe_health/1` can compute meaningful aggregates.
+
+  `:metadata` (a map) is merged into each row that this function writes.
+  A key that the function sets itself, such as `"verification"`, wins over
+  the map, so the map can add a field but cannot change what the rescan found.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
+    extra = Keyword.get(opts, :metadata, %{})
+
     if Keyword.get(opts, :verify, false) and outcome == :success do
       repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
       repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
@@ -329,7 +335,13 @@ defmodule Hypatia.OutcomeTracker do
           # Record success WITH the verification stamp so recipe_health
           # can distinguish verified-clean fixes from un-verified ones.
           {:ok, record} =
-            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "verified"})
+            record_outcome(
+              recipe_id,
+              repo,
+              file,
+              outcome,
+              Map.merge(extra, %{"verification" => "verified"})
+            )
 
           {:ok, record, :verified}
 
@@ -341,13 +353,25 @@ defmodule Hypatia.OutcomeTracker do
           # Both records are tagged so the trail is explicit: the claimed
           # success was actually a false positive, surfaced by re-scan.
           {:ok, _} =
-            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "still_present"})
+            record_outcome(
+              recipe_id,
+              repo,
+              file,
+              outcome,
+              Map.merge(extra, %{"verification" => "still_present"})
+            )
 
           {:ok, record} =
-            record_outcome(recipe_id, repo, file, :false_positive, %{
-              "verification" => "still_present",
-              "caused_by" => "post_fix_rescan"
-            })
+            record_outcome(
+              recipe_id,
+              repo,
+              file,
+              :false_positive,
+              Map.merge(extra, %{
+                "verification" => "still_present",
+                "caused_by" => "post_fix_rescan"
+              })
+            )
 
           {:ok, record, :false_positive}
 
@@ -357,7 +381,13 @@ defmodule Hypatia.OutcomeTracker do
           # the distinction from "verified clean" without penalising the
           # recipe in confidence updates.
           {:ok, record} =
-            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "scan_failed"})
+            record_outcome(
+              recipe_id,
+              repo,
+              file,
+              outcome,
+              Map.merge(extra, %{"verification" => "scan_failed"})
+            )
 
           {:ok, record, :scan_unavailable}
       end
@@ -367,9 +397,15 @@ defmodule Hypatia.OutcomeTracker do
       # tell the difference between "verification wasn't attempted" and
       # "verification was attempted and failed".
       {:ok, record} =
-        record_outcome(recipe_id, repo, file, outcome, %{
-          "verification" => if(outcome == :failure, do: "failed", else: "unverified")
-        })
+        record_outcome(
+          recipe_id,
+          repo,
+          file,
+          outcome,
+          Map.merge(extra, %{
+            "verification" => if(outcome == :failure, do: "failed", else: "unverified")
+          })
+        )
 
       {:ok, record, :not_verified}
     end
