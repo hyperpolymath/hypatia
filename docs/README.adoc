@@ -22,6 +22,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 
 == Guides
 
+* link:guides/claude-api-agents.adoc[`claude-api-agents.adoc`]: how to run work orders on Claude API credit, with prices, models, budget controls and the launch command.
 * link:guides/user-guide.adoc[`user-guide.adoc`] — end-to-end usage walkthrough.
 * link:guides/developer-guide.adoc[`developer-guide.adoc`] — adding rules, recipes, neural networks.
 * link:guides/admin-guide.adoc[`admin-guide.adoc`] — deployment + operations.
@@ -52,6 +53,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 Each operations doc has a "When to update this memo" footer and explicit
 acceptance criteria for closing the underlying roadmap item.
 
+* link:operations/e0-closeout/README.adoc[`e0-closeout/`]: the work orders that close step E0 of issue 984, with their templates.
 * link:operations/dispatch-runner-contract.adoc[`dispatch-runner-contract.adoc`] — exit-code contract gitbot-fleet must implement.
 * link:operations/verisim-api-deployment.adoc[`verisim-api-deployment.adoc`] — runbook for when the verisim-api Rust crate ships.
 * link:operations/migration-arangodb-to-verisim.adoc[`migration-arangodb-to-verisim.adoc`] — historical migration record.

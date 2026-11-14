@@ -1,0 +1,149 @@
+{
+  "schema": "hypatia.proven-coverage.evidence/1",
+  "evidence": [
+    {
+      "id": "e1",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "E",
+      "test_id": {
+        "module_path": "test/examples.test.js",
+        "name": "example: classify zero",
+        "file": "test/examples.test.js",
+        "line": 6
+      },
+      "fixtures": {
+        "cannot_fail_by_design": "example test"
+      },
+      "run": {
+        "outcome": "passed"
+      }
+    },
+    {
+      "id": "e2",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "E",
+      "test_id": {
+        "module_path": "test/examples.test.js",
+        "name": "example: clamp inside",
+        "file": "test/examples.test.js",
+        "line": 10
+      },
+      "fixtures": {
+        "cannot_fail_by_design": "example test"
+      },
+      "run": {
+        "outcome": "passed"
+      }
+    },
+    {
+      "id": "e3",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "E",
+      "test_id": {
+        "module_path": "test/examples.test.js",
+        "name": "example: classify negative and large",
+        "file": "test/examples.test.js",
+        "line": 14
+      },
+      "fixtures": {
+        "cannot_fail_by_design": "example test"
+      },
+      "run": {
+        "outcome": "passed"
+      }
+    },
+    {
+      "id": "e4",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "E",
+      "test_id": {
+        "module_path": "test/examples.test.js",
+        "name": "example: clamp rejects lo > hi and clamps below",
+        "file": "test/examples.test.js",
+        "line": 19
+      },
+      "fixtures": {
+        "cannot_fail_by_design": "example test"
+      },
+      "run": {
+        "outcome": "passed"
+      }
+    },
+    {
+      "id": "r1",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "R",
+      "in_proven_run": true,
+      "test_id": {
+        "module_path": "test/props.test.js",
+        "name": "property: classify says small on 1..100",
+        "file": "test/props.test.js",
+        "line": 12
+      },
+      "fixtures": {
+        "silence": "int 1..100",
+        "firing": {
+          "source": "classify(n) returning 'large' for n <= 100",
+          "defect_class": "wrong-branch"
+        }
+      },
+      "run": {
+        "outcome": "passed",
+        "property": {
+          "generator": "int 1..100",
+          "seed": "42",
+          "cases": 500
+        },
+        "mutation": {
+          "tool": "stryker",
+          "killed": 4,
+          "survived": 0
+        }
+      }
+    },
+    {
+      "id": "r2",
+      "repo": "example/js-demo",
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "language": "js",
+      "kind": "R",
+      "in_proven_run": true,
+      "test_id": {
+        "module_path": "test/props.test.js",
+        "name": "property: clamp stays within bounds",
+        "file": "test/props.test.js",
+        "line": 20
+      },
+      "fixtures": {
+        "silence": "int -100..99",
+        "firing": {
+          "source": "clamp(value, lo, hi) returning value unchanged when value > hi",
+          "defect_class": "missing-bound"
+        }
+      },
+      "run": {
+        "outcome": "passed",
+        "property": {
+          "generator": "int -100..99",
+          "seed": "7",
+          "cases": 500
+        },
+        "mutation": {
+          "tool": "stryker",
+          "killed": 4,
+          "survived": 0
+        }
+      }
+    }
+  ]
+}

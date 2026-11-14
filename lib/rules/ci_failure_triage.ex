@@ -464,7 +464,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "dependency_advisory",
       layer: :code,
-      patterns: [~r/\bRUSTSEC-\d{4}-\d{4}\b/, ~r/error: \d+ vulnerabilit(y|ies) found/],
+      patterns: [
+        ~r/\bRUSTSEC-\d{4}-\d{4}\b/,
+        ~r/error: \d+ vulnerabilit(y|ies) found/,
+        # A wrapper script's per-lockfile verdict, with no RUSTSEC id in the
+        # log (echidna#504: `fuzz/Cargo.lock: FAILED (vulnerabilities found)`).
+        ~r/\bCargo\.lock: FAILED \(vulnerabilities found\)/
+      ],
       # An advisory id in a test or fixture is not an audit failure.
       context: [~r/\d+ vulnerabilit(y|ies) found|cargo[- ]audit|cargo[- ]deny|Crate:\s+\S+/i],
       action: :report,
@@ -474,6 +480,22 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason:
         "A dependency has a published advisory (cargo audit). A person bumps or " <>
           "replaces it; never ignore the advisory to pass."
+    },
+    %{
+      name: "shellcheck_findings",
+      layer: :code,
+      # ShellCheck's own finding form, `SC2030 (info): ...` (trope-checker#116,
+      # exit 123). The code and severity together; a bare "SC2030" in prose
+      # or a disable directive does not match.
+      patterns: [~r/\bSC\d{4} \((?:error|warning|info|style)\): /],
+      context: [~r/shellcheck|^In \S+ line \d+:/im],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "ShellCheck found problems in a shell script. A person fixes the script " <>
+          "(or adds a reasoned inline disable); never weaken the lint to pass."
     },
     %{
       name: "review_rate_limited",
@@ -550,7 +572,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "sonar_not_authorized",
       layer: :config,
-      patterns: [~r/Not authorized or organization not found/],
+      patterns: [
+        ~r/Not authorized or organization not found/,
+        # The scanner's own call to SonarCloud refused the token (aerie#103:
+        # JRE metadata GET -> HTTP 403). 401/403 only; a 5xx is Sonar's outage.
+        ~r/https:\/\/(?:api\.)?sonarcloud\.io\/\S+ failed with HTTP 40[13]\b/
+      ],
       # An app may log the phrase; only a Sonar scanner run ties it to Sonar.
       context: [~r/sonar-scanner|SonarQube|SonarCloud/i],
       action: :owner,
@@ -559,7 +586,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       escalation: :owner,
       reason:
         "The Sonar scanner's token or project binding is not valid for this " <>
-          "organization (lithoglyph). The owner fixes the setting."
+          "organization (lithoglyph), or SONAR_TOKEN was refused (aerie). The " <>
+          "owner renews the token or fixes the setting."
     },
     %{
       name: "pages_not_enabled",
@@ -792,6 +820,16 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason: "panic-attack pinned at different commits (check_scanner_pin_drift/1)."
     },
     %{
+      name: "hypatia_pin_drift",
+      layer: :config,
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      input: :workflow_set,
+      reason: "Hypatia pinned at different commits (check_hypatia_pin_drift/1)."
+    },
+    %{
       name: "always_after_cancel",
       layer: :config,
       action: :fix,
@@ -942,14 +980,38 @@ defmodule Hypatia.Rules.CiFailureTriage do
   defp strip_line_comment([?# | _], nil, acc) when acc == [] or hd(acc) in [?\s, ?\t],
     do: acc |> Enum.reverse() |> List.to_string()
 
-  defp strip_line_comment([c | rest], nil, acc) when c in [?", ?'],
-    do: strip_line_comment(rest, c, [c | acc])
+  # A quote opens a quoted scalar only where one can start: at the line's
+  # start or after `:`, `-`, `[`, `{` or `,`. Inside a plain scalar
+  # (`name: Don't`) it is a literal, so a later ` #` still starts a comment.
+  defp strip_line_comment([c | rest], nil, acc) when c in [?", ?'] do
+    if quote_can_open?(acc),
+      do: strip_line_comment(rest, c, [c | acc]),
+      else: strip_line_comment(rest, nil, [c | acc])
+  end
 
   defp strip_line_comment([?\\, c | rest], ?", acc),
     do: strip_line_comment(rest, ?", [c, ?\\ | acc])
 
+  # `''` inside a single-quoted scalar is one literal quote, not its end.
+  defp strip_line_comment([?', ?' | rest], ?', acc),
+    do: strip_line_comment(rest, ?', [?', ?' | acc])
+
   defp strip_line_comment([q | rest], q, acc), do: strip_line_comment(rest, nil, [q | acc])
   defp strip_line_comment([c | rest], q, acc), do: strip_line_comment(rest, q, [c | acc])
+
+  # `:` and `-` need YAML's separating space before a quoted scalar
+  # (`scheme:'v` is plain text); a flow `[`, `{` or `,` does not.
+  defp quote_can_open?([]), do: true
+  defp quote_can_open?([c | _]) when c in [?[, ?{, ?,], do: true
+
+  defp quote_can_open?([c | _] = acc) when c in [?\s, ?\t] do
+    case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
+      [] -> true
+      [prev | _] -> prev in [?:, ?-, ?[, ?{, ?,]
+    end
+  end
+
+  defp quote_can_open?(_acc), do: false
 
   @doc """
   Scanner pin drift: panic-attack pinned at different commits across a set of
@@ -996,6 +1058,260 @@ defmodule Hypatia.Rules.CiFailureTriage do
       end
     else
       []
+    end
+  end
+
+  # Hypatia pin sites in a minted repository (Apodeixis.jl#25, CASE-065):
+  # the scan's `HYPATIA_SHA` env, the verdict grid's `--hypatia-ref`, a
+  # checkout of hyperpolymath/hypatia (dogfood-gate's oracle) and the
+  # rule-order policy's `scanner.commit`. All must name one commit.
+  @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/m
+  @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/
+  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})/i
+
+  @doc """
+  Hypatia pin drift: Hypatia pinned at different commits across a repo's
+  workflows and its `hypatia-rule-order.json` (`%{label => content}`).
+  Returns one finding per pin site when more than one commit is pinned, and
+  `[]` otherwise. A stale pin can lack a crash fix (#1062), and the five
+  sites must move together; which commit is canonical is the owner's call.
+  """
+  def check_hypatia_pin_drift(contents) when is_map(contents) do
+    sites =
+      contents
+      |> Enum.flat_map(fn {label, content} -> hypatia_pins(label, content) end)
+      |> Enum.uniq()
+
+    shas = sites |> Enum.map(& &1.sha) |> Enum.uniq() |> Enum.sort()
+
+    if length(shas) > 1 do
+      for site <- Enum.sort_by(sites, &{&1.file, &1.line || 0, &1.key}) do
+        %{
+          rule: id("hypatia_pin_drift"),
+          layer: :config,
+          action: :owner,
+          route: route(:owner),
+          retries: 0,
+          fix: nil,
+          escalation: :owner,
+          file: site.file,
+          line: site.line,
+          key: site.key,
+          sha: site.sha,
+          pinned: shas,
+          reason:
+            "Hypatia is pinned at #{length(shas)} different commits " <>
+              "(#{Enum.map_join(shas, ", ", &String.slice(&1, 0, 8))}). Move every " <>
+              "site together to one commit at or after 37b8d01 (#1062)."
+        }
+      end
+    else
+      []
+    end
+  end
+
+  defp hypatia_pins(label, content) do
+    content = String.replace(content, "\r\n", "\n")
+
+    cond do
+      String.ends_with?(label, ".json") ->
+        hypatia_policy_pin(label, content)
+
+      match?({:ok, _}, Hypatia.Kyaml.parse(content)) ->
+        # Read from the parsed YAML, so comments, quoting (`''`), aliases and
+        # folded or literal block scalars mean what YAML says they mean
+        # (Codex on #1103).
+        {:ok, docs} = Hypatia.Kyaml.parse(content)
+        Enum.flat_map(docs, &walk_pins(label, &1)) ++ hypatia_checkout_pins(label, content)
+
+      true ->
+        hypatia_pins_by_text(label, content)
+    end
+  end
+
+  # `HYPATIA_SHA` is case-sensitive: a lowercase `hypatia_sha` does not set
+  # the scanner on a Linux runner (Codex on #1103).
+  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:\s|\\\n)+)["']?([0-9a-fA-F]{40})\b/
+
+  # Walks the tree with the key that holds each node. `HYPATIA_SHA` counts
+  # only inside an `env:` mapping, and `--hypatia-ref` only inside a `run:`
+  # script with shell comments removed: a `with:` input of that name, a step
+  # `name:` or a `# previously --hypatia-ref …` line sets nothing (Codex on
+  # #1103).
+  defp walk_pins(label, node, holder \\ nil) do
+    case node do
+      %{kind: :map, entries: es} ->
+        Enum.flat_map(es, fn e ->
+          key = e.key |> Hypatia.Kyaml.deref() |> Map.get(:value)
+          here = if holder == "env", do: env_pin(label, e), else: []
+          here ++ run_pins(label, key, e.value) ++ walk_pins(label, e.value, key)
+        end)
+
+      %{kind: :seq, items: items} ->
+        Enum.flat_map(items, &walk_pins(label, &1))
+
+      # `env: *shared` sets the job's environment from the anchored mapping.
+      # Only an alias under `env:` is followed, so the anchor (read under its
+      # own key) is never counted twice (Codex on #1103).
+      %{kind: :alias} when holder == "env" ->
+        case Hypatia.Kyaml.deref(node) do
+          %{kind: :map, entries: es} ->
+            for e <- es, pin <- env_pin(label, e), do: %{pin | line: elem(node.loc, 0)}
+
+          _ ->
+            []
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp run_pins(label, "run", value) do
+    case Hypatia.Kyaml.deref(value) do
+      %{kind: :string, value: v} = scalar when is_binary(v) ->
+        lines = String.split(v, "\n")
+        starts = lines |> Enum.scan(0, &(&2 + byte_size(&1) + 1)) |> then(&[0 | &1])
+
+        code =
+          Enum.map_join(lines, "\n", &strip_line_comment(String.to_charlist(&1), nil, []))
+
+        for [{off, _}, {s_off, s_len}] <- Regex.scan(@hypatia_ref_flag, code, return: :index) do
+          k = code |> binary_part(0, off) |> String.split("\n") |> length() |> Kernel.-(1)
+
+          %{
+            file: label,
+            key: "--hypatia-ref",
+            sha: code |> binary_part(s_off, s_len) |> String.downcase(),
+            line: scalar_line(scalar, Enum.at(starts, k))
+          }
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp run_pins(_label, _key, _value), do: []
+
+  defp env_pin(label, %{key: %{value: "HYPATIA_SHA"}, value: value, loc: {line, _}}) do
+    case Hypatia.Kyaml.deref(value) do
+      %{value: v} when is_binary(v) ->
+        if Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, v),
+          do: [%{file: label, key: "HYPATIA_SHA", sha: String.downcase(v), line: line}],
+          else: []
+
+      _ ->
+        []
+    end
+  end
+
+  defp env_pin(_label, _entry), do: []
+
+  # A block scalar maps value offsets to source lines with `segments`; any
+  # other scalar sits on its own line.
+  defp scalar_line(%{segments: [_ | _] = segs}, off) do
+    segs |> Enum.take_while(fn {o, _} -> o <= off end) |> List.last({0, nil}) |> elem(1)
+  end
+
+  defp scalar_line(%{loc: {line, _}}, _off), do: line
+
+  # Unparseable YAML: fall back to text, comments stripped.
+  defp hypatia_pins_by_text(label, content) do
+    yaml = strip_yaml_comments(content)
+
+    for {key, re} <- [
+          {"HYPATIA_SHA", @hypatia_env},
+          {"HYPATIA_SHA", @hypatia_env_flow},
+          {"--hypatia-ref", @hypatia_flag}
+        ],
+        [_, {off, len}] <- Regex.scan(re, yaml, return: :index) do
+      %{
+        file: label,
+        key: key,
+        sha: yaml |> binary_part(off, len) |> String.downcase(),
+        line: line_at(yaml, off)
+      }
+    end ++ checkout_pins_by_text(label, yaml)
+  end
+
+  # Fallback for YAML outside the parser's subset (Codex on #1103): a
+  # `repository: hyperpolymath/hypatia` and a sibling `ref:` at the same
+  # indentation, in either order, with nothing shallower between them.
+  defp checkout_pins_by_text(label, yaml) do
+    lines = String.split(yaml, "\n")
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.flat_map(fn {line, n} ->
+      with [_, ind] <-
+             Regex.run(
+               ~r/^([ \t]*)(?:-[ \t]+)?["']?repository["']?[ \t]*:[ \t]*["']?hyperpolymath\/hypatia["']?[ \t]*$/i,
+               line
+             ),
+           {ref, ref_n} <- sibling_ref(lines, n, String.length(ind)) do
+        [%{file: label, key: "checkout ref", sha: String.downcase(ref), line: ref_n}]
+      else
+        _ -> []
+      end
+    end)
+  end
+
+  # The block of `n`'s siblings: lines at least as deep as `depth`, up and
+  # down, stopping at a shallower non-blank line.
+  defp sibling_ref(lines, n, depth) do
+    block = fn range ->
+      range
+      |> Enum.map(&{Enum.at(lines, &1 - 1), &1})
+      |> Enum.take_while(fn {l, _} -> String.trim(l) == "" or indent(l) >= depth end)
+    end
+
+    (block.((n - 1)..1//-1) ++ block.((n + 1)..length(lines)//1))
+    |> Enum.find_value(fn {l, i} ->
+      if indent(l) == depth do
+        case Regex.run(~r/^[ \t]*["']?ref["']?[ \t]*:[ \t]*["']?([0-9a-fA-F]{40})["']?[ \t]*$/, l) do
+          [_, sha] -> {sha, i}
+          _ -> nil
+        end
+      end
+    end)
+  end
+
+  defp indent(line), do: byte_size(line) - byte_size(String.trim_leading(line))
+
+  # A checkout of hyperpolymath/hypatia, read from the parsed workflow so a
+  # blank line or any number of sibling inputs in `with:` cannot hide it.
+  defp hypatia_checkout_pins(label, content) do
+    case Hypatia.Workflow.parse(content, label) do
+      {:ok, %Hypatia.Workflow{jobs: jobs}} ->
+        for job <- jobs,
+            step <- job.steps,
+            is_binary(step.uses),
+            String.starts_with?(String.downcase(step.uses), "actions/checkout@"),
+            repo = Hypatia.Workflow.input(step, "repository"),
+            is_binary(repo) and String.downcase(repo) == "hyperpolymath/hypatia",
+            ref = Hypatia.Workflow.input(step, "ref"),
+            is_binary(ref) and Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, ref) do
+          %{file: label, key: "checkout ref", sha: String.downcase(ref), line: step.line}
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  defp line_at(text, offset),
+    do: text |> binary_part(0, offset) |> String.split("\n") |> length()
+
+  # The rule-order policy names the scanner it was written against.
+  defp hypatia_policy_pin(label, content) do
+    with {:ok, %{"scanner" => %{"repository" => repo, "commit" => c}}}
+         when is_binary(repo) and is_binary(c) <- Jason.decode(content),
+         "hyperpolymath/hypatia" <- String.downcase(repo),
+         true <- Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, c) do
+      [%{file: label, key: "scanner.commit", sha: String.downcase(c), line: nil}]
+    else
+      _ -> []
     end
   end
 
