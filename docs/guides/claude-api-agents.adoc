@@ -129,11 +129,13 @@ answers it.
 |Medium pull request |$6 to $15
 |Design note or ruling packet, opus at high effort |$3 to $12
 |Idris2 model with its fixtures |$10 to $30
-|The whole E0 close-out, 16 work orders, with 30 percent for rework |$115 to $315
+|The whole E0 close-out, 17 work orders, with 30 percent for rework |$115 to $315
 |===
 
-The first 3 work orders (`E0-06`, `E0-01`, `E0-13`) are the test run. After
-them, replace this table with the measured figures from the ledger.
+The first 4 work orders (`E0-17`, `E0-06`, `E0-01`, `E0-13`) are the test run.
+After them, replace this table with the measured figures from the ledger.
+`E0-17` goes first: until it merges, each `mix test` adds test rows to a
+sibling `gitbot-fleet` checkout.
 
 == The budget
 
@@ -158,9 +160,14 @@ month. Review time and CI time are likely to limit the work before the credit do
 [source,bash]
 ----
 export ANTHROPIC_API_KEY=...        # from the Console workspace; never in a file that git tracks
-scripts/api-agents/run-work-order.sh E0-06 --dry-run   # prints the command
-scripts/api-agents/run-work-order.sh E0-06             # runs it
+scripts/api-agents/run-work-order.sh E0-17 --dry-run   # prints the command
+scripts/api-agents/run-work-order.sh E0-17             # runs it
 ----
+
+The script runs a work order only in a checkout of the repository that the
+work order names. `E0-02` and `E0-12` are for `gitbot-fleet`, and the skills,
+the agents and the headless profile are in hypatia only. Put them in
+`gitbot-fleet` before those 2 runs, or run those 2 with a person.
 
 The script reads the header of the work order (`:wo-model:`, `:wo-effort:`,
 `:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`). It refuses to run when the
