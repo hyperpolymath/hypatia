@@ -5,14 +5,11 @@ erlang = "27.3.4.19"  # >= 27.3.4.13: :httpc drops authorization on cross-origin
 elixir = "1.17.3-otp-27"
 node = "latest"
 rust = "latest"   # provides cargo, rustfmt and clippy
-go = "latest"     # provides gofmt
 zig = "0.16.0"   # pinned; .github/workflows/zig.yml asserts this equals ZIG_VERSION
 java = "latest"
 bun = "latest"
 
 # Package managers
-npm = "latest"
-yarn = "latest"
 pnpm = "latest"
 
 # Formatting & Linting
