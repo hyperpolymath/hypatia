@@ -964,6 +964,10 @@ defmodule Hypatia.Rules.CiFailureTriage do
   defp strip_line_comment([?\\, c | rest], ?", acc),
     do: strip_line_comment(rest, ?", [c, ?\\ | acc])
 
+  # `''` inside a single-quoted scalar is one literal quote, not its end.
+  defp strip_line_comment([?', ?' | rest], ?', acc),
+    do: strip_line_comment(rest, ?', [?', ?' | acc])
+
   defp strip_line_comment([q | rest], q, acc), do: strip_line_comment(rest, nil, [q | acc])
   defp strip_line_comment([c | rest], q, acc), do: strip_line_comment(rest, q, [c | acc])
 
@@ -1026,8 +1030,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # the scan's `HYPATIA_SHA` env, the verdict grid's `--hypatia-ref`, a
   # checkout of hyperpolymath/hypatia (dogfood-gate's oracle) and the
   # rule-order policy's `scanner.commit`. All must name one commit.
-  @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-f]{40})/im
-  @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-f]{40})/i
+  @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/m
+  @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/
   @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})/i
 
   @doc """
@@ -1074,30 +1078,94 @@ defmodule Hypatia.Rules.CiFailureTriage do
   defp hypatia_pins(label, content) do
     content = String.replace(content, "\r\n", "\n")
 
-    if String.ends_with?(label, ".json") do
-      hypatia_policy_pin(label, content)
-    else
-      yaml = strip_yaml_comments(content)
+    cond do
+      String.ends_with?(label, ".json") ->
+        hypatia_policy_pin(label, content)
 
-      # Comment stripping keeps every line, so an offset in `yaml` is an
-      # offset in the file. Each occurrence is its own site (two jobs passing
-      # the same old `--hypatia-ref` are two edits).
-      flags =
-        for {key, re} <- [
-              {"HYPATIA_SHA", @hypatia_env},
-              {"HYPATIA_SHA", @hypatia_env_flow},
-              {"--hypatia-ref", @hypatia_flag}
-            ],
-            [_, {off, len}] <- Regex.scan(re, yaml, return: :index) do
+      match?({:ok, _}, Hypatia.Kyaml.parse(content)) ->
+        # Read from the parsed YAML, so comments, quoting (`''`), aliases and
+        # folded or literal block scalars mean what YAML says they mean
+        # (Codex on #1103).
+        {:ok, docs} = Hypatia.Kyaml.parse(content)
+        Enum.flat_map(docs, &walk_pins(label, &1)) ++ hypatia_checkout_pins(label, content)
+
+      true ->
+        hypatia_pins_by_text(label, content)
+    end
+  end
+
+  # `HYPATIA_SHA` is case-sensitive: a lowercase `hypatia_sha` does not set
+  # the scanner on a Linux runner (Codex on #1103).
+  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:\s|\\\n)+)["']?([0-9a-fA-F]{40})\b/
+
+  defp walk_pins(label, node) do
+    case node do
+      %{kind: :map, entries: es} ->
+        Enum.flat_map(es, fn e ->
+          env_pin(label, e) ++ walk_pins(label, e.key) ++ walk_pins(label, e.value)
+        end)
+
+      %{kind: :seq, items: items} ->
+        Enum.flat_map(items, &walk_pins(label, &1))
+
+      # An alias is read where its anchor is defined; walking it again here
+      # would count one pin twice.
+      %{kind: :alias} ->
+        []
+
+      %{kind: :string, value: v} = scalar when is_binary(v) ->
+        for [{off, _}, {s_off, s_len}] <- Regex.scan(@hypatia_ref_flag, v, return: :index) do
           %{
             file: label,
-            key: key,
-            sha: yaml |> binary_part(off, len) |> String.downcase(),
-            line: line_at(yaml, off)
+            key: "--hypatia-ref",
+            sha: v |> binary_part(s_off, s_len) |> String.downcase(),
+            line: scalar_line(scalar, off)
           }
         end
 
-      flags ++ hypatia_checkout_pins(label, content)
+      _ ->
+        []
+    end
+  end
+
+  defp env_pin(label, %{key: %{value: "HYPATIA_SHA"}, value: value, loc: {line, _}}) do
+    case Hypatia.Kyaml.deref(value) do
+      %{value: v} when is_binary(v) ->
+        if Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, v),
+          do: [%{file: label, key: "HYPATIA_SHA", sha: String.downcase(v), line: line}],
+          else: []
+
+      _ ->
+        []
+    end
+  end
+
+  defp env_pin(_label, _entry), do: []
+
+  # A block scalar maps value offsets to source lines with `segments`; any
+  # other scalar sits on its own line.
+  defp scalar_line(%{segments: [_ | _] = segs}, off) do
+    segs |> Enum.take_while(fn {o, _} -> o <= off end) |> List.last({0, nil}) |> elem(1)
+  end
+
+  defp scalar_line(%{loc: {line, _}}, _off), do: line
+
+  # Unparseable YAML: fall back to text, comments stripped.
+  defp hypatia_pins_by_text(label, content) do
+    yaml = strip_yaml_comments(content)
+
+    for {key, re} <- [
+          {"HYPATIA_SHA", @hypatia_env},
+          {"HYPATIA_SHA", @hypatia_env_flow},
+          {"--hypatia-ref", @hypatia_flag}
+        ],
+        [_, {off, len}] <- Regex.scan(re, yaml, return: :index) do
+      %{
+        file: label,
+        key: key,
+        sha: yaml |> binary_part(off, len) |> String.downcase(),
+        line: line_at(yaml, off)
+      }
     end
   end
 

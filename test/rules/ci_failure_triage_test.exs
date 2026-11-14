@@ -689,6 +689,34 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "apos.yml", wf)) == []
     end
 
+    # Codex on #1103, second round: read pins the way YAML does.
+    test "a doubled quote before a hash does not hide a live pin" do
+      wf = "env: {NOTE: 'Don''t # special', HYPATIA_SHA: #{@old}}\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "dq.yml", wf))
+      assert Enum.any?(found, &(&1.file == "dq.yml" and &1.sha == @old))
+    end
+
+    test "a folded run scalar carries its flag across the line break" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: >\n          grid --hypatia-ref\n          #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "fold.yml", wf))
+      assert [%{file: "fold.yml", line: 5}] = Enum.filter(found, &(&1.file == "fold.yml"))
+    end
+
+    test "an aliased HYPATIA_SHA is a pin" do
+      wf = "env:\n  PIN: &h #{@old}\n  HYPATIA_SHA: *h\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "alias.yml", wf))
+
+      assert [%{file: "alias.yml", line: 3, key: "HYPATIA_SHA"}] =
+               Enum.filter(found, &(&1.file == "alias.yml"))
+    end
+
+    test "a lowercase hypatia_sha is not a pin" do
+      wf = "env:\n  hypatia_sha: #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "lc.yml", wf)) == []
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []
@@ -738,6 +766,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "a quoted hash before a flow pin does not hide the pin" do
       contents = %{
         "a.yml" => "env: {NOTE: \"use # carefully\", PA_SHA: #{@a}}\n",
+        "b.yml" => "env:\n  PA_SHA: #{@b}\n"
+      }
+
+      assert length(T.check_scanner_pin_drift(contents)) == 2
+    end
+
+    test "a doubled single quote before a hash keeps the flow pin" do
+      contents = %{
+        "a.yml" => "env: {NOTE: 'Don''t # here', PA_SHA: #{@a}}\n",
         "b.yml" => "env:\n  PA_SHA: #{@b}\n"
       }
 
