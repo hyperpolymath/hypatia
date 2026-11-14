@@ -126,6 +126,12 @@ mix deps.get --check-locked
 mix test
 ----
 
+Where mise is absent (a container or a cloud session on Ubuntu 24.04 x86_64),
+link:scripts/dev/install-toolchain.sh[`scripts/dev/install-toolchain.sh`]
+installs the same pinned Erlang, Elixir and Zig, and `just`, from archives
+that it checks against pinned SHA-256 values. Add `--with-idris2` to build
+Idris 2 for the proof gate (about 10 minutes).
+
 Installing the toolchain and Hex does not vendor project dependencies:
 `mix deps.get` needs network access to the configured Hex repository (normally
 `repo.hex.pm`). In a restricted environment, use an approved Hex mirror or a
