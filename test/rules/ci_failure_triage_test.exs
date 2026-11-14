@@ -424,6 +424,24 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
     end
 
+    test "a quoted runner annotation mid-line does not outrank a test failure" do
+      log =
+        "  expected \"##[error]worker did not succeed (result: cancelled)\"\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n" <>
+          "5 tests, 1 failure\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      refute p.rule == T.id("runner_cancelled")
+      assert p.layer == :code
+    end
+
+    test "a timestamped runner annotation is still read as a cancellation" do
+      log = "2026-11-14T13:52:24.3285804Z ##[error]lint did not succeed (result: cancelled)\n"
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
     test "startup_failure with no log is a referral, never a rerun" do
       %{primary: p} = T.classify("", %{conclusion: "startup_failure"})
       assert p.rule == T.id("workflow_startup_failure")
