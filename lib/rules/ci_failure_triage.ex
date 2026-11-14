@@ -464,7 +464,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "dependency_advisory",
       layer: :code,
-      patterns: [~r/\bRUSTSEC-\d{4}-\d{4}\b/, ~r/error: \d+ vulnerabilit(y|ies) found/],
+      patterns: [
+        ~r/\bRUSTSEC-\d{4}-\d{4}\b/,
+        ~r/error: \d+ vulnerabilit(y|ies) found/,
+        # A wrapper script's per-lockfile verdict, with no RUSTSEC id in the
+        # log (echidna#504: `fuzz/Cargo.lock: FAILED (vulnerabilities found)`).
+        ~r/\bCargo\.lock: FAILED \(vulnerabilities found\)/
+      ],
       # An advisory id in a test or fixture is not an audit failure.
       context: [~r/\d+ vulnerabilit(y|ies) found|cargo[- ]audit|cargo[- ]deny|Crate:\s+\S+/i],
       action: :report,
@@ -474,6 +480,22 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason:
         "A dependency has a published advisory (cargo audit). A person bumps or " <>
           "replaces it; never ignore the advisory to pass."
+    },
+    %{
+      name: "shellcheck_findings",
+      layer: :code,
+      # ShellCheck's own finding form, `SC2030 (info): ...` (trope-checker#116,
+      # exit 123). The code and severity together; a bare "SC2030" in prose
+      # or a disable directive does not match.
+      patterns: [~r/\bSC\d{4} \((?:error|warning|info|style)\): /],
+      context: [~r/shellcheck|^In \S+ line \d+:/im],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "ShellCheck found problems in a shell script. A person fixes the script " <>
+          "(or adds a reasoned inline disable); never weaken the lint to pass."
     },
     %{
       name: "review_rate_limited",

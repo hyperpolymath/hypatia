@@ -59,6 +59,11 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"sonar-not-authorized.txt", "sonar_not_authorized", :owner},
     # #u5 fixer, 2026-11-14: aerie#103, SONAR_TOKEN refused (HTTP 403).
     {"sonar-token-403.txt", "sonar_not_authorized", :owner},
+    # Same batch: a cargo-audit wrapper with no RUSTSEC id (echidna#504) and
+    # ShellCheck findings in the tty form (trope-checker#116). Reconstructed
+    # from the reported lines.
+    {"cargo-audit-lockfile-failed.txt", "dependency_advisory", :report},
+    {"shellcheck-findings.txt", "shellcheck_findings", :report},
     {"capnp-generated-e0451.txt", "compile_error", :report},
     {"codeql-config-error.txt", "codeql_setup_conflict", :owner},
     {"dependabot-bun.txt", "dependabot_ecosystem_mismatch", :fix},
@@ -485,6 +490,16 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
       %{matches: ms} = T.classify(log, %{})
       refute Enum.any?(ms, &(&1.rule == T.id("sonar_not_authorized")))
+    end
+
+    test "a ShellCheck disable directive or a bare code is not a finding" do
+      log =
+        "Running shellcheck on scripts/\n" <>
+          "# shellcheck disable=SC2030 -- PASS is read in the same subshell\n" <>
+          "see SC2031 in the wiki\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("shellcheck_findings")))
     end
 
     test "startup_failure with no log is a referral, never a rerun" do
