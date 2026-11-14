@@ -2,9 +2,9 @@
 
 === Overview
 
-Hypatia’s neural subsystem consists of *5 neural networks* orchestrated
+Hypatia’s neural subsystem consists of *8 neural networks* orchestrated
 by a central *Neural.Coordinator* GenServer in a *hub-and-spoke*
-topology. The coordinator aggregates predictions from all 5 networks and
+topology. The coordinator aggregates predictions from all 8 networks and
 provides a unified intelligence layer for the safety triangle pipeline.
 
 *Logtalk is NOT part of the neural architecture.* The Logtalk rule files
