@@ -1,0 +1,259 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Running hypatia work on Claude API credit
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-14
+:toc:
+
+== What this guide is for
+
+This guide says how to spend Claude API credit on hypatia work without waste:
+which route to use, which model for which task, what a run costs, and how to
+keep the spend inside a monthly budget. The first use is the E0 close-out
+(`docs/operations/e0-closeout/`).
+
+Each figure has one of 3 labels. *Measured*: a run on 2026-11-14 produced it.
+*Published*: Anthropic states it, and the source is in <<sources>>. *Estimate*:
+no run has produced it yet.
+
+== The routes
+
+[cols="2,3,3",options="header"]
+|===
+|Route |Use it for |Limits
+
+|Headless Claude Code (`claude -p` with an API key). *The default.*
+|One work order for each run, on a machine or a container that has the
+toolchain. It reads the skills, the agents and the settings of this repository.
+|The cost cap of a run is a client estimate. The hard stop is in the Console.
+
+|Message Batches API
+|Many independent items that need no tool loop of your own: labels,
+judgements, summaries. Half price. Most batches end within 1 hour.
+|Your own tools cannot answer in the middle of a request. The server tools
+(web search, web fetch, code execution) do work. A batch that is not finished
+after 24 hours expires, and a request in it then ends as `expired`. Check
+each result, and send the expired requests again.
+
+|Managed Agents
+|An unattended session in a sandbox that Anthropic hosts, with a hard dollar
+cap for each session.
+|Beta. Each session must install the toolchain. It needs a GitHub token and
+a GitHub connector. Commit signing is not solved. Not set up for hypatia.
+
+|A cloud session on the Claude plan
+|Planning, review and supervision with a person.
+|It is billed to the plan, not to the API credit. Each agent start carries a
+large fixed context (see <<cost>>).
+|===
+
+== Prices
+
+Published list prices in US dollars for each million tokens, read on 2026-11-14.
+Read the page again before you plan with them.
+
+[cols="2,1,1,1,1,1,1",options="header"]
+|===
+|Model |Input |Cache write (5 min) |Cache read |Output |Batch input |Batch output
+
+|Claude Haiku 5.5, prompt up to 100,000 tokens |0.10 |0.125 |0.01 |0.50 |0.05 |0.25
+|Claude Haiku 5.5, prompt over 100,000 tokens |0.50 |0.625 |0.05 |2.50 |0.25 |1.25
+|Claude Sonnet 5.5 |2 |2.50 |0.10 |10 |1 |5
+|Claude Opus 5.5 |4 |5 |0.20 |20 |2 |10
+|Claude Fable 5.2 |8 |10 |0.20 |40 |4 |20
+|===
+
+Three things follow from the table:
+
+* Output costs 5 times as much as input. A long explanation costs more than a long read.
+* A cache read costs 2.5 to 10 percent of fresh input. A long session is paid
+  mostly in cache reads, as long as its start does not change.
+* Haiku costs 5 times as much when a prompt passes 100,000 tokens. Keep a
+  Haiku run short and give it an exact file list.
+
+== The model for each task
+
+[cols="3,1,1",options="header"]
+|===
+|Task |Model |Effort
+
+|Mechanical edits and checks that a command can verify |haiku |medium
+|Implementation where the design is decided |sonnet |medium
+|Review of a diff against its work order |opus for learning code, else sonnet |medium
+|Design, a ruling packet, work across repositories |opus |high
+|Idris2 and other proof work |opus |high
+|A task where opus at high effort failed, with the failure stated |fable |high
+|===
+
+The estate rule is the reason: upkeep does not get a top model, and proof work
+and hard design do. Raise a model or an effort only after a failed run, and
+write down what failed.
+
+Published, for scale: on Anthropic's coding benchmark, Sonnet 5.5 at its
+default effort cost $0.11 for each solved task, Opus 5.5 at its default cost
+$0.22, and Fable 5.2 at its default cost $1.39 (on 463 of the 478 problems,
+where Opus 5.5 also cost $0.22). Opus 5.5 at low effort solved
+about as many tasks as Sonnet 5.5 at its default, for about 7 percent more.
+Those tasks are smaller than a hypatia work order. Use the numbers to compare
+models, not to predict a run.
+
+[[cost]]
+== What a run costs
+
+=== Measured on 2026-11-14
+
+[cols="3,2,2",options="header"]
+|===
+|Run |Tokens |List cost
+
+|Read-only audit of 1 repository against 14 to 17 claims, Sonnet 5.5 (3 runs)
+|1.0 to 1.3 million cache read, about 160,000 cache write, 9,000 to 13,000 output
+|about $0.60 each
+
+|The same kind of audit, deeper, Opus 5.5 (1 run, 33 tool calls)
+|4.6 million cache read, 181,000 cache write, 13,000 output
+|about $2.10
+|===
+
+Those audits ran as subagents of a cloud session with many plugins. The first
+request of each one wrote about 120,000 tokens of fixed context: the system
+prompt, the tool list and the instructions. That alone costs about $0.30 on
+Sonnet 5.5, $0.60 on Opus 5.5 and $1.20 on Fable 5.2. A headless run in this
+repository carries less. How much less is not measured yet: the first run
+answers it.
+
+=== Estimates, not yet measured
+
+[cols="3,2",options="header"]
+|===
+|Work |Cost of one
+
+|Small pull request: 1 module and its test, sonnet, with an opus review |$2 to $5
+|Medium pull request |$6 to $15
+|Design note or ruling packet, opus at high effort |$3 to $12
+|Idris2 model with its fixtures |$10 to $30
+|The whole E0 close-out, 17 work orders, with 30 percent for rework |$115 to $315
+|===
+
+The first 4 work orders (`E0-17`, `E0-06`, `E0-01`, `E0-13`) are the test run.
+After them, replace this table with the measured figures from the ledger.
+`E0-17` goes first: until it merges, each `mix test` adds test rows to a
+sibling `gitbot-fleet` checkout.
+
+== The budget
+
+The budget on 2026-11-14 is about 150 pounds each month, which is about $198
+at the rate of 2026-11-13 (1.3227). Four controls keep the spend inside it.
+The first 3 are in the Console and only the owner can set them.
+
+. *A workspace and a key for this programme only.* Then the Console shows this
+  spend apart from other use, and the key can be withdrawn alone.
+. *Prepaid credit with automatic reload off.* When the credit of the month is
+  spent, the requests stop. This is the hard stop.
+. *A spend limit on the workspace*, set to the budget of the month.
+. *A cap for each run.* The work order names it, and the launch script passes
+  it as `--max-budget-usd`. Claude Code checks it against its own estimate,
+  and the spend can pass it, so each cap leaves room.
+
+At about $10 for each merged pull request, the budget pays for about 20 each
+month. Review time and CI time are likely to limit the work before the credit does.
+
+== Run a work order
+
+[source,bash]
+----
+export ANTHROPIC_API_KEY=...        # from the Console workspace; never in a file that git tracks
+scripts/api-agents/run-work-order.sh E0-17 --dry-run   # prints the command
+scripts/api-agents/run-work-order.sh E0-17             # runs it
+----
+
+The script runs a work order only in a checkout of the repository that the
+work order names. `E0-02` and `E0-12` are for `gitbot-fleet`, and the skills,
+the agents and the headless profile are in hypatia only. Put them in
+`gitbot-fleet` before those 2 runs, or run those 2 with a person.
+
+The script reads the header of the work order (`:wo-model:`, `:wo-effort:`,
+`:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`). It refuses to run when the
+key is not set, because Claude Code would then bill the signed-in plan. It
+also refuses a working tree with changes, an argument that it does not know,
+an agent whose model or effort differs from the work order, and a locale that
+is not UTF-8. It reads the project settings and the headless profile only, so
+a personal permission rule does not widen the run. It writes one line to the
+ledger for each run (`docs/operations/e0-closeout/templates/ledger-line.adoc`).
+
+The script, the profile, the agents and the work orders are the other parts
+of the same kit: `scripts/api-agents/`, `.claude/profiles/`, `.claude/agents/`
+and `docs/operations/e0-closeout/`. The command works when those parts are in
+the checkout.
+
+Sum of the current month:
+
+[source,bash]
+----
+jq -s --arg m "$(date -u +%Y-%m)" \
+  'map(select(.ended | startswith($m)) | .cost_usd // 0) | add // 0' \
+  "${XDG_STATE_HOME:-$HOME/.local/state}/hypatia/api-ledger.jsonl"
+----
+
+The ledger holds client estimates. The Console holds the bill. Compare them
+once each week.
+
+== Rules that save money
+
+* *One work order for each session.* Each request sends the whole
+  conversation again, so a long session costs more for each turn.
+* *Do not wait for CI inside a session.* The prompt cache lasts 5 minutes by default. A
+  session that waits 12 minutes for CI pays a full cache write when it
+  continues: about $0.40 on Sonnet 5.5 for a context of 150,000 tokens. End
+  the run at the draft pull request. If CI fails, start a short new run with
+  the failing job as its task.
+* *Do not change the model or the effort in the middle of a run.* That starts
+  the cache again.
+* *Give bulk reading to a cheaper subagent* only when the work is large. Each
+  start has a fixed cost.
+* *Where a checker can judge the result, start low.* Run at the lower setting
+  and repeat only the failures higher. Published: about 40 percent less cost
+  for the same pass rate on Anthropic's coding runs.
+* *A run that reaches its cap is a finding about the work order.* Make the
+  work order smaller or clearer. Do not raise the cap and run again.
+* *Work with no tool loop of your own goes to the Batches API.* Classification of review
+  comments (experiment E4 of the ultraplan) is such work.
+
+== Permissions and secrets
+
+* `.claude/settings.json` holds the rules for each session in this repository.
+  `.claude/profiles/e0-headless.json` adds the rules of an unattended run: it
+  can commit, push a branch and open a draft pull request, and it cannot
+  merge, approve, comment or fetch from the web.
+* A permission rule is not a security boundary. The limits that hold are the
+  scope of the GitHub token and the branch rules.
+* Give an unattended run its own fine-grained GitHub token: this repository
+  (and `gitbot-fleet` for its 2 work orders), contents and pull requests with
+  write access, nothing else. No administration right, and no right to pass
+  a branch rule.
+* Put the API key in the environment of the run. Do not write it to a file
+  that git tracks, to a pull request or to a chat.
+* A run on a workstation signs its commits with the key of that workstation.
+  A run in a cloud container makes commits with no signature. That is a
+  platform matter. Do not put a signing key into a container to change it.
+
+[[sources]]
+== Sources
+
+All read on 2026-11-14.
+
+* Prices: https://platform.claude.com/docs/en/about-claude/pricing
+* Cost and model guidance, with the benchmark figures:
+  https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence
+* Headless mode and the command-line flags: https://code.claude.com/docs/en/headless
+  and https://code.claude.com/docs/en/cli-reference
+* Permission rules: https://code.claude.com/docs/en/permissions
+* Batches: https://platform.claude.com/docs/en/build-with-claude/batch-processing
+* Exchange rate: the reference rate of 2026-11-13 from https://www.frankfurter.dev
+
+== When to update this memo
+
+Update the prices and the date when the price page changes. Replace the
+estimates with measured figures after the test run. Update the budget when
+the owner changes it. Remove the Managed Agents row when someone sets it up
+for hypatia or decides against it.
