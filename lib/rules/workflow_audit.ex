@@ -4632,10 +4632,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     by_name = Map.new(parsed, fn {filename, wf} -> {Path.basename(filename), {filename, wf}} end)
 
     scans =
-      for {filename, %{triggers: triggers, jobs: jobs}} <- parsed,
+      for {filename, %{triggers: triggers, jobs: jobs, doc: doc}} <- parsed,
           job <- jobs,
           scan <- job_scans(job, filename, triggers, by_name),
-          do: scan
+          do: Map.put_new(scan, :wf_doc, doc)
 
     pr_scans =
       Enum.filter(scans, fn sc ->
@@ -4697,7 +4697,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       is_binary(job.uses) and String.starts_with?(job.uses, "./.github/workflows/") ->
         case Map.get(by_name, Path.basename(String.trim(job.uses))) do
-          {callee_file, %{jobs: callee_jobs}} ->
+          {callee_file, %{jobs: callee_jobs, doc: callee_doc}} ->
             for callee_job <- callee_jobs,
                 scan <- step_scans(callee_job),
                 do:
@@ -4705,7 +4705,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
                     file: callee_file,
                     job: callee_job,
                     triggers: triggers,
-                    guards: [job.if, callee_job.if, scan.step.if]
+                    guards: [job.if, callee_job.if, scan.step.if],
+                    wf_doc: callee_doc
                   })
 
           nil ->
@@ -4780,8 +4781,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp full_history_scan?(%{kind: :rail}, _events), do: true
 
-  defp full_history_scan?(%{kind: kind, step: step, job: job, index: i}, events) do
-    deep? = deep_checkout_before?(job, i)
+  defp full_history_scan?(%{kind: kind, step: step, job: job, index: i} = sc, events) do
+    deep? = deep_checkout_before?(job, i, events, Map.get(sc, :wf_doc))
 
     cond do
       kind == :action ->
@@ -4811,11 +4812,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # An actions/checkout of this repository (no `repository:` input) with
-  # `fetch-depth: 0`, before step `i` of the job. Read from the parsed step:
-  # the job text holds values, not keys.
-  defp deep_checkout_before?(job, i) do
+  # `fetch-depth: 0`, before step `i` of the job, that runs on one of the
+  # scan's non-PR `events` (its own `if:` narrows them). Read from the parsed
+  # step: the job text holds values, not keys.
+  defp deep_checkout_before?(job, i, events, wf_doc) do
     steps = job.steps || []
     scanner = Enum.at(steps, i)
+    non_pr = Enum.filter(events, &(&1 in @non_pr_events))
 
     steps
     |> Enum.take(i)
@@ -4823,23 +4826,53 @@ defmodule Hypatia.Rules.WorkflowAudit do
       is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
         Hypatia.Workflow.input(step, "fetch-depth") == "0" and
         Hypatia.Workflow.input(step, "repository") in [nil, "", "${{ github.repository }}"] and
-        feeds?(Hypatia.Workflow.input(step, "path"), scanner)
+        runs_on_any?(step.if, non_pr) and
+        feeds?(Hypatia.Workflow.input(step, "path"), scanner, job, wf_doc)
     end)
   end
 
-  # A checkout into `path:` feeds the scanner only when the scanner names
-  # that path (a `--source`, `file://` or `working-directory`); a checkout at
-  # the workspace root feeds a scanner run from there.
-  defp feeds?(path, _scanner) when path in [nil, "", ".", "./"], do: true
+  defp runs_on_any?(cond_text, events) do
+    case narrow_events(cond_text, events) do
+      :unknown -> false
+      narrowed -> narrowed != []
+    end
+  end
 
-  defp feeds?(path, scanner) do
+  # A checkout into `path:` feeds the scanner only when the scanner names
+  # that path (a `--source`, `file://`, or its working directory: the step's
+  # own, else the job's or the workflow's `defaults.run.working-directory`);
+  # a checkout at the workspace root feeds a scanner run from there.
+  defp feeds?(path, _scanner, _job, _wf_doc) when path in [nil, "", ".", "./"], do: true
+
+  defp feeds?(path, scanner, job, wf_doc) do
     path = String.trim_trailing(path, "/")
-    wd = scanner && Hypatia.Kyaml.get(scanner.node, "working-directory")
-    wd_text = wd && Hypatia.Workflow.text(wd)
+
+    wd_text =
+      [
+        scanner && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
+        default_wd(job && job.node),
+        default_wd(wf_doc)
+      ]
+      |> Enum.find(& &1)
+      |> case do
+        nil -> nil
+        node -> Hypatia.Workflow.text(node)
+      end
 
     String.trim_trailing(wd_text || "", "/") == path or
       (is_binary(scanner && scanner.run) and
          Regex.match?(~r/(?:--source[=\s]+|file:\/\/)\.?\/?#{Regex.escape(path)}\b/, scanner.run))
+  end
+
+  defp default_wd(nil), do: nil
+
+  defp default_wd(node) do
+    with defaults when not is_nil(defaults) <- Hypatia.Kyaml.get(node, "defaults"),
+         run when not is_nil(run) <- Hypatia.Kyaml.get(defaults, "run") do
+      Hypatia.Kyaml.get(run, "working-directory")
+    else
+      _ -> nil
+    end
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
