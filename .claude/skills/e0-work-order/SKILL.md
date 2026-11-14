@@ -15,9 +15,14 @@ Work order to run: `$ARGUMENTS`
 
 ## Procedure
 
-1. **Start from the newest `main`.** Run `git fetch origin main`. Find the
-   work order in `docs/operations/e0-closeout/work-orders/` on `origin/main`,
-   and start the branch that its `:wo-branch:` line names from `origin/main`.
+1. **Get on the branch of the work order.** Run `git fetch origin`. Find the
+   work order in `docs/operations/e0-closeout/work-orders/` on `origin/main`.
+   Its `:wo-branch:` line names the branch.
+   - First run (the branch does not exist, here or on `origin`): start it
+     from `origin/main` with `git switch -c <branch> origin/main`.
+   - Continued run (the branch exists): `git switch <branch>`. Keep its
+     commits. Do not start it again from `main`, and do not reset it.
+
    Do each later step on this branch, so that the code that you measure is
    the code that you change.
 2. **Read.** Read the whole work order. Read the "Rules for every run" part
@@ -26,7 +31,11 @@ Work order to run: `$ARGUMENTS`
    `main`. If one is not, stop and say which.
 4. **Check the toolchain.** Run `mix --version`. If it fails, run
    `scripts/dev/install-toolchain.sh` when that file exists and the system is
-   Ubuntu 24.04. In each other case, use `mise install erlang elixir`.
+   Ubuntu 24.04, and run `mix --version` again. If `mix` is still missing,
+   stop and report it. Do not continue without `mix`. On other systems the
+   person who starts the run installs the toolchain first:
+   `mise install erlang elixir`, with mise active in that shell
+   (`mise install` alone does not put the tools on `PATH`).
 5. **Measure the facts again.** Open each function that "Facts measured"
    names. Run each command that it names. Line numbers drift, so find the code
    by its function name. If a fact no longer holds, stop and report the
