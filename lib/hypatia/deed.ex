@@ -14,7 +14,7 @@ defmodule Hypatia.Deed do
       {head, items}
       item  = {:field, keyword, value} | {:clause, symbol, [item]}
       value = {:string, s} | {:symbol, s} | {:integer, n} | {:boolean, b}
-            | {:uuid5, s} | {:uuid8, s} | {:quoted, value} | {:list, [value]}
+            | {:uuid5, s} | {:uuid8, s} | {:uuid, s} | {:quoted, value} | {:list, [value]}
 
   It accepts a deed only when both the normative grammar and the gate would:
   `deed.abnf`, plus the gate's semantic checks (one string `:schema-version`,
@@ -362,6 +362,7 @@ defmodule Hypatia.Deed do
   defp value("\"" <> rest), do: string(rest, [])
   defp value("#u5\"" <> rest), do: tagged(:uuid5, string(rest, []))
   defp value("#u8\"" <> rest), do: uuid8(string(rest, []))
+  defp value("#uuid\"" <> rest), do: uuid(string(rest, []))
   defp value("#t" <> rest), do: {:ok, {:boolean, true}, rest}
   defp value("#f" <> rest), do: {:ok, {:boolean, false}, rest}
   defp value("(" <> rest), do: list_open(rest)
@@ -402,6 +403,16 @@ defmodule Hypatia.Deed do
   end
 
   defp uuid8(err), do: err
+
+  # uuid body: an opaque id, lowercase 8-4-4-4-12 hex (deed.abnf `uuid`). The
+  # reader keeps it as written; the gate (check-uuid-v8.sh) judges its version.
+  defp uuid({:ok, {:string, s}, _} = ok) do
+    if Regex.match?(~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/, s),
+      do: tagged(:uuid, ok),
+      else: {:error, "a #uuid body must be a lowercase 8-4-4-4-12 hex id"}
+  end
+
+  defp uuid(err), do: err
 
   # list = "(" [token-sep] [value *(token-sep value)] [token-sep] ")", as
   # v1.2.1 has it: a multi-line list may start on the line after "(", as the

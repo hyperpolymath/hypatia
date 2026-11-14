@@ -55,6 +55,22 @@ defmodule Hypatia.DeedTest do
              ]
     end
 
+    test "reads an opaque #uuid identity value (owner ruling g)" do
+      text = """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      (repo-deed :schema-version "1.0.0" :canonical-name "x"
+        :repo-uuid #uuid"642ad0c1-9ad5-839b-aaff-820f5a59c089"
+        :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e")
+      """
+
+      assert {:ok, {"repo-deed", items}} = Deed.parse(text)
+      assert {:field, "repo-uuid", {:uuid, "642ad0c1-9ad5-839b-aaff-820f5a59c089"}} in items
+      assert {:field, "beholding-chora", {:uuid, "0889b37b-defb-831f-973c-e119500db00e"}} in items
+
+      bad = String.replace(text, "0889b37b-defb-831f-973c-e119500db00e", "NOT-A-UUID")
+      assert {:error, _} = Deed.parse(bad)
+    end
+
     test "rejects what it cannot read" do
       hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n"
       assert {:error, _} = Deed.parse("(repo-deed :schema-version \"1.0.0\")")
