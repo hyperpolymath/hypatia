@@ -336,13 +336,32 @@ defmodule Hypatia.Workflow do
   defp mask(<<c, r::binary>>, q, _, _, qs?, ps, acc),
     do: mask(r, q, false, false, qs?, ps, [if(qs?, do: blank(c), else: c) | acc])
 
-  # After only blanks since a newline, `;`, `&`, `|`, `(` or the start.
+  # After only blanks since a newline, `;`, `&`, `|`, `(`, the start, or a
+  # reserved word that a command follows (`then`, `do`, `else`, ...; Codex
+  # on #1143).
+  @command_words ~w(then do else elif if while until ! {)
+
   defp command_start?(acc) do
     case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
       [] -> true
       [c | _] when c in [?\n, ?;, ?&, ?|, ?(] -> true
-      _ -> false
+      rest -> previous_word(rest) in @command_words and word_start_before?(rest)
     end
+  end
+
+  # The word that ends the (reversed) accumulator, and whether a command
+  # could start before it.
+  defp previous_word(rest) do
+    rest
+    |> Enum.take_while(&(is_integer(&1) and &1 not in [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(]))
+    |> Enum.reverse()
+    |> List.to_string()
+  end
+
+  defp word_start_before?(rest) do
+    rest
+    |> Enum.drop_while(&(is_integer(&1) and &1 not in [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(]))
+    |> command_start?()
   end
 
   defp blank(?\n), do: ?\n

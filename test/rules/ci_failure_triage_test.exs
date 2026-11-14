@@ -896,6 +896,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert [%{file: "ce.yml"}] = Enum.filter(found, &(&1.file == "ce.yml"))
     end
 
+    test "a case after then or do opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(if true; then case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac; fi)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr.yml", wf)) == []
+    end
+
     test "the word case as an argument does not open a case" do
       wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
       found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
