@@ -1,5 +1,5 @@
 ;; SPDX-License-Identifier: CC-BY-SA-4.0
-(repo-deed :schema-version "1.0.0" :canonical-name "x" :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+(repo-deed :schema-version "1.0.0" :canonical-name "x" :repo-uuid #u8"gv-clade-index:github.com/o/x" :beholding-chora #u8"chora:estate/github.com/o"
   (egress
     :policy "standards ADR-009"
     ; A secret-held endpoint and a public one, both without a run-time enforcer.

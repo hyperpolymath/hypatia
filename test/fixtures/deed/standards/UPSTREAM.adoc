@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= DEED grammar fixtures (vendored)
+
+Copied verbatim, SPDX headers intact, from `metadatastician/standards`
+`1-formats/deed/tools/fixtures/` at commit
+`b2aaeb0c142de45ca1ed6e7b29f548c979737f54` (main, 2026-11-14), where
+`deed.abnf` is v2.0.0:
+
+[cols="1,3"]
+|===
+| Directory | What it holds
+
+| `valid/`, `invalid/`
+| the core grammar and the gate's core semantic checks (line length, the
+  identity rule, `:schema-version`)
+
+| `heads/valid/`, `heads/invalid/`
+| filename dispatch to doc-heads (deed.abnf v1.4.0 J14, v2.0.0 S1)
+
+| `bang/valid/`, `bang/invalid/`
+| the bang token (deed.abnf v1.5.0, A7 J17)
+|===
+
+`invalid/inno-header_chora.deed` has no SPDX header on purpose: that is the
+defect it carries.
+
+`test/deed_conformance_test.exs` requires `Hypatia.Deed.parse/2` to accept
+every file under a `valid/` directory and refuse every file under an
+`invalid/` one, as `deed_lint.js FILE` does. The clause-profile fixtures
+(`anchor/`, `contractiles/`, `ecosystem/`, `edict/`, `egress/`,
+`rsr-scorecard/`, `state/`, `verb-descriptile/`) are not vendored here: their
+`invalid/` cases are refused by profile flags this reader does not run. The
+egress ones are vendored separately, in `../../deed_egress/`.
+
+Hypatia CI has no standards checkout, which is why these are copies. To run the
+test against a standards checkout instead, point `HYPATIA_DEED_FIXTURES` (or
+the `:hypatia, :deed_standards_fixtures` config key) at its
+`1-formats/deed/tools/fixtures` directory. The profile directories are then
+read too, and every file under their `valid/` directories must parse.
+
+To refresh: copy the six directories above from a newer standards commit, do
+not edit them here, and update the commit in this note.

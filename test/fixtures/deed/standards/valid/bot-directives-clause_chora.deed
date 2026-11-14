@@ -1,0 +1,18 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; Exercises the (bot-directives ...) clause shape of
+; mappings/agentic-neurosym-playbook-to-repo-deed.adoc section 6.
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "bot-directives-clause"
+  (bot-directives
+    ; allow and deny, a target and a config
+    (bot :name panicbot
+      :allow (assail assay diagnostics)
+      :deny (assault ambush)
+      (target :build "cargo build --release" :program "target/release/foo")
+      (config :min-severity low :timeout-seconds 300))
+    ; deny only: everything except these
+    (bot :name hypatia
+      :deny (ambush))
+    ; nothing declared: the bot's full suite, no dynamic target
+    (bot :name rhodibot)))

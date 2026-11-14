@@ -1010,7 +1010,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.write!(Path.join(repo, "x_chora.deed"), """
       ;; SPDX-License-Identifier: CC-BY-SA-4.0
       (repo-deed :schema-version "1.0.0" :canonical-name "x"
-        :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+        :repo-uuid #u8"chora-registry:github.com/o/x" :beholding-chora #u8"chora:estate/github.com/o"
         #{egress})
       """)
     end

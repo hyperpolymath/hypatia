@@ -1,0 +1,5 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed
+  :schema-version "1.0.0"
+:canonical-name "x" ; comment between
+  (lineage :type hub :parent "" :previous-names ()) )
