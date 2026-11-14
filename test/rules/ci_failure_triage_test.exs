@@ -442,6 +442,35 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert p.rule == T.id("runner_cancelled")
     end
 
+    test "a rollup with a cancelled and a failed job is not read as a cancellation" do
+      log =
+        "2026-11-14T13:52:24Z ##[error]lint did not succeed (result: cancelled)\n" <>
+          "2026-11-14T13:52:24Z ##[error]tests did not succeed (result: failure)\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
+    test "the security rollup's cancelled wording is a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n"
+
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
+    test "the security rollup with a cancelled and a failed scan is not a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n" <>
+          "2026-11-14T15:38:53Z ##[error]Rust dependency audit did not complete " <>
+          "successfully (result=failure) -- no verdict was produced\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
     test "startup_failure with no log is a referral, never a rerun" do
       %{primary: p} = T.classify("", %{conclusion: "startup_failure"})
       assert p.rule == T.id("workflow_startup_failure")

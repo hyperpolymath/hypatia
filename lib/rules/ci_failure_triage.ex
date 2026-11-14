@@ -89,7 +89,17 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # line (after the optional log timestamp), so a test or program that
         # prints the phrase, or quotes the annotation mid-line, does not
         # hide a failure.
-        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*did not succeed \(result: cancelled\)/
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*did not succeed \(result: cancelled\)/,
+        # The security rollup's wording of the same thing (hypatia#1093,
+        # run 43611131531): `<check> did not complete successfully
+        # (result=cancelled)`.
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*did not complete successfully \(result=cancelled\)/
+      ],
+      # A rollup that also reports a needed job as failed is not "just
+      # cancelled": the failure must not be hidden behind the cancelled
+      # sibling, so the whole rule stands down.
+      unless: [
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*(?:did not succeed \(result: failure\)|did not complete successfully \(result=failure\))/m
       ],
       action: :none,
       retries: 0,
@@ -986,8 +996,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # ── internals ─────────────────────────────────────────────────────────
 
   defp first_hit(rule, lines, log) do
-    if in_context?(rule, log), do: scan_lines(rule, lines)
+    if in_context?(rule, log) and not excluded?(rule, log), do: scan_lines(rule, lines)
   end
+
+  # A rule with `:unless` stands down when any of those patterns appears
+  # anywhere in the log (evidence that the signature would hide a failure).
+  defp excluded?(%{unless: pats}, log), do: Enum.any?(pats, &Regex.match?(&1, log))
+  defp excluded?(_rule, _log), do: false
 
   # A rule with `:context` fires only when one of those patterns appears
   # somewhere in the whole log (the signature line alone is ambiguous).
