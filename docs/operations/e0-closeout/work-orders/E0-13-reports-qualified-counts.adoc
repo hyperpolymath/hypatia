@@ -42,6 +42,22 @@ successes. For them the raw count is the intended denominator.
 `confidence_trend/1` returns an atom (`:improving`, `:declining`, `:stable` or
 `:insufficient_data`), not a report with keys. It has no caller in `lib/`.
 
+== Theory inputs
+
+Read on 2026-11-14 in the second theory recon. No prover was run for this
+work order. Use each result as a design rule. Its match to Hypatia is a
+reading, not a proof.
+
+* A count does not replace a "which". A count of lost items is not a
+  morphism of the grade that says which items (resource-algebra `f0818f2`,
+  claim F-10; machine-checked there). So a report that shows a count keeps
+  the way back to the rows.
+* A bottleneck is not a sum, and a bound on what is held is not a bound on
+  cost (the same repository, `Separation.agda`, claims S-1 and S-4). Do not
+  show one of these under the name of the other.
+* The counts of a report add up to the number of rows read. A row in no
+  count is a defect of the report.
+
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.

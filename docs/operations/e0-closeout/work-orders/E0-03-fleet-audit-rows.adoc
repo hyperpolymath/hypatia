@@ -49,6 +49,21 @@ Commit `4d7f059`, read on 2026-11-14.
   with an unknown `"verification"` value falls into `ignored`.
 * Ran: `mix test test/learning_scheduler_test.exs` gave 0 failures.
 
+== Theory inputs
+
+Read on 2026-11-14 in the second theory recon. No prover was run for this
+work order. Use each result as a design rule. Its match to Hypatia is a
+reading, not a proof.
+
+* One verdict for each outcome. In the choreography model a choice is 1
+  label that both ends read (choreographic-types `233b07b`,
+  `Projection.agda`, `proj-choice`, lines 33 to 36; Agda only, no recheck).
+  The fleet row has 2 fields that can disagree. So the import reads the
+  verdict, and it reports a row whose 2 fields disagree by name.
+* Nothing is dropped. Each row goes to exactly 1 bucket, and the number of
+  rows read equals the sum of the buckets (the pattern of tsunami-breaker
+  `957ea0e`, `rescue/rescue.ex`; tested there, not proved).
+
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.

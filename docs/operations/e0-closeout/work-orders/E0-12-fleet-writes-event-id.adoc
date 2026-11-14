@@ -39,6 +39,19 @@ gitbot-fleet commit `7fc2778`, read on 2026-11-14.
 * The estate rule for a new identifier is ADR-008. A random version 4 UUID
   from `uuidgen` does not meet it.
 
+== Theory inputs
+
+Read on 2026-11-14 in the second theory recon. No prover was run for this
+work order. Use each result as a design rule. Its match to Hypatia is a
+reading, not a proof.
+
+* A sender cannot know that its message arrived. Only a reply that it can
+  tie to that message gives the knowledge (choreographic-types `233b07b`,
+  `AsyncKnowledge.agda`, `receiver-knows-sent`, line 129, and
+  `sender-cannot-know-receipt`, line 146; Agda only, proved for the first
+  message of a protocol). So "the manifest was written" never means "the
+  fleet acted". Only an outcome row with the same `event_id` does.
+
 == Steps
 
 . Confirm the ruled id format of `E0-08` and that `E0-11` is merged. Stop if not.
