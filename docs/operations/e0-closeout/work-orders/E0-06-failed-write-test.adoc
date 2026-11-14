@@ -31,6 +31,14 @@ Commit `4d7f059`, read on 2026-11-14.
   reduction halts with `{:error, {:write_failed, line_number, reason}}` (line 898).
 * Same file: the result of `ingest_fleet_outcomes/1` (line 108) becomes
   `last_fleet_signature` in the state (line 193).
+* `lib/outcome_tracker.ex`, `imported_fleet_ids/0` (line 67) reads each
+  `.jsonl` file of the outcomes directory before the import writes. A missing
+  directory gives an empty set. A read error stops the poll before any write.
+* Ran on 2026-11-14, in the test environment: with a dangling symbolic link at
+  the path of the `outcomes` directory, `imported_fleet_ids/0` gave
+  `{:ok, MapSet.new([])}` and `record_fleet_outcome/6` gave
+  `{:error, {:outcome_log_write, :eexist}}`. With the link removed, the same
+  write gave `:ok`.
 * No test in `test/` forces this write to fail. The 2 matches for
   `write_failed` in `test/` belong to other features.
 * Ran: `mix test test/learning_scheduler_test.exs` gave 0 failures.
@@ -40,10 +48,14 @@ Commit `4d7f059`, read on 2026-11-14.
 . Measure the facts again. Stop if one no longer holds.
 . Add the test to `test/learning_scheduler_test.exs`:
 .. Write a fleet file with 1 qualified row.
-.. Make the destination write fail by structure, for example put a directory
-   where the month log file must be. Do not use `chmod`: a root user ignores it.
-.. Poll. Assert the error, assert zero stored rows, and assert that the fleet
-   signature did not advance.
+.. Make only the write fail, by structure: put a dangling symbolic link at
+   the path of the `outcomes` directory (see the facts above). Do not put a
+   directory where the month log file must be: the id lookup then fails
+   first, and the poll does not reach the write. Do not use `chmod`: a root
+   user ignores it.
+.. Poll. Assert zero stored rows, and assert that the fleet signature did not
+   advance. Assert with `ExUnit.CaptureLog` that the warning names
+   `write_failed`. That assertion proves that the poll reached the write.
 .. Remove the obstacle. Poll again. Assert exactly 1 stored row.
 . Run a mutation check by hand: change the `{:halt, {:error, ...}}` branch to
   continue, run the new test, and confirm that it fails. Then restore the code.

@@ -7,10 +7,10 @@
 :wo-agent: e0-executor
 :wo-model: sonnet
 :wo-effort: medium
-:wo-cap-usd: 15
-:wo-max-turns: 220
+:wo-cap-usd: 18
+:wo-max-turns: 240
 :wo-branch: feat/e0-09-receipt-emitter
-:wo-depends: E0-08
+:wo-depends: E0-05, E0-08
 
 == Goal
 
@@ -32,9 +32,15 @@ Commit `4d7f059`, read on 2026-11-14.
   `LevelDerived` contract refuses a stored level that disagrees.
 * `lib/hypatia/verdict.ex` annotates each finding in one place
   (`lib/hypatia/cli.ex`, line 1175: "Same funnel, exactly once").
-* The qualified learning updates start in `lib/outcome_tracker.ex`
-  (`update_confidence_file/5`, line 420) and in the fleet import of
-  `lib/learning_scheduler.ex` (`import_fleet_lines/2`).
+* The qualified learning updates start in 3 places: `lib/outcome_tracker.ex`
+  (`update_confidence_file/5`, line 420), the fleet import of
+  `lib/learning_scheduler.ex` (`import_fleet_lines/2`), and the neural path of
+  `lib/fleet_dispatcher.ex` (`ingest_fix_outcome/1` calls
+  `Neural.Coordinator.record_outcome/3` through `record_neural_outcome/3`).
+  `E0-05` makes the neural path learn from qualified outcomes only.
+* `lib/outcome_tracker.ex`, `persist_outcome/6` (line 116): the outcome log
+  is the commit point. The annealing state and the recipe summary are derived
+  after it, and a failed derived write is retried from the log.
 
 == Steps
 
@@ -46,23 +52,29 @@ Commit `4d7f059`, read on 2026-11-14.
   `missing_evidence` for an update with a gap, and a refusal by the contract
   for a receipt with `qualification` "verified" and no evidence reference.
 . Write `lib/hypatia/receipt.ex`: build, encode in canonical form, append.
-  Call it from one place for each learning path. A write error of the receipt
-  must fail the update loudly.
+  Call it from one place for each of the 3 learning paths.
+. Follow the failure rule of the design for the order of the update and its
+  receipt. Write a test for each failure point: the receipt write fails, and
+  the update write fails. In each test, the failure is loud, and after the
+  next run each update has exactly 1 receipt and no receipt is without its update.
 . Add a test that the encoded line is byte-identical to a committed fixture.
 
 == Acceptance
 
 * `mix test` has 0 failures. The new tests are in `test/receipt_test.exs`.
+* A verified update on each of the 3 learning paths writes 1 receipt (3 tests).
 * A replay of the same event writes no second receipt (test).
+* The 2 failure tests of step 6 pass.
 * The fixture line is in canonical form: `jq -cS . fixture` prints the same
   bytes. This is the profile of `scripts/proof-ledger.sh` (ASCII strings, no
   numbers). If the design needs numbers, use the estate JCS tool and say so.
 * No file that was formatted before the change is unformatted after it.
-* The diff touches only `schema/`, `lib/hypatia/receipt.ex`, the 2 call sites and test files.
+* The diff touches only `schema/`, `lib/hypatia/receipt.ex`, the 3 call sites and test files.
 
 == Stop and ask
 
 * The design is not ruled, or a field of the design cannot be filled as the
   design says.
+* The design gives no failure rule, or `E0-05` is not merged.
 * The canonical form needs a tool that the repository does not have.
 * The cost reaches the cap before the acceptance checks pass.

@@ -24,8 +24,12 @@ Status:     verified | partly verified | not verified
 
 == Rules
 
-* `verified` needs every check under "Ran" to pass on the commit under "Head".
+* `verified` needs every check under "Ran" to pass on the commit under "Head",
+  and nothing under "Not run". A claim with a check under "Not run" is
+  `partly verified` at most.
 * A check that did not run is listed under "Not run". It is never left out.
 * A result line is copied from the tool output. It is not written from memory.
 * A skipped gate is not a pass. A zero exit code alone is not a pass.
-* When the head moves, the receipt is stale. Run the checks again.
+* When the head moves, the receipt is stale. Run the checks again. One
+  exception: a receipt in a document names the commit that the checks ran on,
+  and the commit that adds only that document does not make it stale.

@@ -47,8 +47,8 @@ Commit `4d7f059`, measured on 2026-11-14.
 |Passes. The fallback is in `lib/neural/training_pipeline.ex`.
 
 |`docs/architecture/NEURAL-ARCHITECTURE.adoc`, line 5: "5 neural networks"
-|`ls lib/neural`
-|8 networks
+|`grep -n '@network_count ' lib/neural/coordinator.ex`
+|`@network_count 8`. Do not count the entries of `lib/neural`: it has 17, with the support modules.
 
 |`ROADMAP.adoc`: "5 neural networks", "302 repos scanned"
 |none: the figures have no producer

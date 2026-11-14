@@ -50,11 +50,24 @@ Commit `4d7f059`, read on 2026-11-14.
   source, whether E0 can fill it, and what `missing_evidence` says when it cannot.
 . Decide and write down, with the rejected options:
 .. the unit: one receipt for each learning update, or one for each event chain;
+.. the entry points: each place where a qualified learning update starts.
+   There are 3: the confidence update (`OutcomeTracker.update_confidence_file/5`),
+   the fleet import (`LearningScheduler.import_fleet_lines/2`) and the neural
+   path (`FleetDispatcher.ingest_fix_outcome/1`, see `E0-05`);
+.. the identity: the format of `event_id` under ADR-008, who mints it, and
+   with which tool (`E0-11` and `E0-12` build on this);
+.. the start record: where the fleet writes the identity of an attempt before
+   the fix runs, in which form, and how the import treats that record. It
+   must not be stored as an outcome, and it must not make the later outcome
+   row look like a replay;
 .. the storage: path, append-only rule and canonical form;
+.. the failure rule: the order in which an update and its receipt are
+   written, and how a later run finds and repairs an update with no receipt
+   or a receipt with no update;
 .. the revision rule: how a withdrawal (`E0-07`) links to a receipt with no loss of history;
 .. the 3 to 5 properties that the Idris2 model of `E0-10` must prove.
 . Write the document as `docs/design/e0-receipt.adoc` with the status `PROPOSED`.
-. Write the ruling packet in the pull request body: 6 decisions at most. Each
+. Write the ruling packet in the pull request body: 8 decisions at most. Each
   has 2 to 4 options, the consequence of each option, and a label on the
   option that is most correct in the long term.
 
@@ -63,6 +76,7 @@ Commit `4d7f059`, read on 2026-11-14.
 * `asciidoctor` builds `docs/design/e0-receipt.adoc` with no warning.
 * The document has all 13 fields in 1 table.
 * Each decision names the option that it rejects and the reason.
+* The document names the 3 entry points, the start record and the failure rule.
 * The diff has no file under `lib/`, `schema/`, `src/` or `test/`.
 
 == Stop and ask

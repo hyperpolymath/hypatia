@@ -7,8 +7,8 @@
 :wo-agent: e0-executor
 :wo-model: sonnet
 :wo-effort: medium
-:wo-cap-usd: 8
-:wo-max-turns: 160
+:wo-cap-usd: 10
+:wo-max-turns: 180
 :wo-branch: fix/e0-03-fleet-audit-rows
 :wo-depends: none
 
@@ -16,7 +16,8 @@
 
 The fleet import keeps each row that it cannot qualify as an audit row. Such
 a row is visible and countable as an attempt. It gives no positive learning
-and no negative learning.
+and no negative learning. A real `incomplete` row counts as the failure that
+it is.
 
 == Authority
 
@@ -32,6 +33,16 @@ Commit `4d7f059`, read on 2026-11-14.
   that is not one of the 3 accepted pairs becomes `:unqualified`, and then
   `:skip`. The row is not stored anywhere.
 * The string `no_op` does not occur in `lib/`.
+* gitbot-fleet commit `7fc2778`, `scripts/lib/outcome-verdict.sh`,
+  `legacy_outcome`: the fleet writes `"outcome": "success"` beside each
+  verdict other than `failed`. So a real `incomplete` row has the outcome
+  `success`. The pair `incomplete` with `failure` of `classify_fleet_record/1`
+  does not match it, and the import drops that negative evidence today. The
+  runner itself reports `failure` to Hypatia for `incomplete`
+  (`scripts/dispatch-runner.sh`, lines 347 to 349). No test in `test/` gives
+  `classify_fleet_record/1` a row with the verdict `incomplete`.
+* `lib/outcome_tracker.ex`, `record_fleet_outcome/6` (line 48) stores
+  `fleet_import_id`, `origin` and `verification`. It accepts no other row field.
 * Same file, `import_fleet_lines/2` (line 893): a write error halts the import
   and the source is not acknowledged.
 * `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 486): a row
@@ -41,14 +52,21 @@ Commit `4d7f059`, read on 2026-11-14.
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.
-. Write the tests first, in `test/learning_scheduler_test.exs`.
+. Write the tests first, in `test/learning_scheduler_test.exs`. Build each
+  fleet row in the shape that the fleet writes (see the facts above).
+. Qualify an `incomplete` row by its verdict and its numbers: `after_hits`
+  above 0 makes it a failure with `"verification" => "incomplete"`, for the
+  legacy outcome `success` and for `failure`.
 . Make `classify_fleet_record/1` return an audit classification for a row
   that has a valid recipe and repo and is not qualified. Keep `:skip` for a row
   with no recipe or no repo, and for a row with `"bot" => "hypatia"`.
 . Store the audit row through the same path as a qualified row, with the same
   `fleet_import_id`. Set `"verification"` to the fleet verdict when it is
   `no_op` or `unverified`. Set it to `"unqualified"` for every other case.
-  Keep the original `"verdict"`, `"exit_code"`, `"before_hits"` and `"after_hits"`.
+. Keep the original `"verdict"`, `"exit_code"`, `"before_hits"` and
+  `"after_hits"` in each stored fleet row. For that, give
+  `record_fleet_outcome` one more argument: a map of audit fields, empty by
+  default. The map cannot replace `fleet_import_id`, `origin` or `verification`.
 . Do not count an audit row in the recipes that the scheduler recomputes.
 
 == Acceptance
@@ -58,13 +76,20 @@ Commit `4d7f059`, read on 2026-11-14.
    does not store them again;
 ** `OutcomeTracker.qualified_outcome_counts/1` on the stored rows gives 0
    successes, 0 failures and the rows under `ignored`;
-** a `success` row with no verdict is stored as `"unqualified"`.
+** a `success` row with no verdict is stored as `"unqualified"`;
+** a row with the verdict `incomplete`, the outcome `success` and
+   `after_hits` above 0 counts as 1 failure;
+** a stored fleet row has the 4 audit fields of its source row, and an audit
+   map with the key `verification` does not change the stored `verification`.
 * `mix test test/learning_scheduler_test.exs test/outcome_tracker_test.exs`
   passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
-* The change touches only `lib/learning_scheduler.ex` and its test file.
+* The change touches only `lib/learning_scheduler.ex`, `lib/outcome_tracker.ex`
+  and their test files.
 
 == Stop and ask
 
+* The owner wants an `incomplete` row with the outcome `success` to stay
+  unqualified.
 * A stored audit row changes a confidence value, an annealing stage or a
   dispatch tier in any test.
 * The identity of an audit row needs a new field.

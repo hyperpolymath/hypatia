@@ -35,6 +35,10 @@ Commit `4d7f059`, read on 2026-11-14.
   `annealed_strategy_from_store/3` (line 1006) and `reconcile_annealing_state/2`
   (line 1075) compute the stage from the qualified counts. So a new count
   can give a new confidence and a new stage.
+* `lib/confidence_annealing.ex` (lines 86 to 91): a recipe is `:nascent` from
+  0 qualified outcomes, `:adolescent` from 5, `:mature` from 15 and `:veteran`
+  from 50. The dispatch tier of `:nascent` is `:report_only`, and the tier of
+  `:adolescent` is `:review` (lines 241 and 242). So 1 outcome changes no stage.
 * `lib/safety/quarantine.ex`, `retract_dependents/1` (line 110) retracts
   findings that rest on a quarantined rule, bot or prover. Only
   `test/retraction_test.exs` calls it.
@@ -53,11 +57,15 @@ Commit `4d7f059`, read on 2026-11-14.
 .. Which stored values are computed again, and when.
 +
 Name the option that is most correct in the long term. Say so if you choose another.
-. Stop for the owner if the note needs a stable id for local rows. That id is
-  the subject of `E0-11`.
-. Write the tests first: a verified success raises confidence, a withdrawal of
-  that row returns confidence and stage to the earlier values, and the log
-  still has both records.
+. Stop for the owner if the note needs a stable id for local rows. No work
+  order in this folder gives a local row a stable id: `E0-11` covers fleet
+  rows only. The owner then adds a work order for it, and this one waits.
+. Write the tests first. They must cross a stage threshold:
+.. 5 verified successes take a new recipe from `:nascent` to `:adolescent`,
+   and its dispatch tier from `:report_only` to `:review`;
+.. a withdrawal of 1 of the 5 rows returns the confidence, the stage and the
+   tier to the values that the recipe had after 4 rows;
+.. the log still has the 5 rows and the record of the withdrawal.
 . Implement the smallest change that passes the tests.
 
 == Acceptance
@@ -70,7 +78,8 @@ Name the option that is most correct in the long term. Say so if you choose anot
 
 == Stop and ask
 
-* The design needs a change to the row identity (see step 3).
+* The design needs a stable id for a local row, or another change to the row
+  identity (see step 3). No work order covers a stable id for local rows yet.
 * A withdrawal must also retract findings through `Quarantine.retract_dependents/1`.
   That wires a safety module into a live path, which this folder excludes.
 * The cost reaches the cap before the acceptance checks pass.

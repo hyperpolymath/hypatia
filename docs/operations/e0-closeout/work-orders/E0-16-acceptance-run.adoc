@@ -30,7 +30,8 @@ To be measured by this run. The baseline of 2026-11-14 is in `../README.adoc`.
 == Steps
 
 . Check out `main`. Record the full commit, the toolchain versions and the date.
-. Confirm that each of `E0-01` to `E0-15` is merged or is listed as not done.
+. Confirm that each of `E0-01` to `E0-15`, and `E0-17`, is merged or is
+  listed as not done.
 . For each statement A1 to A7 of `../README.adoc`:
 .. name the tests that show it;
 .. run them and copy the result line;
@@ -39,18 +40,24 @@ To be measured by this run. The baseline of 2026-11-14 is in `../README.adoc`.
 . Run `mix test` and `bash scripts/check-verdicts.sh`. Copy the result lines.
 . Find the CI run of the same commit. Record its link and its conclusion.
 . Write `docs/operations/e0-closeout/ACCEPTANCE.adoc` in the shape of
-  `templates/result-receipt.adoc`, with 1 block for each statement.
+  `templates/result-receipt.adoc`, with 1 block for each statement. The
+  document attests the commit of step 1, which is the tested commit of
+  `main`. It does not attest its own commit. The pull request adds this 1
+  file only, so the tested code is the parent of the pull request.
 . List what E0 does not cover. Use the "Not in this folder" part of the README.
 
 == Acceptance
 
-* The document names 1 commit, and each result line comes from that commit.
+* The document names 1 commit, the tested commit of `main`, and each result
+  line comes from that commit. The diff of the pull request has 1 file,
+  `ACCEPTANCE.adoc`.
 * Each statement has a status and at least 1 test name, or the words "no test".
 * A statement with a part that no test shows is `partly verified`, not `verified`.
 * The pull request does not close issue 984 and does not comment on it.
 
 == Stop and ask
 
-* A test that the document needs fails or does not exist.
+* A test that exists and that the document needs fails. A statement with no
+  test is not a reason to stop: record it as "no test" and `not verified`.
 * The CI run of the commit is red or absent.
 * The cost reaches the cap before the document is complete.

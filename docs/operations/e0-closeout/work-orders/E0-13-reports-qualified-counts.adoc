@@ -39,12 +39,19 @@ Commit `4d7f059`, read on 2026-11-14. These readers count the raw value
 `verification_rate/2` and `recipe_health/1` divide verified fixes by claimed
 successes. For them the raw count is the intended denominator.
 
+`confidence_trend/1` returns an atom (`:improving`, `:declining`, `:stable` or
+`:insufficient_data`), not a report with keys. It has no caller in `lib/`.
+
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.
 . For each reader, write down in the pull request body which case it is:
 .. the raw count is the intended denominator (keep it, name it `claimed`);
-.. the raw count stands for success (add the qualified count beside it).
+.. the raw count stands for success (add the qualified count beside it);
+.. the reader returns a classification and no counts. That is
+   `confidence_trend/1`. Do not change it in this work order. List it in the
+   pull request body as an open item with 2 options for the owner: remove
+   the function, or compute it from the qualified rows.
 . Write the tests first, with a fixture that has 3 claimed successes and 1
   verified success.
 . Add the qualified count with `OutcomeTracker.qualified_outcome_counts/1`.
@@ -57,6 +64,8 @@ successes. For them the raw count is the intended denominator.
 * Each reader of case 2 returns `claimed` and `qualified` counts, and a test
   shows 3 and 1 for the fixture.
 * No existing key of a report disappears. A test or a grep shows it.
+* `confidence_trend/1` has no change, and the pull request body lists it as
+  an open item.
 * `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The diff touches only the 5 files above and test files.
 
