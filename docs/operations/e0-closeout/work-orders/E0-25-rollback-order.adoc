@@ -63,12 +63,14 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 . Measure the facts again. Stop if one no longer holds.
 . Write the tests first, in `test/safety_test.exs`, with outcome rows of
   their own in the test store. Each test must fail today.
-. The order of the outcome log is the order of execution: the files of the
-  outcome folder sort by name (one file for each month), and the lines of a
-  file keep their order. List the outcomes of the batch from the last
-  position in the log to the first. Do not sort by `timestamp`, and do not
-  sort by `repo` or `file`: neither is an execution order, and a tie would
-  then revert dependent changes in the wrong order.
+. The order of the outcome log is the order in which the outcomes were
+  recorded. It is the best order that the log gives. `File.ls/1` returns
+  names in no fixed order (`find_batch_outcomes/1`, line 114), so sort the
+  file names explicitly (one file for each month, so a name sort is a time
+  sort), and keep the order of the lines inside a file. List the outcomes of
+  the batch from the last position in the log to the first. Do not sort by
+  `timestamp`, and do not sort by `repo` or `file`: neither gives an order,
+  and a tie would then revert dependent changes in the wrong order.
 . Leave out each row that a rollback wrote (`"caused_by"` is
   `"batch_rollback"`) when the outcomes of a batch are collected.
 . A batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing.
@@ -89,6 +91,9 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 * A test shows 2 outcomes with the same `timestamp`, written in the order
   `b` then `a` (against the order of `repo` and `file`), and a manifest that
   lists `a` before `b`: the reverse of the order in the log.
+* A test shows outcomes of 1 batch in 2 monthly files, written so that the
+  names do not come in the order of the months from `File.ls/1`, and a
+  manifest that lists the later month first.
 * A test shows that a failed write of `rollbacks.jsonl` returns an error
   and does not set the status `rolled_back`.
 * A test shows that, after successful outcome writes and a failed write of
@@ -102,6 +107,12 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 
 == Out of scope
 
+* The order of execution. An outcome is recorded after the fix and after its
+  verification, so a delayed or concurrent report can be in the log out of
+  execution order. No row records the start of an attempt today. `E0-12`
+  gives each attempt an event id and a start record, and a later work order
+  can then use them. Until then the manifest follows the order of recording,
+  and the pull request body says so.
 * 2 callers that roll back the same batch at the same time. The JSONL
   store has no lock, so "once" here means once for calls in sequence. A
   lock or an atomic claim for each batch is a design choice for the owner.
