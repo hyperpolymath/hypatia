@@ -75,6 +75,7 @@ defmodule Hypatia.CrossRepoLearningTest do
       qualified = CrossRepoLearning.qualified_rows(rows)
 
       assert length(qualified) == 3
+
       assert Hypatia.OutcomeTracker.qualified_outcome_counts(qualified) ==
                %{successes: 1, failures: 1, false_positives: 1, ignored: 0}
     end

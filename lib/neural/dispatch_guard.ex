@@ -111,6 +111,7 @@ defmodule Hypatia.Neural.DispatchGuard do
 
   def enforce(action, %{strategy: :auto_execute}),
     do: review_ceiling(action, "invalid_recommendation")
+
   def enforce(action, _unexpected), do: review_ceiling(action, "invalid_recommendation")
 
   defp review_ceiling({:eliminate, recipe, pattern}, reason) do

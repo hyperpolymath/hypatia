@@ -122,7 +122,9 @@ defmodule Hypatia.Neural.SourceStore do
 
   def reply(state, requested, operation) do
     case transact(state, requested, operation) do
-      {:ok, result, updated} -> {:reply, result, updated}
+      {:ok, result, updated} ->
+        {:reply, result, updated}
+
       {:error, reason, refused} ->
         Logger.warning("Neural source refused: #{inspect(reason)}")
         {:reply, {:error, reason}, refused}
@@ -131,7 +133,9 @@ defmodule Hypatia.Neural.SourceStore do
 
   def noreply(state, requested, operation) do
     case transact(state, requested, operation) do
-      {:ok, _result, updated} -> {:noreply, updated}
+      {:ok, _result, updated} ->
+        {:noreply, updated}
+
       {:error, reason, refused} ->
         Logger.warning("Neural source refused: #{inspect(reason)}")
         {:noreply, refused}
