@@ -607,17 +607,24 @@ defmodule Hypatia.Rules.RsrConformance do
     end
   end
 
-  # The repo's chora deed: :absent (none at the root), :ok (it parses as a
-  # repo-deed), or :broken (it does not parse, is not a repo-deed, has an
-  # illegal name, or there is more than one).
+  # The chora deed's state: :absent (no deed file), :ok (it parses as a
+  # repo-deed) or :broken (present but unreadable, unparsable, misnamed or
+  # ambiguous).
   defp deed_state(repo) do
-    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
-         {:ok, text} <- File.read(path),
-         {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
-      :ok
-    else
-      :none -> :absent
-      _ -> :broken
+    case Hypatia.Deed.repo_deed_path(repo) do
+      {:ok, path} ->
+        with {:ok, text} <- File.read(path),
+             {:ok, {"repo-deed", _items}} <- Hypatia.Deed.parse(text) do
+          :ok
+        else
+          _ -> :broken
+        end
+
+      :none ->
+        :absent
+
+      _ ->
+        :broken
     end
   end
 
@@ -656,6 +663,8 @@ defmodule Hypatia.Rules.RsrConformance do
     deed = deed_state(repo)
 
     cond do
+      # The deed first: a broken chora deed fails 3.2.1 even when the
+      # remaining .a2ml files parse (#1117).
       deed == :broken ->
         :fail
 
