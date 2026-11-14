@@ -570,6 +570,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     @new "6693f9aed8e4383f78a3d01b600b32663bf7a45c"
     @old "51539abf3d2472b955da9b051a68c5971f6cfa22"
 
+    # A whole workflow whose one step checks out `repo_line`'s repository.
+    defp checkout_wf(repo_line, sha, extra \\ "") do
+      "on: push\njobs:\n  oracle:\n    runs-on: ubuntu-24.04\n    steps:\n" <>
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n" <>
+        "        with:\n          #{repo_line}\n" <>
+        "          # Pinned to a commit that contains hypatia#1062.\n" <>
+        extra <> "          ref: #{sha}\n          path: _hypatia\n"
+    end
+
     defp template_set(oracle) do
       %{
         ".github/workflows/hypatia-scan.yml" =>
@@ -579,10 +588,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         ".github/workflows/verdict-grid-publish.yml" =>
           "      - run: |\n          scripts/verdict-grid.sh \\\n            --hypatia-ref #{@new} \\\n            --out x\n",
         ".github/workflows/dogfood-gate.yml" =>
-          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n" <>
-            "        with:\n          repository: hyperpolymath/hypatia\n" <>
-            "          # Pinned to a commit that contains hypatia#1062.\n" <>
-            "          ref: #{oracle}\n          path: _hypatia\n",
+          checkout_wf("repository: hyperpolymath/hypatia", oracle),
         ".machine_readable/policies/hypatia-rule-order.json" =>
           ~s({"scanner":{"commit":"#{@new}","repository":"hyperpolymath/hypatia"}})
       }
@@ -613,7 +619,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         Map.put(
           template_set(@new),
           "x.yml",
-          "        with:\n          repository: metadatastician/standards\n          ref: #{@old}\n"
+          checkout_wf("repository: metadatastician/standards", @old)
         )
 
       assert T.check_hypatia_pin_drift(set) == []
@@ -646,10 +652,41 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         Map.put(
           template_set(@new),
           "z.yml",
-          "        with:\n          ref: #{@old}\n          repository: hyperpolymath/hypatia\n"
+          "on: push\njobs:\n  j:\n    runs-on: x\n    steps:\n" <>
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n" <>
+            "        with:\n          ref: #{@old}\n          repository: hyperpolymath/hypatia\n"
         )
 
       assert length(T.check_hypatia_pin_drift(set)) == 6
+    end
+
+    # Codex on #1103: a blank line or many sibling inputs must not hide the pin.
+    test "a checkout with a blank line and many inputs is still read" do
+      many = Enum.map_join(1..10, "", &"          opt#{&1}: x\n")
+      wf = checkout_wf("repository: hyperpolymath/hypatia", @old, "\n" <> many)
+
+      found =
+        T.check_hypatia_pin_drift(
+          Map.put(template_set(@new), ".github/workflows/dogfood-gate.yml", wf)
+        )
+
+      assert Enum.any?(found, &(&1.key == "checkout ref" and &1.sha == @old))
+    end
+
+    # Codex on #1103: each occurrence is its own site.
+    test "the same old flag in two jobs is two findings" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: grid --hypatia-ref #{@old}\n" <>
+          "  b:\n    steps:\n      - run: grid --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "two.yml", wf))
+      assert found |> Enum.filter(&(&1.file == "two.yml")) |> Enum.map(& &1.line) == [4, 7]
+    end
+
+    # Codex on #1103: an apostrophe in a plain value does not open a quote.
+    test "a commented flag after an apostrophe is not a pin" do
+      wf = "jobs:\n  a:\n    name: Don't use this # --hypatia-ref #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "apos.yml", wf)) == []
     end
 
     test "a variable HYPATIA_SHA is not a pin" do
