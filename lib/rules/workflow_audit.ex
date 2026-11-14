@@ -4631,7 +4631,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   Limits: local reusable workflows are followed one level deep; shell
   comments are stripped from `run` scripts, but a scanner reached through
   a script file or a shell function is not seen; scanner arguments held in
-  a shell variable (`gitleaks detect $ARGS`) are not expanded.
+  a shell variable (`gitleaks detect $ARGS`) are not expanded; a scanner
+  name with a separator inside a quoted argument (`echo "x; gitleaks git"`)
+  is read as a call; expressions in `fetch-depth` are not evaluated
+  (`${{ 0 }}` is not `0`); a reusable workflow's `inputs.*` guards are not
+  resolved against caller values or defaults.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
     parsed =
@@ -4843,7 +4847,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # when any one of them is a full-history scan.
         run
         |> String.replace(~r/\\\r?\n[ \t]*/, " ")
-        |> String.split(~r/\n|&&|;|\|\|/)
+        |> String.split(~r/\n|&&|;|\|\|?|&/)
+        |> Enum.map(&String.replace(&1, ~r/^[\s(`]+/, ""))
         |> Enum.any?(&full_history_command?(&1, job, i, events, wf_doc))
     end
   end
@@ -4855,7 +4860,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # changes or the tree only; so does `--no-git`.
         not Regex.match?(~r/--(?:no-git|staged|pre-commit)\b/, cmd) and
           (all_history_log_opts?(cmd) or not Regex.match?(@log_opts, cmd)) and
-          deep_checkout_before?(job, i, events, wf_doc)
+          deep_checkout_before?(job, i, events, wf_doc, cmd)
 
       Regex.match?(~r/^\s*(?:\S*\/)?trufflehog\s+git\b/, cmd) ->
         # A URL source is cloned by trufflehog itself, and counts only when
@@ -4863,7 +4868,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # ref is scanned unless a flag limits it.
         source_ok? =
           case trufflehog_url(cmd) do
-            nil -> deep_checkout_before?(job, i, events, wf_doc)
+            nil -> deep_checkout_before?(job, i, events, wf_doc, cmd)
             url -> self_repo_url?(url)
           end
 
@@ -4897,7 +4902,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # A URL naming exactly this repository on GitHub.
   defp self_repo_url?(url) do
     Regex.match?(
-      ~r/^(?:https:\/\/github\.com\/|\$\{\{github\.server_url\}\}\/)\$\{\{github\.repository\}\}(?:\.git)?\/?$/,
+      ~r/^(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/|git@github\.com:|\$\{\{github\.server_url\}\}\/)\$\{\{github\.repository\}\}(?:\.git)?\/?$/,
       url
     )
   end
@@ -4906,7 +4911,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `fetch-depth: 0`, before step `i` of the job, that runs on one of the
   # scan's non-PR `events` (its own `if:` narrows them). Read from the parsed
   # step: the job text holds values, not keys.
-  defp deep_checkout_before?(job, i, events, wf_doc) do
+  defp deep_checkout_before?(job, i, events, wf_doc, cmd \\ nil) do
     steps = job.steps || []
     scanner = Enum.at(steps, i)
     non_pr = Enum.filter(events, &(&1 in @non_pr_events))
@@ -4914,7 +4919,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     # On each event, the last checkout that runs then and lands where the
     # scanner reads decides what history it sees; one deep event is enough.
     Enum.any?(non_pr, fn event ->
-      target = norm_path(scanner_target(scanner, job, wf_doc))
+      target = norm_path(scanner_target(scanner, job, wf_doc, cmd))
 
       # A checkout into the scanner's place or an ancestor of it (a fresh
       # root checkout clears the workspace) replaces what was there; the
@@ -4958,8 +4963,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp covers?(path, target),
     do: path == target or path == "" or String.starts_with?(target, path <> "/")
 
-  defp scanner_target(scanner, job, wf_doc) do
-    run = if scanner, do: run_code(scanner), else: ""
+  # `cmd`, when given, is the one scanner command whose source is read.
+  defp scanner_target(scanner, job, wf_doc, cmd) do
+    run = cmd || if(scanner, do: run_code(scanner), else: "")
 
     wd =
       [

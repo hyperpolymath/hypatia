@@ -777,6 +777,60 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => remote})
   end
 
+  test "a full scan after a pipe, a background job or in a subshell counts" do
+    for run <- ["true | " <> @full_run, "true & " <> @full_run, "true && (" <> @full_run <> ")"] do
+      wf = full_with("      - run: " <> @full_run, "      - run: " <> run)
+      assert wf =~ run
+      assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == [], run
+    end
+  end
+
+  test "each scanner command's own --source picks its checkout" do
+    wf =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+
+    good =
+      String.replace(
+        wf,
+        "      - run: " <> @full_run,
+        "      - run: gitleaks protect --source other --staged; " <>
+          ~s(gitleaks git --source source --log-opts="--all" --redact)
+      )
+
+    assert good =~ "--source other"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => good}) == []
+
+    bad =
+      String.replace(
+        wf,
+        "      - run: " <> @full_run,
+        "      - run: gitleaks protect --source source --staged; " <>
+          ~s(gitleaks git --source other --log-opts="--all" --redact)
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => bad})
+  end
+
+  test "an SSH URL for this repository counts as a remote trufflehog scan" do
+    for url <- [
+          "git@github.com:${{ github.repository }}.git",
+          "ssh://git@github.com/${{ github.repository }}"
+        ] do
+      wf =
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git #{url}\n"
+
+      assert check(%{"pr.yml" => @pr_range, "r.yml" => wf}) == [], url
+    end
+
+    other =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git git@gitlab.com:${{ github.repository }}.git\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => other})
+  end
+
   test "an empty-value comparison on a PR context is not a PR-only guard" do
     wf =
       full_with(
