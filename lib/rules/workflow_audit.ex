@@ -5427,7 +5427,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
     code = Hypatia.Workflow.shell_mask(run)
     bare = Hypatia.Workflow.shell_mask(run, quotes: true)
 
-    ~r/\bexit\s+/
+    # Blanks only: a masked comment must not join `exit` to the next line
+    # (Codex on #1110).
+    ~r/\bexit[ \t]+/
     |> Regex.scan(bare, return: :index)
     |> Enum.any?(fn [{off, len}] ->
       arg = binary_part(code, off + len, byte_size(code) - off - len)
@@ -5457,7 +5459,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp later_command?(line) do
     line
     |> String.replace("&&", "  ")
-    |> String.split(~r/[;&]/)
+    # `&>`, `>&2` and `<&` are redirections, not a new command (Codex on #1110).
+    |> String.split(~r/;|(?<![<>&])&(?![>&])/)
     |> Enum.drop(1)
     |> Enum.any?(&(String.trim(&1) != ""))
   end
