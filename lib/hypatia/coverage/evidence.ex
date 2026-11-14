@@ -337,8 +337,7 @@ defmodule Hypatia.Coverage.Evidence do
       "proof was checked against different source (a covered range changed, moved or is missing); not counted (COV-E006)"
 
   def reason_text(:proof_unbound),
-    do:
-      "proof cannot be bound to source without the checkout (no root given); not counted (COV-E006)"
+    do: "proof cannot be bound to source without the checkout (no root given); not counted"
 
   def reason_text(:no_covers),
     do: "proof claim has no covers entries (decl, file, lines, source_sha256) to bind to source"
