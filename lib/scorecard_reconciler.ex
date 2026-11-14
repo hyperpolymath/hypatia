@@ -54,8 +54,9 @@ defmodule Hypatia.ScorecardReconciler do
   #                      remediation exists via the GitHub settings API
   #                      (enable branch protection, require reviews). NOT a
   #                      code change and NOT non-actionable — a third, narrow
-  #                      action class so config findings are auto-remediated
-  #                      under full-auto policy instead of escalated. (#265)
+  #                      action class. Escalated to the owner by default; auto-
+  #                      remediated only under the explicit full-auto policy.
+  #                      (#265; owner answer on hypatia#1080 group E)
   #   :open_escalate   — unknown / not safely automatable. Leave OPEN and
   #                      ensure a tracking issue (never silently drop —
   #                      "didn't look" is an escaped-defect KPI breach).
@@ -208,11 +209,18 @@ defmodule Hypatia.ScorecardReconciler do
           fix_requested: Enum.count(results, &(&1.action == :fix)),
           settings_remediated: Enum.count(results, &(&1.acted == :settings_remediated)),
           settings_actionable: Enum.count(results, &(&1.action == :fix_settings)),
-          escalated: Enum.count(results, &(&1.action == :open_escalate)),
+          escalated: Enum.count(results, &escalated?/1),
           results: results
         }
     end
   end
+
+  @doc false
+  # A result counts as escalated when it was left open for a person: an
+  # :open_escalate finding, or a settings finding the default policy escalated.
+  def escalated?(%{action: :open_escalate}), do: true
+  def escalated?(%{acted: :escalated_conservative}), do: true
+  def escalated?(_), do: false
 
   @doc """
   Verify pass: a finding the registry recorded as dismissed that is OPEN

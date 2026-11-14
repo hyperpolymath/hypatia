@@ -82,6 +82,13 @@ defmodule Hypatia.ScorecardReconcilerTest do
       assert R.policy(policy: :full_auto) == :full_auto
     end
 
+    test "a settings finding escalated by default counts as escalated" do
+      assert R.escalated?(%{action: :fix_settings, acted: :escalated_conservative})
+      assert R.escalated?(%{action: :open_escalate, acted: :escalated})
+      refute R.escalated?(%{action: :fix_settings, acted: :settings_remediated})
+      refute R.escalated?(%{action: :dismiss_info, acted: :dismissed})
+    end
+
     test "the mix task changes settings only on --apply-settings" do
       alias Mix.Tasks.Hypatia.Reconcile
       assert Reconcile.policy([]) == :conservative
