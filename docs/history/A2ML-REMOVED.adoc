@@ -241,6 +241,13 @@ control still needs exactly that input, and it has no deed form to move to.
 |===
 | Path | Why it stays
 
+| `audits/assail-classifications.a2ml`
+| panic-attack (>= 2.5.5, `load_user_classifications` in its assail module,
+in the panic-attack repository) reads only `audits/assail-classifications.a2ml` or
+`.panic-attack-classifications.a2ml`. No mapping spec covers it and
+panic-attack has no deed reader, so deleting it would unsuppress the audited
+findings it records. It goes when panic-attack reads a deed form first.
+
 | `test/fixtures/a2ml/rsr-criteria-v2.a2ml`
 | A dogfood copy of the RSR v2.0 criteria, whose canon
 (`0-canon/rsr/rsr-criteria-v2.a2ml` in standards) is still A2ML: A7 section
