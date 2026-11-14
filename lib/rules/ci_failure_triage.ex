@@ -80,7 +80,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # A verdict job reporting that the job it reads was cancelled by a
         # newer push (rsr-template-repo#337: `Fork governance failed
         # (deed=cancelled)`). Superseded, not a defect.
-        ~r/\bgovernance failed \(deed=cancelled\)/i
+        ~r/\bgovernance failed \(deed=cancelled\)/i,
+        # A CI-status rollup reporting a needed job's `result: cancelled`
+        # (hypatia#1091, run 43601615541): a newer push cancelled the older
+        # run, so the superseded head's rollup goes red. Only `cancelled`;
+        # `result: failure` is a real failure and stays the rollup's.
+        ~r/did not succeed \(result: cancelled\)/
       ],
       action: :none,
       retries: 0,

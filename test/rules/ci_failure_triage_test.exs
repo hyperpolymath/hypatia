@@ -70,6 +70,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-43137798791-lock-unresolvable.txt", "actions_lock_unresolvable_pin", :fix},
     {"real-43158586027-gitleaks-range.txt", "scan_range_missing_commit", :rerun},
     {"real-43357534889-rollup.txt", "rollup_cascade", :upstream},
+    # hypatia#1091: the CI Status rollup on a superseded head, red only
+    # because a newer push cancelled the job it waits on.
+    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :none},
     {"real-43416333174-orchestrate-raise.txt", "runtime_exception", :report},
     {"real-43150955344-rustfmt.txt", "format_diff", :fix},
     {"real-43357534889-container-build.txt", "compile_error", :report}
@@ -404,6 +407,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
     test "conclusion cancelled is authoritative with an empty log" do
       assert T.classify("", %{conclusion: "cancelled"}).primary.rule == T.id("runner_cancelled")
+    end
+
+    test "a rollup naming a failed job is not read as a cancellation" do
+      failed = "##[error]kyaml-conformance did not succeed (result: failure)\n"
+      %{matches: ms} = T.classify(failed, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
     end
 
     test "startup_failure with no log is a referral, never a rerun" do
