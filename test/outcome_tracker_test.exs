@@ -283,4 +283,207 @@ defmodule Hypatia.OutcomeTrackerTest do
       assert OutcomeTracker.update_recipe_confidence("recipe-nonexistent") == :no_outcomes
     end
   end
+
+  # ── E0-04: verification comes from a rescan, not from the caller ────
+
+  describe "verification is set by a rescan, not by the caller" do
+    # Each test writes only below a temporary data directory. A fake
+    # `panic-attack` on PATH stands in for the rescan, so the result of the
+    # rescan is chosen by the test.
+    setup do
+      keys = [:verisimdb_data_path, :annealing_state_path, :fleet_path]
+      original = for key <- keys, do: {key, Application.fetch_env(:hypatia, key)}
+      old_path = System.get_env("PATH")
+      old_mode = System.get_env("FAKE_PA_MODE")
+      old_repos = System.get_env("HYPATIA_REPOS_DIR")
+
+      root =
+        System.tmp_dir!()
+        |> Path.join("hypatia_e0_04_#{:erlang.unique_integer([:positive])}")
+
+      bin = Path.join(root, "bin")
+      File.mkdir_p!(bin)
+      script = Path.join(bin, "panic-attack")
+
+      File.write!(script, """
+      #!/bin/sh
+      case "$FAKE_PA_MODE" in
+        clean) echo '{"weak_points":[]}' ;;
+        present) echo '{"weak_points":[{"category":"cat-x"}]}' ;;
+        *) exit 1 ;;
+      esac
+      """)
+
+      File.chmod!(script, 0o755)
+
+      Application.put_env(:hypatia, :verisimdb_data_path, Path.join(root, "data"))
+      Application.put_env(:hypatia, :annealing_state_path, Path.join(root, "annealing"))
+      Application.put_env(:hypatia, :fleet_path, Path.join(root, "fleet"))
+      System.put_env("PATH", bin <> ":" <> (old_path || ""))
+      System.put_env("HYPATIA_REPOS_DIR", root)
+      System.put_env("FAKE_PA_MODE", "clean")
+
+      on_exit(fn ->
+        for {key, value} <- original do
+          case value do
+            {:ok, previous} -> Application.put_env(:hypatia, key, previous)
+            :error -> Application.delete_env(:hypatia, key)
+          end
+        end
+
+        System.put_env("PATH", old_path || "")
+
+        for {name, old} <- [{"FAKE_PA_MODE", old_mode}, {"HYPATIA_REPOS_DIR", old_repos}] do
+          if old, do: System.put_env(name, old), else: System.delete_env(name)
+        end
+
+        File.rm_rf!(root)
+      end)
+
+      %{root: root}
+    end
+
+    defp stored(root) do
+      dir = Path.join([root, "data", "outcomes"])
+
+      case File.ls(dir) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+          |> Enum.flat_map(fn f ->
+            dir |> Path.join(f) |> File.read!() |> String.split("\n", trim: true)
+          end)
+          |> Enum.map(&Jason.decode!/1)
+
+        {:error, _} ->
+          []
+      end
+    end
+
+    test "an unknown recipe with a clean scan is not verified", %{root: root} do
+      # The recipe is not in the registry, so no category can be derived. A
+      # scan cannot show that a weak point of no named category is gone.
+      assert {:ok, record, result} =
+               OutcomeTracker.record_outcome_for_fix(
+                 "recipe-e0-04-unknown",
+                 "owner/repo",
+                 "a.txt",
+                 :success
+               )
+
+      refute result == :verified
+      assert result == :not_verified
+      assert record["verification"] == "scan_skipped"
+
+      assert [row] = stored(root)
+
+      assert OutcomeTracker.qualified_outcome_counts([row]) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 1}
+    end
+
+    test "an empty category is not verified, whatever the scan returns", %{root: root} do
+      for mode <- ["clean", "present", "fail"], category <- [nil, ""] do
+        System.put_env("FAKE_PA_MODE", mode)
+
+        opts = if category, do: [verify: true, category: category], else: [verify: true]
+
+        assert {:ok, record, :not_verified} =
+                 OutcomeTracker.record_and_verify(
+                   "recipe-e0-04-empty-#{mode}",
+                   "owner/repo",
+                   "a.txt",
+                   :success,
+                   opts
+                 )
+
+        assert record["verification"] == "scan_skipped"
+      end
+
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a named category is still verified by a clean scan and refuted by a present one",
+         %{root: root} do
+      opts = [verify: true, category: "cat-x", repo_path: root]
+
+      assert {:ok, %{"verification" => "verified"}, :verified} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-a",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 opts
+               )
+
+      System.put_env("FAKE_PA_MODE", "present")
+
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-b",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 opts
+               )
+    end
+
+    test "an absent scanner gives scan_failed and no credit, not a crash", %{root: root} do
+      File.rm!(Path.join([root, "bin", "panic-attack"]))
+
+      assert {:ok, record, :scan_unavailable} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-absent",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 verify: true,
+                 category: "cat-x",
+                 repo_path: root
+               )
+
+      assert record["verification"] == "scan_failed"
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a caller's verification of verified does not survive record_outcome/5", %{root: root} do
+      assert {:ok, record} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-forged",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 %{
+                   "verification" => "verified"
+                 }
+               )
+
+      refute record["verification"] == "verified"
+      assert record["verification"] == "unverified"
+      # The claim is kept, so the audit trail shows it.
+      assert record["claimed_verification"] == "verified"
+
+      assert [row] = stored(root)
+      refute row["verification"] == "verified"
+      assert OutcomeTracker.qualified_outcome_counts([row]).successes == 0
+    end
+
+    test "a caller's other fields and negative verifications are kept", %{root: root} do
+      assert {:ok, record} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-neg",
+                 "owner/repo",
+                 "a.txt",
+                 :failure,
+                 %{
+                   "verification" => "failed",
+                   "note" => "kept"
+                 }
+               )
+
+      assert record["verification"] == "failed"
+      assert record["note"] == "kept"
+      refute Map.has_key?(record, "claimed_verification")
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).failures == 1
+    end
+  end
 end

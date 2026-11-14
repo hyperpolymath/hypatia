@@ -32,14 +32,34 @@ defmodule Hypatia.OutcomeTracker do
   - repo: repository name
   - file: file that was fixed
   - outcome: :success | :failure | :false_positive
-  - metadata: optional map of extra fields to merge into the record
-              (e.g. %{"verification" => "verified"} from `record_and_verify`).
+  - metadata: optional map of extra fields to merge into the record.
               Pre-existing keys (recipe_id, repo, file, outcome,
               timestamp, bot) are not overwritten by metadata.
+
+  A caller cannot stamp a row as verified. A `"verification"` of `"verified"`
+  in `metadata` is stored as `"unverified"`, and the claim is kept as
+  `"claimed_verification"` so the audit trail shows it. Only a rescan of
+  Hypatia (`record_and_verify/5`) and the qualified fleet import
+  (`record_fleet_outcome/6`) can stamp `"verified"`.
   """
   def record_outcome(recipe_id, repo, file, outcome, metadata \\ %{}) do
-    persist_outcome(recipe_id, repo, file, outcome, metadata, true)
+    persist_outcome(recipe_id, repo, file, outcome, untrusted_verification(metadata), true)
   end
+
+  # `"verified"` is the one value that makes a success row positive evidence
+  # (see `qualified_outcome_counts/1`), so a caller of the public entry point
+  # cannot set it. Any other value can only lower or keep trust.
+  defp untrusted_verification(%{"verification" => "verified"} = metadata) do
+    Logger.warning(
+      "OutcomeTracker: a caller claimed verification \"verified\"; stored as \"unverified\""
+    )
+
+    metadata
+    |> Map.put("verification", "unverified")
+    |> Map.put("claimed_verification", "verified")
+  end
+
+  defp untrusted_verification(metadata), do: metadata
 
   @doc """
   Import a fleet attempt without echoing it into the source fleet log. The
@@ -220,9 +240,22 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp do_verify_fix(repo_path, pattern_id, category) do
-    case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
-           stderr_to_stdout: true
-         ) do
+    # An absent scanner is an absent verifier: no verification, and no crash.
+    result =
+      try do
+        System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
+          stderr_to_stdout: true
+        )
+      rescue
+        e in ErlangError ->
+          if e.original == :enoent, do: :scanner_absent, else: reraise(e, __STACKTRACE__)
+      end
+
+    case result do
+      :scanner_absent ->
+        Logger.error("Re-scan unavailable: panic-attack is not on PATH")
+        :scan_failed
+
       {output, 0} ->
         case Jason.decode(output) do
           {:ok, scan} ->
@@ -269,8 +302,11 @@ defmodule Hypatia.OutcomeTracker do
   recipe registry, so callers don't have to thread them through.
 
   Failure to derive `category` (recipe not found / no `target_categories`)
-  falls back to `record_outcome/5` with `"verification" = "scan_skipped"`
-  so the outcome is still recorded and the verification gap is auditable.
+  and no `:category` from the caller: no rescan runs, and the outcome is
+  recorded with `"verification" = "scan_skipped"` and the result
+  `:not_verified`, so the outcome is still recorded and the verification gap
+  is auditable. A scan cannot show that a weak point of no named category is
+  gone.
 
   Returns `{:ok, record, verification}` where verification is one of
   `:verified | :false_positive | :scan_unavailable | :not_verified`.
@@ -279,11 +315,15 @@ defmodule Hypatia.OutcomeTracker do
     derived =
       case derive_verify_opts(recipe_id, repo, opts) do
         {:ok, derived_opts} -> Keyword.merge(derived_opts, opts)
-        {:error, _reason} -> Keyword.put(opts, :verify, false)
+        # No category could be derived. `record_and_verify/5` then rescans only
+        # if the caller named a category, and records `scan_skipped` if not.
+        {:error, _reason} -> opts
       end
 
     record_and_verify(recipe_id, repo, file, outcome, Keyword.put(derived, :verify, true))
   end
+
+  defp category_named?(category), do: is_binary(category) and String.trim(category) != ""
 
   defp derive_verify_opts(recipe_id, repo, opts) do
     cond do
@@ -343,11 +383,15 @@ defmodule Hypatia.OutcomeTracker do
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
     extra = Keyword.get(opts, :metadata, %{})
+    category = Keyword.get(opts, :category, "")
+    verify_requested? = Keyword.get(opts, :verify, false) and outcome == :success
 
-    if Keyword.get(opts, :verify, false) and outcome == :success do
+    # A rescan runs only when it can name the category that it looks for.
+    # With a blank category, `verify_fix/3` would find no weak point of that
+    # category in any scan and answer `:verified`.
+    if verify_requested? and category_named?(category) do
       repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
       repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
-      category = Keyword.get(opts, :category, "")
       pattern_id = Keyword.get(opts, :pattern_id, "")
 
       case verify_fix(repo_path, pattern_id, category) do
@@ -355,7 +399,7 @@ defmodule Hypatia.OutcomeTracker do
           # Record success WITH the verification stamp so recipe_health
           # can distinguish verified-clean fixes from un-verified ones.
           {:ok, record} =
-            record_outcome(
+            record_rescanned_outcome(
               recipe_id,
               repo,
               file,
@@ -423,12 +467,23 @@ defmodule Hypatia.OutcomeTracker do
           file,
           outcome,
           Map.merge(extra, %{
-            "verification" => if(outcome == :failure, do: "failed", else: "unverified")
+            "verification" =>
+              cond do
+                outcome == :failure -> "failed"
+                verify_requested? -> "scan_skipped"
+                true -> "unverified"
+              end
           })
         )
 
       {:ok, record, :not_verified}
     end
+  end
+
+  # The one path that may stamp "verified": `record_and_verify/5` calls it only
+  # after `verify_fix/3` found the weak point of a named category gone.
+  defp record_rescanned_outcome(recipe_id, repo, file, outcome, metadata) do
+    persist_outcome(recipe_id, repo, file, outcome, metadata, true)
   end
 
   @doc """
