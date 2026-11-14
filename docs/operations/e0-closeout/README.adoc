@@ -99,10 +99,10 @@ function name is the stable locator. Measure again before you edit.
 |E0-01 |The outcome command accepts the predicate verdict |S |sonnet |$6 |none
 |E0-02 |The fleet passes the verdict through (gitbot-fleet) |S |sonnet |$4 |E0-01
 |E0-03 |Fleet rows with `no_op` and `unverified` stay as audit evidence |M |sonnet |$10 |none
-|E0-04 |Verification comes from a rescan, not from the caller |M |opus, then sonnet |$12 |none
-|E0-05 |The live neural path learns from qualified evidence only |S |sonnet |$6 |none
+|E0-04 |Verification comes from a rescan, not from the caller |M |opus |$12 |none
+|E0-05 |The live neural path learns from qualified evidence only |S |sonnet |$6 |E0-04
 |E0-06 |Test: a failed write leaves the source unacknowledged |S |sonnet |$4 |none
-|E0-07 |Withdrawn evidence changes confidence and tier |M |opus, then sonnet |$12 |none
+|E0-07 |Withdrawn evidence changes confidence and tier |M |opus |$16 |none
 |E0-08 |The receipt: design and ruling packet |Design |opus |$10 |none
 |E0-09 |The receipt: schema, emitter and tests |M |sonnet |$18 |E0-05, E0-08
 |E0-10 |The receipt: Idris2 model and gate |M |opus |$25 |E0-09
@@ -110,12 +110,12 @@ function name is the stable locator. Measure again before you edit.
 |E0-12 |The fleet writes an event id for each attempt (gitbot-fleet) |S |sonnet |$6 |E0-08, E0-11
 |E0-13 |Reports count qualified evidence |S |sonnet |$6 |none
 |E0-14 |Cross-repo residuals |S |sonnet |$6 |none
-|E0-15 |Truth update of the documents |S |haiku |$3 |none
+|E0-15 |Truth update of the documents |S |sonnet |$3 |none
 |E0-16 |E0 acceptance run and receipt |M |opus |$10 |all
 |E0-17 |The test suite does not write into the fleet checkout |S |sonnet |$3 |none
 |===
 
-The caps add up to $147. The estimate for the whole close-out, with rework, is
+The caps add up to $151. The estimate for the whole close-out, with rework, is
 $115 to $315. That figure is an estimate. The first 4 runs (`E0-17`, `E0-06`,
 `E0-01`, `E0-13`) are the test run that replaces it with measured numbers.
 
@@ -129,9 +129,9 @@ runs, or run those 2 work orders in a session with a person.
 . First of all: `E0-17`. Until it merges, each `mix test` adds test rows to
   `../gitbot-fleet/shared-context/learning/fix-outcomes.jsonl` when that
   checkout exists (measured on 2026-11-14).
-. First lane, no decisions needed: `E0-06`, `E0-01`, `E0-13`, `E0-05`, `E0-14`, `E0-03`, `E0-15`.
+. First lane, no decisions needed: `E0-06`, `E0-01`, `E0-13`, `E0-14`, `E0-03`, `E0-15`.
 . Second lane, each starts with a design note for the owner: `E0-04`, `E0-07`, `E0-08`.
-. After the rulings: `E0-02`, `E0-09`, `E0-10`, `E0-11`, `E0-12`.
+. After the rulings: `E0-05` (after `E0-04`), `E0-02`, `E0-09`, `E0-10`, `E0-11`, `E0-12`.
 . Last: `E0-16`.
 
 == Rules for every run
@@ -151,6 +151,8 @@ runs, or run those 2 work orders in a session with a person.
   real rows that are not committed yet. The test rows have
   `"bot": "hypatia"` and the repo `r` or `test-repo`.
 * A model above the tier in the work order needs a reason in the pull request body.
+* The model and the effort of a work order equal those of its agent
+  definition in `.claude/agents/`. The launch script stops when they differ.
 
 == Not in this folder
 

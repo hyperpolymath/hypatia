@@ -7,8 +7,8 @@
 :wo-agent: e0-supervisor
 :wo-model: opus
 :wo-effort: high
-:wo-cap-usd: 12
-:wo-max-turns: 200
+:wo-cap-usd: 16
+:wo-max-turns: 240
 :wo-branch: fix/e0-07-withdrawn-evidence
 :wo-depends: none
 
@@ -35,6 +35,11 @@ Commit `4d7f059`, read on 2026-11-14.
   `annealed_strategy_from_store/3` (line 1006) and `reconcile_annealing_state/2`
   (line 1075) compute the stage from the qualified counts. So a new count
   can give a new confidence and a new stage.
+* 4 other modules call the gate for each row: `lib/cross_repo_learning.ex`
+  (lines 137 and 262), `lib/neural/training_pipeline.ex` (line 97),
+  `lib/neural/graph_of_trust.ex` (line 77) and `lib/neural/rebalancer.ex`
+  (line 260). A withdrawal that changes only the stored confidence leaves
+  these readers with the withdrawn row.
 * `lib/confidence_annealing.ex` (lines 86 to 91): a recipe is `:nascent` from
   0 qualified outcomes, `:adolescent` from 5, `:mature` from 15 and `:veteran`
   from 50. The dispatch tier of `:nascent` is `:report_only`, and the tier of
@@ -55,6 +60,9 @@ Commit `4d7f059`, read on 2026-11-14.
 .. How the withdrawal names its row, for a fleet row and for a local row.
 .. Who can write a withdrawal, and by which command.
 .. Which stored values are computed again, and when.
+.. Where the withdrawal takes effect, so that each reader of the gate stops
+   counting the row. The gate reads 1 row, and a withdrawal is a second
+   record, so a check of 1 row alone cannot see it.
 +
 Name the option that is most correct in the long term. Say so if you choose another.
 . Stop for the owner if the note needs a stable id for local rows. No work
@@ -65,12 +73,16 @@ Name the option that is most correct in the long term. Say so if you choose anot
    and its dispatch tier from `:report_only` to `:review`;
 .. a withdrawal of 1 of the 5 rows returns the confidence, the stage and the
    tier to the values that the recipe had after 4 rows;
-.. the log still has the 5 rows and the record of the withdrawal.
+.. the log still has the 5 rows and the record of the withdrawal;
+.. cross-repo learning, the training pipeline, the graph of trust and the
+   rebalancer no longer count the withdrawn row (1 test for each).
 . Implement the smallest change that passes the tests.
 
 == Acceptance
 
-* New tests pass in `test/outcome_tracker_test.exs`. They show the 3 points of step 4.
+* New tests pass in `test/outcome_tracker_test.exs`. They show the first 3 points of step 4.
+* 1 test for each of the 4 other readers shows that it does not count a
+  withdrawn row.
 * A withdrawal of a row that does not exist returns an error and writes nothing.
 * `mix test test/outcome_tracker_test.exs test/retraction_test.exs test/cross_repo_learning_test.exs`
   passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.

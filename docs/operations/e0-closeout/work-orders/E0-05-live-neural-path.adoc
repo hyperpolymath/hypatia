@@ -10,7 +10,7 @@
 :wo-cap-usd: 6
 :wo-max-turns: 140
 :wo-branch: fix/e0-05-live-neural-path
-:wo-depends: none
+:wo-depends: E0-04
 
 == Goal
 
@@ -30,6 +30,10 @@ Commit `4d7f059`, read on 2026-11-14.
 * `lib/fleet_dispatcher.ex`, `ingest_fix_outcome/1` (about line 714): it reads
   the boolean `:success` from the finding, builds `"success"` or `"failure"`
   (line 726) and calls `record_neural_outcome/3` (line 728).
+* The finding comes from the caller of the public
+  `FleetDispatcher.dispatch_finding/1`. No rescan and no check of its origin
+  stands between that caller and this path. So each field of the finding is
+  a claim of the caller.
 * Same file, `record_neural_outcome/3` (line 691) calls
   `Hypatia.Neural.Coordinator.record_outcome/3`.
 * `lib/neural/coordinator.ex`, `record_outcome/3` (line 386): the handler
@@ -41,12 +45,17 @@ Commit `4d7f059`, read on 2026-11-14.
 
 == Steps
 
+. Confirm that `E0-04` is merged. Its design note says which callers can set
+  a verification, and from which trusted source. Stop if it is not merged.
 . Measure the facts again. Stop if one no longer holds.
 . Write the tests first. Use a fake coordinator process that records what it receives.
-. In `ingest_fix_outcome/1`, build the same map shape that
-  `OutcomeTracker.qualified_outcome?/1` reads. Call the coordinator only when
-  that function returns `true`.
-. For an unqualified outcome, log one line at `info` level with the pattern and
+. Do not take the verification from the finding. A `verification` value
+  there is a claim of the caller, and it does not qualify the outcome. Take
+  it from the trusted source that `E0-04` names: a rescan of Hypatia, or a
+  qualified record of the fleet import.
+. Call the coordinator only when `OutcomeTracker.qualified_outcome?/1` returns
+  `true` for a map that has the verification of that trusted source.
+. For each other outcome, log one line at `info` level with the pattern and
   the repo. Do not call the coordinator.
 . Do not change `Coordinator.record_outcome/3`.
 
@@ -54,15 +63,19 @@ Commit `4d7f059`, read on 2026-11-14.
 
 * New tests show:
 ** a finding with `success: true` and no verification does not reach the coordinator;
-** a finding with a verified success reaches it once;
-** a finding with a qualified failure reaches it once.
+** a finding with `success: true` and a `verification` of `"verified"` that
+   the caller set does not reach the coordinator;
+** an outcome that the trusted source verifies reaches it once;
+** a failure that the trusted source qualifies reaches it once.
 * `mix test test/neural_training_qualification_test.exs test/graph_of_trust_qualification_test.exs`
   passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The change touches only `lib/fleet_dispatcher.ex` and test files.
 
 == Stop and ask
 
-* The finding has no field that carries the verification. Then the producer
-  of the finding must change, and that is a larger work order.
+* The design note of `E0-04` names no trusted source that this path can
+  read. Then make the path log each outcome and call the coordinator for
+  none, and say so in the pull request body. A way to bring trusted evidence
+  to this path is a larger work order.
 * A test needs a change in `lib/neural/coordinator.ex`.
 * The cost reaches the cap before the acceptance checks pass.

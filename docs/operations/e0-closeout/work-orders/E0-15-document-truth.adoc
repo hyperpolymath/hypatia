@@ -5,7 +5,7 @@
 :wo-repo: hyperpolymath/hypatia
 :wo-size: small
 :wo-agent: e0-executor
-:wo-model: haiku
+:wo-model: sonnet
 :wo-effort: medium
 :wo-cap-usd: 3
 :wo-max-turns: 80
