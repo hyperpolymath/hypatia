@@ -173,6 +173,9 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
 
     assert {{:usage, "unknown or malformed option(s): --bogus"}, _} =
              run(args(tmp, ["--bogus", "1"]))
+
+    assert {{:usage, "unexpected argument(s): stray.json" <> _}, _} =
+             run(args(tmp, ["stray.json"]))
   end
 
   test "run/1 exits with the shutdown code and zero returns normally", %{tmp: tmp} do

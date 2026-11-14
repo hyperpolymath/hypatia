@@ -263,7 +263,8 @@ defmodule Hypatia.Coverage.Report do
   defp binding_reason(name, meta, repo, sha) do
     problems =
       [
-        meta["repo"] != repo && {:repo, meta["repo"], repo},
+        String.downcase(to_string(meta["repo"])) != String.downcase(to_string(repo)) &&
+          {:repo, meta["repo"], repo},
         String.downcase(to_string(meta["commit"])) != String.downcase(to_string(sha)) &&
           {:commit, meta["commit"], sha},
         meta["role"] != name && {:role, meta["role"], name}

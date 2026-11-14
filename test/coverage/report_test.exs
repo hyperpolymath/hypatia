@@ -90,6 +90,11 @@ defmodule Hypatia.Coverage.ReportTest do
       end
     end
 
+    test "repo names compare case-insensitively" do
+      v = build(%{raw_meta: meta("raw", %{"repo" => "Example/Demo"})})
+      refute "COV-E007" in codes(v)
+    end
+
     test "mismatched run ids: UNJUDGED COV-E007" do
       v = build(%{proven_meta: meta("proven", %{"run_id" => "run-2"})})
       assert v["outcome"] == "UNJUDGED" and "COV-E007" in codes(v)

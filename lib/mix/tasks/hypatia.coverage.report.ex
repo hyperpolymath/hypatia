@@ -72,7 +72,7 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
   """
   @spec execute([String.t()]) :: {:ok, 0 | 1 | 2, String.t()} | {:usage, String.t()}
   def execute(argv) do
-    {opts, _rest, invalid} = OptionParser.parse(argv, strict: @switches)
+    {opts, rest, invalid} = OptionParser.parse(argv, strict: @switches)
 
     invalid =
       Enum.map(invalid, fn
@@ -81,6 +81,7 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
       end)
 
     with :ok <- check_invalid(invalid),
+         :ok <- check_rest(rest),
          :ok <- check_required(opts),
          :ok <- check_repo(opts[:repo]),
          :ok <- check_min_cases(opts[:min_cases]),
@@ -120,6 +121,13 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
     File.write!(path, output)
     IO.puts("hypatia.coverage.report: #{verdict["outcome"]} (shadow) -> #{path}")
   end
+
+  defp check_rest([]), do: :ok
+
+  defp check_rest(rest),
+    do:
+      {:usage,
+       "unexpected argument(s): " <> Enum.join(rest, " ") <> " (all inputs are --options)"}
 
   defp check_invalid([]), do: :ok
 
