@@ -63,9 +63,12 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 . Measure the facts again. Stop if one no longer holds.
 . Write the tests first, in `test/safety_test.exs`, with outcome rows of
   their own in the test store. Each test must fail today.
-. Sort the outcomes of the batch by `timestamp`, newest first, before the
-  instructions are made. Equal timestamps keep a fixed order (by `repo`,
-  then `file`).
+. The order of the outcome log is the order of execution: the files of the
+  outcome folder sort by name (one file for each month), and the lines of a
+  file keep their order. List the outcomes of the batch from the last
+  position in the log to the first. Do not sort by `timestamp`, and do not
+  sort by `repo` or `file`: neither is an execution order, and a tie would
+  then revert dependent changes in the wrong order.
 . Leave out each row that a rollback wrote (`"caused_by"` is
   `"batch_rollback"`) when the outcomes of a batch are collected.
 . A batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing.
@@ -73,15 +76,25 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
   `rollbacks.jsonl`). Set the status `rolled_back` only after each write
   succeeds. When a write fails, return `{:error, reason}` and leave the
   status as it was, so that a later call can do the rollback again.
+. A retry writes no second outcome row. Before it writes the `false_positive`
+  row of an original outcome, it checks the log for a rollback row with the
+  same `batch_id`, `recipe_id`, `repo` and `file`, and it skips the write
+  when one exists. The retry still lists that outcome in the manifest, so
+  the manifest is complete and has each instruction once.
 
 == Acceptance
 
 * A test shows 3 outcomes of 1 batch, written oldest first, and a manifest
   that lists them newest first.
-* A test shows 2 outcomes with the same `timestamp`, written against the
-  tie order, and a manifest that lists them by `repo`, then `file`.
+* A test shows 2 outcomes with the same `timestamp`, written in the order
+  `b` then `a` (against the order of `repo` and `file`), and a manifest that
+  lists `a` before `b`: the reverse of the order in the log.
 * A test shows that a failed write of `rollbacks.jsonl` returns an error
   and does not set the status `rolled_back`.
+* A test shows that, after successful outcome writes and a failed write of
+  `rollbacks.jsonl`, a retry completes the rollback, writes no second
+  outcome row for any original outcome, and gives a manifest with each
+  instruction once.
 * A test shows that a second `rollback/2` of the same batch adds 0 rows to
   the outcome log and 0 lines to `rollbacks.jsonl`.
 * The diff touches `lib/safety/batch_rollback.ex` and `test/safety_test.exs` only.
@@ -101,5 +114,5 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 == Stop and ask
 
 * A test of step 2 passes today. Then an inferred fact is false: report it.
-* The outcome rows of the test store have no `timestamp`.
+* A test needs the order of the log, and the test store does not keep it.
 * The cost reaches the cap before the acceptance checks pass.
