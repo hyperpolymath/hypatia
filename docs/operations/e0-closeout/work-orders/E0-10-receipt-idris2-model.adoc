@@ -38,6 +38,25 @@ Commit `4d7f059`. The run facts are from 2026-11-14 with Idris 2 version 0.7.0.
 * `verification/proof-ledger.jsonl` has one row for each proved obligation.
   `verification/PROOF-STATUS.adoc` is rendered from it.
 
+== Theory inputs
+
+Read on 2026-11-14 at echo-types `dedda75` and residual-evidence-types
+`6f94640`. Each file has `--safe --without-K --cubical-compatible`. No prover
+was run for this work order. Use these results as design rules. A use in
+Hypatia is a transcription, and its match to the Agda is assumed, not proved.
+
+Candidate properties for the model, beside those of the design:
+
+* The log splits exactly into the withdrawn row and the rest, and joins
+  again (residual-evidence-types `Revision.agda`, lines 101 to 141). Hypatia's
+  `Retraction.idr` does not have this yet.
+* A receipt survives a withdrawal only when each row that it names is in the
+  log that remains (same file, lines 180 to 191).
+* A revision of a receipt only fills gaps (echo-types
+  `EchoPartialSection.agda`, line 162).
+* A known gap, not to hide: `Retraction.idr` retracts by position, and the
+  run time retracts by name. State which of the 2 the model proves.
+
 == Steps
 
 . Confirm that `E0-09` is merged. Measure the facts again.
