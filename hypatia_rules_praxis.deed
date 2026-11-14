@@ -11,7 +11,7 @@
 (praxis-deed
   :schema-version "1.0.0"
   :canonical-name "hypatia-rules"
-  :beholding-chora #u5"estate/chora"
+  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
   (rule-domain :name "hypatia" :owner "hyperpolymath/hypatia")
   (rules
     ;; defaulted: class excusable-at scope-form
@@ -3308,6 +3308,15 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
+    ;; defaulted: excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/WF033"
+      :text "`if: always()` job that judges its needs' results"
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/actions_expression_injection"
@@ -3339,6 +3348,15 @@
     (rule-def
       :id "hypatia/workflow_audit/actions_lock_tag_keyed"
       :text "hypatia/workflow_audit/actions_lock_tag_keyed in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/always_reads_cancelled_needs"
+      :text "hypatia/workflow_audit/always_reads_cancelled_needs in lib/rules/workflow_audit.ex."
       :class advisory
       :severity minor
       :excusable-at repo
