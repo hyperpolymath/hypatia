@@ -1646,8 +1646,8 @@ defmodule Hypatia.Rules.CodeSafety do
   # widened per file:
   #   * namespaces (`import * as cp from`, `import cp from`,
   #     `const cp = require(...)`) add `cp.exec(` and `cp.execSync(`;
-  #   * destructured exec (`import {exec, exec as run} from`,
-  #     `const {exec: run} = require(...)`) adds `exec(` / `run(`.
+  #   * destructured exec or execSync (`import {exec, execSync as run}
+  #     from`, `const {exec: run} = require(...)`) adds `exec(` / `run(`.
   # Regex sources, compiled at call time: a compiled regex in a module
   # attribute does not survive OTP 28.
   @cp_source ~S|['"](?:node:)?child_process['"]|
@@ -1670,9 +1670,9 @@ defmodule Hypatia.Rules.CodeSafety do
       |> captures(content)
       |> Enum.flat_map(&String.split(&1, ","))
       |> Enum.flat_map(fn entry ->
-        case Regex.run(~r/^\s*exec\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/, entry) do
-          [_, local] -> [local]
-          [_] -> ["exec"]
+        case Regex.run(~r/^\s*(exec(?:Sync)?)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/, entry) do
+          [_, _name, local] -> [local]
+          [_, name] -> [name]
           nil -> []
         end
       end)

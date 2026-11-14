@@ -905,6 +905,8 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert exec_sync?("import {exec} from 'node:child_process';\nexec(cmd, cb);\n")
       assert exec_sync?("import {spawn, exec as run} from 'child_process';\nrun(cmd);\n")
       assert exec_sync?("const { exec: sh } = require('node:child_process');\nsh(cmd);\n")
+      assert exec_sync?("import {execSync as run} from 'node:child_process';\nrun(cmd);\n")
+      assert exec_sync?("const {execSync: run} = require('child_process');\nrun(cmd);\n")
       refute exec_sync?("import {spawnSync} from 'node:child_process';\nexec(cmd);\n")
       assert exec_sync?("require('child_process').exec(`ls ${dir}`, cb);\n")
     end
