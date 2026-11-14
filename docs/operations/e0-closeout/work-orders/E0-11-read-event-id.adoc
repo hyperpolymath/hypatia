@@ -56,7 +56,7 @@ Commit `4d7f059`, read on 2026-11-14.
 
 * The 4 tests pass in `test/learning_scheduler_test.exs`.
 * The older replay and identical-attempt tests pass with no change.
-* `mix test` has 0 failures. `mix format --check-formatted` passes.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The diff touches only `lib/learning_scheduler.ex`, `lib/outcome_tracker.ex` and test files.
 
 == Stop and ask

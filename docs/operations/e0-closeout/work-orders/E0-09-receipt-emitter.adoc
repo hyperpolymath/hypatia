@@ -57,7 +57,7 @@ Commit `4d7f059`, read on 2026-11-14.
 * The fixture line is in canonical form: `jq -cS . fixture` prints the same
   bytes. This is the profile of `scripts/proof-ledger.sh` (ASCII strings, no
   numbers). If the design needs numbers, use the estate JCS tool and say so.
-* `mix format --check-formatted` passes.
+* No file that was formatted before the change is unformatted after it.
 * The diff touches only `schema/`, `lib/hypatia/receipt.ex`, the 2 call sites and test files.
 
 == Stop and ask

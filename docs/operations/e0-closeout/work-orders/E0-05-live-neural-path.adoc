@@ -57,7 +57,7 @@ Commit `4d7f059`, read on 2026-11-14.
 ** a finding with a verified success reaches it once;
 ** a finding with a qualified failure reaches it once.
 * `mix test test/neural_training_qualification_test.exs test/graph_of_trust_qualification_test.exs`
-  passes. `mix test` has 0 failures. `mix format --check-formatted` passes.
+  passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The change touches only `lib/fleet_dispatcher.ex` and test files.
 
 == Stop and ask

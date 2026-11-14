@@ -57,7 +57,7 @@ successes. For them the raw count is the intended denominator.
 * Each reader of case 2 returns `claimed` and `qualified` counts, and a test
   shows 3 and 1 for the fixture.
 * No existing key of a report disappears. A test or a grep shows it.
-* `mix test` has 0 failures. `mix format --check-formatted` passes.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The diff touches only the 5 files above and test files.
 
 == Stop and ask

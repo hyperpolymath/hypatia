@@ -60,7 +60,7 @@ Commit `4d7f059`, read on 2026-11-14. Nothing here was shown by a run.
 
 * The new tests pass, and the first one failed before the change. Give both outputs.
 * `mix test test/outcome_tracker_test.exs test/outcome_tracker_runtime_store_test.exs test/cross_repo_learning_test.exs`
-  passes. `mix test` has 0 failures. `mix format --check-formatted` passes.
+  passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * `mix hypatia.record_outcome` with an unknown recipe records a row that
   `qualified_outcome_counts/1` ignores.
 * The change touches only `lib/outcome_tracker.ex` and test files.

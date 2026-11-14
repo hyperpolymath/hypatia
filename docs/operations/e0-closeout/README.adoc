@@ -72,6 +72,10 @@ Measured at `main` commit `4d7f059` with Erlang/OTP 27.3.4.19 and Elixir 1.17.3.
   whole suite (`mix test --include integration`), so they do run in CI.
 * The comment in `.github/workflows/tests.yml` that says the repository has
   "known-red test families" did not match this run.
+* `mix format --check-formatted` reported 25 unformatted files, and no CI job
+  runs it. So the rule for a work order is narrower: a file that was formatted
+  before the change stays formatted. An agent does not reformat a file that
+  was not. It writes its new lines in the style of the file.
 
 A line number in a work order is correct for commit `4d7f059` only. The
 function name is the stable locator. Measure again before you edit.

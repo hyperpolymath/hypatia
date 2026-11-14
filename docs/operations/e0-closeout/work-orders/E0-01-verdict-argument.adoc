@@ -72,7 +72,7 @@ Commit `4d7f059`, read on 2026-11-14.
 ** a `failed` row and an `incomplete` row count as 1 failure each;
 ** an invalid verdict and a contradictory pair exit with code 1 and write no row;
 ** a call with no `--verdict` behaves as before.
-* `mix format --check-formatted` passes. `mix test` has 0 failures.
+* No file that was formatted before the change is unformatted after it. `mix test` has 0 failures.
 * The change touches only the Mix task, its new test file and the contract document.
 
 == Stop and ask

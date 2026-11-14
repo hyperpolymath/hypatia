@@ -54,7 +54,7 @@ Commit `4d7f059`, read on 2026-11-14.
 * The new test passes on the unchanged code.
 * The pull request body shows the failing output of the mutation check and the
   passing output after the restore.
-* `mix test` has 0 failures. `mix format --check-formatted` passes.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The diff touches only `test/learning_scheduler_test.exs`.
 
 == Stop and ask

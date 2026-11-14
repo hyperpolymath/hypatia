@@ -65,7 +65,7 @@ Name the option that is most correct in the long term. Say so if you choose anot
 * New tests pass in `test/outcome_tracker_test.exs`. They show the 3 points of step 4.
 * A withdrawal of a row that does not exist returns an error and writes nothing.
 * `mix test test/outcome_tracker_test.exs test/retraction_test.exs test/cross_repo_learning_test.exs`
-  passes. `mix test` has 0 failures. `mix format --check-formatted` passes.
+  passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
 * The pull request body has the design note and the rejected options.
 
 == Stop and ask
