@@ -4,7 +4,6 @@
 defmodule Hypatia.Rules.RsrConformanceTest do
   use ExUnit.Case, async: true
 
-  alias Hypatia.A2ml.RecordDialect
   alias Hypatia.Rules.RsrConformance
   alias Hypatia.Rules.RsrConformance.Scorecard
   alias Hypatia.Rules.RsrCriteria
@@ -538,23 +537,80 @@ defmodule Hypatia.Rules.RsrConformanceTest do
   describe "scorecard serialization" do
     @describetag :tmp_dir
 
-    test "round-trips through the record-dialect reader", %{tmp_dir: tmp} do
+    # The RSR scorecard deed (standards clauses/rsr-scorecard.abnf, DRAFT; owner
+    # ruling 2026-11-14), read back with the deed reader that agrees with the
+    # standards gate.
+    defp card_of(text) do
+      assert {:ok, {"praxis-deed", items}} = Hypatia.Deed.parse(text)
+      top = for {:field, k, v} <- items, into: %{}, do: {k, v}
+      assert [{:clause, "rsr-scorecard", members}] = for({:clause, _, _} = c <- items, do: c)
+      fields = for {:field, k, v} <- members, into: %{}, do: {k, v}
+
+      criteria =
+        for {:clause, "criterion", cf} <- members,
+            do: Map.new(cf, fn {:field, k, v} -> {k, v} end)
+
+      {top, fields, criteria}
+    end
+
+    test "writes the scorecard as a praxis-deed the deed reader parses", %{tmp_dir: tmp} do
       mk!(tmp, "README.adoc")
       {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
 
-      text = RsrConformance.to_record_dialect(sc)
-      assert {:ok, tree} = RecordDialect.parse(text)
+      {top, card, criteria} = card_of(RsrConformance.to_deed(sc))
+      assert top["profile"] == {:symbol, "rsr-scorecard"}
+      refute Map.has_key?(top, "beholding-chora")
+      assert card["spec"] == {:symbol, "rsr-criteria-v2"}
+      assert card["tier"] == {:symbol, sc.tier}
+      assert card["provisional"] == {:boolean, false}
+      assert {:string, score} = card["score"]
+      assert score =~ ~r/\A[0-9]+(\.[0-9]+)?\z/
+      refute Map.has_key?(card, "source-commit")
 
-      card = tree["scorecard"]
-      assert card["spec"] == "rsr-criteria-v2"
-      assert card["provisional"] == false
-      assert card["tier"] == sc.tier
-      assert is_number(card["score"])
+      assert length(criteria) == length(sc.results)
 
-      results = tree["result"]
-      assert is_list(results)
-      assert length(results) == length(sc.results)
-      assert Enum.any?(results, &(&1["id"] == "2.1.1" and &1["verdict"] == "pass"))
+      assert Enum.any?(
+               criteria,
+               &(&1["id"] == {:string, "2.1.1"} and &1["verdict"] == {:symbol, "pass"})
+             )
+
+      # every weight a plain decimal string, never exponent form
+      assert Enum.all?(criteria, fn c ->
+               match?({:string, w} when is_binary(w), c["weight"]) and
+                 elem(c["weight"], 1) =~ ~r/\A[0-9]+(\.[0-9]+)?\z/
+             end)
+    end
+
+    test "takes the repo's name and estate chora from its chora deed", %{tmp_dir: tmp} do
+      mk!(tmp, "x_chora.deed", """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "example-game"
+        :repo-uuid #u8"chora-registry:github.com/o/example-game"
+        :beholding-chora #uuid"00000000-0000-8000-8000-0000000000e1")
+      """)
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      ctx = RsrConformance.deed_context(tmp)
+      assert ctx[:repo] == "example-game"
+
+      commit = String.duplicate("0123456789", 4)
+      {top, card, _} = card_of(RsrConformance.to_deed(sc, ctx ++ [source_commit: commit]))
+      assert top["beholding-chora"] == {:uuid, "00000000-0000-8000-8000-0000000000e1"}
+      assert card["repo"] == {:string, "example-game"}
+      assert card["source-commit"] == {:string, commit}
+    end
+
+    test "a repo with no chora deed gives no context", %{tmp_dir: tmp} do
+      assert RsrConformance.deed_context(tmp) == []
+    end
+
+    test "names are escaped as deed strings", %{tmp_dir: tmp} do
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      sc = %{sc | results: [%{hd(sc.results) | name: ~s(a "quoted" \\ name)} | tl(sc.results)]}
+      {_, _, [first | _]} = card_of(RsrConformance.to_deed(sc))
+      assert first["name"] == {:string, ~s(a "quoted" \\ name)}
     end
   end
 
