@@ -15,11 +15,20 @@
 # via a repo variable; the default data/verisim is the in-repo store.
 name: Merge Orchestrate (scheduled)
 
+# PAUSED SCHEDULE (owner ruling 2026-11-14). The hourly cron ('17 * * * *') is
+# off and only workflow_dispatch remains. Every scheduled run failed closed with
+# "unqualified observation batch: receipt/observation unavailable": the store
+# it reads (hyperpolymath/verisimdb-data) has no observations/ directory, so no
+# producer has ever published a batch there, and the brain is right to refuse.
+# A permanent hourly red on main trains people to ignore red. The gate itself is
+# unchanged and stays fail-closed.
+# UNBLOCK: when a producer (the farm's merge-observe.yml) publishes a complete
+# observations/.observation-batch.json to the store, run this workflow once by
+# dispatch, see it decide, and restore the schedule:
+#   schedule:
+#   - cron: '17 * * * *'
 on:
   workflow_dispatch:
-  schedule:
-  # Hourly, offset off the top of the hour to dodge runner congestion.
-  - cron: '17 * * * *'
 
 concurrency:
   group: ${{ github.workflow }}

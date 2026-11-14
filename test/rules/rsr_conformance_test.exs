@@ -392,6 +392,61 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
     end
 
+    defp deed_era_verdicts(tmp) do
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Map.new(&{&1.id, &1.verdict}) |> Map.take(~w(3.1.2 3.1.3 3.1.4 3.1.8 3.2.1))
+    end
+
+    # STATE -> (status) (state-v1-decision option B), META -> (meta),
+    # ECOSYSTEM -> (ecosystem) (meta-ecosystem-to-repo-deed), ANCHOR ->
+    # (anchor) (A7 ruling S1); with no .a2ml left, 3.2.1 is the deed parsing.
+    test "top-level (status) (meta) (ecosystem) (anchor) clauses satisfy 3.1.2-3.1.4, 3.1.8 and 3.2.1",
+         %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <>
+          """
+            (status :phase active)
+            (meta :last-updated "2026-11-14")
+            (ecosystem :project "x" :ecosystem "hyperpolymath")
+            (anchor :schema "hyperpolymath.anchor/2" :authority "upstream-canonical"))
+          """
+      )
+
+      assert deed_era_verdicts(tmp) == %{
+               "3.1.2" => :pass,
+               "3.1.3" => :pass,
+               "3.1.4" => :pass,
+               "3.1.8" => :pass,
+               "3.2.1" => :pass
+             }
+    end
+
+    test "nested clauses do not, and a deed that does not parse fails 3.2.1", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <> "  (notes (status) (meta) (ecosystem) (anchor)))\n"
+      )
+
+      assert deed_era_verdicts(tmp) == %{
+               "3.1.2" => :fail,
+               "3.1.3" => :fail,
+               "3.1.4" => :fail,
+               "3.1.8" => :fail,
+               "3.2.1" => :pass
+             }
+
+      File.write!(Path.join(tmp, "x_chora.deed"), @deed_head <> "  (meta) ; )\n")
+      assert deed_era_verdicts(tmp)["3.2.1"] == :fail
+    end
+
+    test "with neither a record-dialect .a2ml nor a deed, 3.2.1 fails", %{tmp_dir: tmp} do
+      assert deed_era_verdicts(tmp)["3.2.1"] == :fail
+    end
+
     # 3.1.9 is the ESTATE clade (registers into gv-clade-index), which the
     # chora deed's (clade) clause carries. In-repo clade organisation (the
     # subtrees a repo groups its own content into, e.g. boj-server's
@@ -496,8 +551,9 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       repo_root = Path.expand("../..", __DIR__)
 
       assert {:ok, %Scorecard{} = sc} = RsrConformance.score(catalogue, repo_root)
-      # hypatia predates the descriptiles migration (still 6a2/) — the oracle
-      # must report that honestly rather than crash or invent a pass.
+      # hypatia carries its descriptiles as chora-deed clauses (A2ML retired
+      # 2026-11-14) and has no descriptiles/ directory, which 3.1.1 still names:
+      # the oracle must report that honestly rather than crash or invent a pass.
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["3.1.1"] in [:pass, :fail]
       assert sc.provisional == true
