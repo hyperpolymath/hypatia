@@ -130,7 +130,7 @@ jobs:
       # Kept equal to the standards Hypatia lane (hypatia-scan-reusable.yml
       # panic-ref) and every other lane; owner ruling 2026-11-13. Check with
       # `mix hypatia.ci_triage pins` (scanner_pin_drift, hypatia#1064).
-      PA_SHA: 410a8f821ea8297833162565b50a298f787815da
+      PA_SHA: cbf2b935ef4260cc3ae66010f4ffc91385ff8f8c
 
     steps:
       - name: Cache built panic-attack
