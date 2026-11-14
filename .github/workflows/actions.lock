@@ -43,7 +43,7 @@ workflows:
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
-        - 'hyperpolymath/deed-ecosystem@main'
+        - 'hyperpolymath/deed-ecosystem@4cb8886be67cf0d67e150679d1213ea519c3806f'
         - 'hyperpolymath/k9-ecosystem@main'
     '.github/workflows/escript-soundness.yml': []
     '.github/workflows/estate-rescan.yml':
@@ -361,9 +361,9 @@ dependencies:
         commit: 'sha1-0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d'
         owner_id: 75048950
         repo_id: 623796603
-    'hyperpolymath/deed-ecosystem@main':
+    'hyperpolymath/deed-ecosystem@4cb8886be67cf0d67e150679d1213ea519c3806f':
         ref: 'main'
-        commit: 'sha1-ed83d6927e8fb21431e403dbf6d7a4af96772746'
+        commit: 'sha1-4cb8886be67cf0d67e150679d1213ea519c3806f'
         owner_id: 6759885
         repo_id: 1275649586
     'hyperpolymath/k9-ecosystem@main':
