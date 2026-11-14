@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: MPL-2.0
+# Files standards scripts/check-uuid-v8.sh does not scan in this repository.
+# Exact paths only, one per line, relative to the repository root. Keep each
+# entry's reason.
+#
+# Owner ruling Q2 (2026-11-14) makes #u5 in an identity field an error. These
+# files hold one on purpose and are not live deeds.
+#
+# Deed fixtures copied verbatim from metadatastician/standards and
+# hyperpolymath/rsr-template-repo (see test/fixtures/deed_egress/README.adoc).
+# They stay byte-identical to their source, so they are not edited here.
+test/fixtures/deed_egress/invalid/bad-host_chora.deed
+test/fixtures/deed_egress/invalid/bad-port_chora.deed
+test/fixtures/deed_egress/invalid/bad-var_chora.deed
+test/fixtures/deed_egress/invalid/duplicate-job_chora.deed
+test/fixtures/deed_egress/invalid/duplicate-secret_chora.deed
+test/fixtures/deed_egress/invalid/empty-secrets_chora.deed
+test/fixtures/deed_egress/invalid/enforcement-string_chora.deed
+test/fixtures/deed_egress/invalid/enforcement-unknown_chora.deed
+test/fixtures/deed_egress/invalid/github-token-lowercase_chora.deed
+test/fixtures/deed_egress/invalid/github-token_chora.deed
+test/fixtures/deed_egress/invalid/job-id_chora.deed
+test/fixtures/deed_egress/invalid/label-leading-hyphen_chora.deed
+test/fixtures/deed_egress/invalid/label-trailing-hyphen_chora.deed
+test/fixtures/deed_egress/invalid/missing-enforcement_chora.deed
+test/fixtures/deed_egress/invalid/nested-egress_chora.deed
+test/fixtures/deed_egress/invalid/repeated-field_chora.deed
+test/fixtures/deed_egress/invalid/secret-endpoint-unlisted_chora.deed
+test/fixtures/deed_egress/invalid/secret-lowercase_chora.deed
+test/fixtures/deed_egress/invalid/secrets-symbols_chora.deed
+test/fixtures/deed_egress/invalid/stray-member_chora.deed
+test/fixtures/deed_egress/invalid/two-clauses_chora.deed
+test/fixtures/deed_egress/invalid/unknown-field_chora.deed
+test/fixtures/deed_egress/invalid/var-lowercase_chora.deed
+test/fixtures/deed_egress/invalid/workflow-dot-start_chora.deed
+test/fixtures/deed_egress/invalid/workflow-double-dot_chora.deed
+test/fixtures/deed_egress/invalid/workflow-path_chora.deed
+test/fixtures/deed_egress/rsr-template-repo_chora.deed
+test/fixtures/deed_egress/template-main/rsr-template-repo_chora.deed
+test/fixtures/deed_egress/valid/empty-clause_chora.deed
+test/fixtures/deed_egress/valid/github-only_chora.deed
+test/fixtures/deed_egress/valid/hyphenated-host_chora.deed
+test/fixtures/deed_egress/valid/no-egress_chora.deed
+test/fixtures/deed_egress/valid/template-pair_chora.deed
+
+# Tests that write small deed texts inline, in the form these readers must
+# still accept, to test Hypatia.Deed and the rules that read deeds.
+test/deed_test.exs
+test/egress_decision_mirror_test.exs
+test/research_extensions_equivalence_test.exs
+test/research_extensions_test.exs
+test/rules/rsr_conformance_test.exs
