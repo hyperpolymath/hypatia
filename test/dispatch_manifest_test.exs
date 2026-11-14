@@ -7,8 +7,10 @@ defmodule Hypatia.DispatchManifestTest do
 
   describe "write/1" do
     test "writes manifest from routed actions" do
+      # An uncapped id: recipe-shell-quote-vars is squabbler-owned since R1
+      # (test/fix_ownership_cap_test.exs), so it can no longer auto-execute.
       recipe = %{
-        "id" => "recipe-shell-quote-vars",
+        "id" => "recipe-example-uncapped",
         "confidence" => 0.99,
         "fix_script" => "fix-shell-quoting.sh",
         "action" => "shell",

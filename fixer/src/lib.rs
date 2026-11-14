@@ -101,6 +101,44 @@ pub struct FixResult {
 mod tests {
     use super::*;
 
+    // Owner ruling R1 (hypatia#1080): SPDX headers are flag-only, and pins
+    // and toolchain inputs belong to cicd-squabbler. fix_repo reports them
+    // and changes nothing.
+    #[test]
+    fn fix_repo_reports_but_never_applies_r1_categories() {
+        let dir = tempfile::tempdir().unwrap();
+        let wf_dir = dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&wf_dir).unwrap();
+        let wf = wf_dir.join("ci.yml");
+        let body = "name: ci\non: push\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: dtolnay/rust-toolchain@stable\n      - run: true\n";
+        std::fs::write(&wf, body).unwrap();
+
+        let fixer = CicdFixer::new();
+        let scan = fixer.scan_repo(dir.path()).unwrap();
+        for id in [
+            "missing-spdx-header",
+            "unpinned-action",
+            "missing-toolchain-input",
+        ] {
+            let issue = scan
+                .issues
+                .iter()
+                .find(|i| i.id == id)
+                .unwrap_or_else(|| panic!("{id} is still reported"));
+            assert!(!issue.auto_fixable, "{id} must not be auto-fixable");
+        }
+        for id in [
+            "missing-spdx-header",
+            "pinned-dependencies-id",
+            "missing-action-input",
+        ] {
+            assert!(!fixer.catalog.auto_fixable().iter().any(|p| p.id == id));
+        }
+
+        assert!(fixer.fix_repo(dir.path(), false).unwrap().is_empty());
+        assert_eq!(std::fs::read_to_string(&wf).unwrap(), body);
+    }
+
     // The permissions rewrite is review tier: fix_repo must not apply it.
     #[test]
     fn fix_repo_leaves_missing_permissions_for_review() {

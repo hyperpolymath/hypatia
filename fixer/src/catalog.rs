@@ -66,7 +66,7 @@ impl ErrorCatalog {
                 id: "pinned-dependencies-id".to_string(),
                 error_type: ErrorType::WorkflowSecurity,
                 severity: Severity::Medium,
-                auto_fixable: true,
+                auto_fixable: false, // R1 (hypatia#1080)
                 description: "GitHub Actions not SHA-pinned".to_string(),
                 fix_pattern: "Replace @vN with @SHA # vN format".to_string(),
             },
@@ -92,7 +92,7 @@ impl ErrorCatalog {
                 id: "missing-action-input".to_string(),
                 error_type: ErrorType::WorkflowSecurity,
                 severity: Severity::Medium,
-                auto_fixable: true,
+                auto_fixable: false, // R1 (hypatia#1080)
                 description: "GitHub Action missing required input parameter".to_string(),
                 fix_pattern: "Add 'with:' section with required inputs (e.g., toolchain: stable)"
                     .to_string(),
@@ -126,7 +126,7 @@ impl ErrorCatalog {
                 id: "missing-spdx-header".to_string(),
                 error_type: ErrorType::WorkflowSecurity,
                 severity: Severity::Low,
-                auto_fixable: true,
+                auto_fixable: false, // R1 (hypatia#1080)
                 description: "Workflow file missing SPDX license header".to_string(),
                 fix_pattern: "Add '# SPDX-License-Identifier: MPL-2.0' as first line".to_string(),
             },
