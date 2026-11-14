@@ -82,6 +82,10 @@ Measured at `main` commit `4d7f059` with Erlang/OTP 27.3.4.19 and Elixir 1.17.3.
 * The fleet writes `"outcome": "success"` beside the verdict `incomplete`, and
   the import accepts `incomplete` only with `failure`. So the import drops
   that negative evidence. `E0-03` corrects that.
+* With a locale that is not UTF-8 (the default of a cloud container),
+  `mix test` has 1 failure, in `test/rules/rsr_conformance_test.exs` (line 306).
+  That file passes with `LANG=C.UTF-8`. So a red baseline with this 1 failure
+  is a locale fault. Set the locale, and do not stop the run for it.
 
 A line number in a work order is correct for commit `4d7f059` only. The
 function name is the stable locator. Measure again before you edit.
