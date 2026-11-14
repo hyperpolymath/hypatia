@@ -62,7 +62,8 @@ gitbot-fleet commit `7fc2778`, read on 2026-11-14.
 . Log one line for each run that says which of the 2 modes it uses.
 . Extend `tests/outcome-verdict-test.sh` with a stub `mix` on `PATH` that
   records its arguments. The stub answers `help hypatia.record_outcome` with
-  or without `--verdict`, as the test case needs.
+  or without `--verdict`, as the test case needs. In a third case the stub
+  ends the help command with an exit code that is not 0.
 
 == Acceptance
 
@@ -70,6 +71,8 @@ gitbot-fleet commit `7fc2778`, read on 2026-11-14.
   option, it shows the `--verdict` argument for each of the 5 verdicts. With
   a stub that does not, it shows no `--verdict` in any call and no call for
   `no_op` and `unverified`.
+  With a stub whose help command fails, the run ends with an error and
+  makes no record call.
 * `bash tests/automation-quarantine-test.sh` passes with no change to that file.
 * `scripts/dispatch-runner.sh` still exits with code 78 before the manifest.
 * The licence refusal gate in `scripts/dispatch-runner.sh` has no change.

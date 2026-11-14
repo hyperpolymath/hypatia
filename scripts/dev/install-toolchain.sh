@@ -171,6 +171,8 @@ if [ "$with_idris2" = 1 ]; then
   case "$have" in
     *"version ${tag#v}"*) ;; # the pinned release is already there
     *)
+      # A marker from an earlier install must not stand for this build.
+      rm -f "$mark"
       want=$(sum_for "idris2-$tag")
       [ -n "$want" ] || die "no pinned commit for Idris 2 $tag: add it to sum_for() before you build it"
       # The bootstrap needs Chez Scheme, the GMP headers, GNU make and a C

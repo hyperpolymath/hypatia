@@ -59,12 +59,14 @@ Work order to run: `$ARGUMENTS`
 8. **Gate.** Go through the `estate-gates` skill.
 9. **Commit and push.** Commit in the form that part 5 of `estate-gates`
    gives. Then run `git status --short`: it must print nothing, so that the
-   commit holds exactly what the checks ran on. Push the branch with
-   `git push -u origin <branch>`. Use this exact command, with nothing after
-   it: an unattended run has no other push rule. If a commit hook changes a
-   file, add the change, commit, and run the checks of step 7 again before
-   you push. Record `git rev-parse HEAD`
-   for the receipts.
+   commit holds exactly what the checks ran on. If a commit hook changes a
+   file, add the change, commit, run the checks of step 7 again, and run
+   `git status --short` again. Do not push until it prints nothing. Push
+   with this exact command, with nothing after it:
+   `git push --no-follow-tags -u origin refs/heads/<branch>:refs/heads/<branch>`.
+   An unattended run has no other push rule. The full ref on each side
+   keeps a push mapping in the git settings from moving the push. Record
+   `git rev-parse HEAD` for the receipts.
 10. **Report.** Open one draft pull request. Use
     `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
     `claim-receipt` skill for each claim. Then stop. Do not merge. Do not mark

@@ -87,7 +87,7 @@ export ANTHROPIC_API_KEY=test-not-a-real-key
 run E0-98 >/dev/null
 [[ "$(cat "$STUB_LOG")" == *"$want"* ]] && ok "the run passes the model, effort, cap and turns, and reads project settings only" || fail "arguments: $(cat "$STUB_LOG")"
 [[ "$(cat "$STUB_LOG")" == *"effort_env=unset"* ]] && ok "an effort variable of the caller does not reach the run" || fail "effort variable: $(cat "$STUB_LOG")"
-[[ "$(cat "$STUB_LOG")" == *"--allowedTools Bash(git push -u origin fix/x) --output-format json"* ]] &&
+[[ "$(cat "$STUB_LOG")" == *"--allowedTools Bash(git push --no-follow-tags -u origin refs/heads/fix/x:refs/heads/fix/x) --output-format json"* ]] &&
   ok "the one push rule of the run names the branch of the work order" || fail "push rule: $(cat "$STUB_LOG")"
 line=$(tail -n 1 "$HYPATIA_LEDGER")
 [[ "$(lines)" == 1 ]] && [[ "$(jq -cS . <<<"$line")" == "$line" ]] && ok "one ledger line, in canonical form" || fail "ledger: $line"
@@ -135,6 +135,10 @@ if ANTHROPIC_BASE_URL=https://example.invalid run E0-98 >/dev/null 2>&1; then fa
 sed -i "s/^:wo-cap-usd: 5$/:wo-cap-usd: 25/" "$repo/wo/E0-98-fixture.adoc"
 commit -a -m "a work order that main does not have"
 if run E0-98 >/dev/null 2>&1; then fail "ran a work order that differs from main"; fi
+# The same from a folder below the top, with a relative work-order folder.
+if (cd "$repo/wo" && WO_DIR=. sh ../scripts/api-agents/run-work-order.sh E0-98) >/dev/null 2>&1; then
+  fail "ran a work order that differs from main, from a folder below the top"
+fi
 git -C "$repo" reset -q --hard HEAD~1
 [[ "$(calls)" == "$before" ]] && ok "a work order that differs from origin/main is refused" || fail "a stale work order reached claude"
 

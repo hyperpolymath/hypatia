@@ -187,8 +187,9 @@ without the `e0-work-order` skill, and a locale that is not UTF-8. It fetches
 `main` and refuses when the work order, `.claude/` or `scripts/api-agents/`
 differs from `origin/main`, so start a run from a checkout of `main`. It reads
 the project settings and the headless profile only, so a personal permission
-rule does not widen the run. The run can push with one command only:
-`git push -u origin` and the branch of its work order. The script writes one
+rule does not widen the run. The run can push with one command only. That
+command names the branch of its work order as the source and as the
+destination, and it sends no tags. The script writes one
 line to the ledger for each run
 (`docs/operations/e0-closeout/templates/ledger-line.adoc`).
 

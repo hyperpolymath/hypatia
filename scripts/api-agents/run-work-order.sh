@@ -19,8 +19,9 @@
 # The run reads the project settings and the headless profile only
 # (--setting-sources project), so a personal allow rule of the caller does not
 # widen what the unattended run can do. The profile has no push rule: this
-# script allows the one command `git push -u origin BRANCH`, with the branch of
-# the work order, so the run cannot force, delete or push another ref.
+# script allows one push command, which names the branch of the work order as
+# its source and its destination. So the run cannot force, delete or push
+# another ref, and a push mapping in the git settings cannot move the push.
 
 set -eu
 
@@ -46,6 +47,10 @@ esac
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null) || die "run this inside a git checkout"
 dir=${WO_DIR:-$repo/docs/operations/e0-closeout/work-orders}
+# An absolute path: git reads a relative path from the top of the checkout,
+# not from the folder of the caller.
+[ -d "$dir" ] || die "no work-order folder $dir"
+dir=$(CDPATH="" cd -- "$dir" && pwd -P)
 ledger=${HYPATIA_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/hypatia/api-ledger.jsonl}
 
 file=""
@@ -111,7 +116,9 @@ fi
 
 skill="$repo/.claude/skills/e0-work-order/SKILL.md"
 [ -f "$skill" ] || die "missing $skill"
-push="git push -u origin $branch"
+# The full ref on each side: a short name lets remote.origin.push choose
+# another destination. No tags: push.followTags would send them too.
+push="git push --no-follow-tags -u origin refs/heads/$branch:refs/heads/$branch"
 prompt="Run work order $id with the e0-work-order skill. The work order is ${file#"$repo"/}. Stop at its cost cap of $cap US dollars. This run can push with one command only, with nothing after it: $push"
 profile="$repo/.claude/profiles/e0-headless.json"
 [ -f "$profile" ] || die "missing $profile"
