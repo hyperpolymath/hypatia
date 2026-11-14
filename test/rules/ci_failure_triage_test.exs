@@ -118,7 +118,12 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "rules/0 is the whole inventory, including the non-log rules" do
       names = T.rules() |> Enum.map(& &1.id) |> MapSet.new()
 
-      for n <- ["required_check_never_reported", "scanner_pin_drift", "always_after_cancel"] do
+      for n <- [
+            "required_check_never_reported",
+            "scanner_pin_drift",
+            "hypatia_pin_drift",
+            "always_after_cancel"
+          ] do
         assert T.id(n) in names
       end
 
@@ -557,6 +562,99 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
     test "all reported, nothing to say" do
       assert T.check_gate(["Tests"], ["Tests", "Lint"]) == []
+    end
+  end
+
+  describe "hypatia pin drift" do
+    # The template's split on rsr-template-repo main d183b32 (CASE-065).
+    @new "6693f9aed8e4383f78a3d01b600b32663bf7a45c"
+    @old "51539abf3d2472b955da9b051a68c5971f6cfa22"
+
+    defp template_set(oracle) do
+      %{
+        ".github/workflows/hypatia-scan.yml" =>
+          "jobs:\n  scan:\n    env:\n      HYPATIA_SHA: '#{@new}'\n",
+        ".github/workflows/fork-governance.yml" =>
+          "      - run: |\n          scripts/verdict-grid.sh \\\n            --hypatia-ref #{@new}\n",
+        ".github/workflows/verdict-grid-publish.yml" =>
+          "      - run: |\n          scripts/verdict-grid.sh \\\n            --hypatia-ref #{@new} \\\n            --out x\n",
+        ".github/workflows/dogfood-gate.yml" =>
+          "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n" <>
+            "        with:\n          repository: hyperpolymath/hypatia\n" <>
+            "          # Pinned to a commit that contains hypatia#1062.\n" <>
+            "          ref: #{oracle}\n          path: _hypatia\n",
+        ".machine_readable/policies/hypatia-rule-order.json" =>
+          ~s({"scanner":{"commit":"#{@new}","repository":"hyperpolymath/hypatia"}})
+      }
+    end
+
+    test "the template's split oracle pin reports every site" do
+      found = T.check_hypatia_pin_drift(template_set(@old))
+      assert length(found) == 5
+      assert Enum.all?(found, &(&1.pinned == Enum.sort([@new, @old])))
+      assert Enum.all?(found, &(&1.action == :owner and &1.fix == nil))
+
+      assert Enum.map(found, & &1.key) |> Enum.sort() ==
+               Enum.sort([
+                 "HYPATIA_SHA",
+                 "--hypatia-ref",
+                 "--hypatia-ref",
+                 "checkout ref",
+                 "scanner.commit"
+               ])
+    end
+
+    test "one pin everywhere is clean" do
+      assert T.check_hypatia_pin_drift(template_set(@new)) == []
+    end
+
+    test "a checkout of another repository at another commit is not a Hypatia pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "x.yml",
+          "        with:\n          repository: metadatastician/standards\n          ref: #{@old}\n"
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "a commented-out old pin is not a second pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "y.yml",
+          "env:\n  # HYPATIA_SHA: #{@old}\n  HYPATIA_SHA: #{@new}\n"
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "a policy naming another scanner is not a Hypatia pin" do
+      set =
+        Map.put(
+          template_set(@new),
+          "other.json",
+          ~s({"scanner":{"commit":"#{@old}","repository":"hyperpolymath/panic-attack"}})
+        )
+
+      assert T.check_hypatia_pin_drift(set) == []
+    end
+
+    test "ref before repository in a checkout is still read" do
+      set =
+        Map.put(
+          template_set(@new),
+          "z.yml",
+          "        with:\n          ref: #{@old}\n          repository: hyperpolymath/hypatia\n"
+        )
+
+      assert length(T.check_hypatia_pin_drift(set)) == 6
+    end
+
+    test "a variable HYPATIA_SHA is not a pin" do
+      set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
+      assert T.check_hypatia_pin_drift(set) == []
     end
   end
 

@@ -792,6 +792,16 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason: "panic-attack pinned at different commits (check_scanner_pin_drift/1)."
     },
     %{
+      name: "hypatia_pin_drift",
+      layer: :config,
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      input: :workflow_set,
+      reason: "Hypatia pinned at different commits (check_hypatia_pin_drift/1)."
+    },
+    %{
       name: "always_after_cancel",
       layer: :config,
       action: :fix,
@@ -996,6 +1006,91 @@ defmodule Hypatia.Rules.CiFailureTriage do
       end
     else
       []
+    end
+  end
+
+  # Hypatia pin sites in a minted repository (Apodeixis.jl#25, CASE-065):
+  # the scan's `HYPATIA_SHA` env, the verdict grid's `--hypatia-ref`, a
+  # checkout of hyperpolymath/hypatia (dogfood-gate's oracle) and the
+  # rule-order policy's `scanner.commit`. All must name one commit.
+  @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-f]{40})/im
+  @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-f]{40})/i
+  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})/i
+  # A checkout step: `repository: hyperpolymath/hypatia` and a sibling
+  # `ref:` (same indentation, either order, within the same `with:` block).
+  @hypatia_checkout ~r/^([ \t]*)["']?repository["']?[ \t]*:[ \t]*["']?hyperpolymath\/hypatia["']?[ \t]*\n(?:\1[^\n]*\n){0,8}?\1["']?ref["']?[ \t]*:[ \t]*["']?([0-9a-f]{40})/im
+  @hypatia_checkout_rev ~r/^([ \t]*)["']?ref["']?[ \t]*:[ \t]*["']?([0-9a-f]{40})["']?[ \t]*\n(?:\1[^\n]*\n){0,8}?\1["']?repository["']?[ \t]*:[ \t]*["']?hyperpolymath\/hypatia["']?[ \t]*$/im
+
+  @doc """
+  Hypatia pin drift: Hypatia pinned at different commits across a repo's
+  workflows and its `hypatia-rule-order.json` (`%{label => content}`).
+  Returns one finding per pin site when more than one commit is pinned, and
+  `[]` otherwise. A stale pin can lack a crash fix (#1062), and the five
+  sites must move together; which commit is canonical is the owner's call.
+  """
+  def check_hypatia_pin_drift(contents) when is_map(contents) do
+    sites =
+      contents
+      |> Enum.flat_map(fn {label, content} -> hypatia_pins(label, content) end)
+      |> Enum.uniq()
+
+    shas = sites |> Enum.map(& &1.sha) |> Enum.uniq() |> Enum.sort()
+
+    if length(shas) > 1 do
+      for site <- Enum.sort_by(sites, &{&1.file, &1.key}) do
+        %{
+          rule: id("hypatia_pin_drift"),
+          layer: :config,
+          action: :owner,
+          route: route(:owner),
+          retries: 0,
+          fix: nil,
+          escalation: :owner,
+          file: site.file,
+          key: site.key,
+          sha: site.sha,
+          pinned: shas,
+          reason:
+            "Hypatia is pinned at #{length(shas)} different commits " <>
+              "(#{Enum.map_join(shas, ", ", &String.slice(&1, 0, 8))}). Move every " <>
+              "site together to one commit at or after 37b8d01 (#1062)."
+        }
+      end
+    else
+      []
+    end
+  end
+
+  defp hypatia_pins(label, content) do
+    content = String.replace(content, "\r\n", "\n")
+
+    if String.ends_with?(label, ".json") do
+      hypatia_policy_pin(label, content)
+    else
+      yaml = strip_yaml_comments(content)
+
+      for {key, re} <- [
+            {"HYPATIA_SHA", @hypatia_env},
+            {"HYPATIA_SHA", @hypatia_env_flow},
+            {"--hypatia-ref", @hypatia_flag},
+            {"checkout ref", @hypatia_checkout},
+            {"checkout ref", @hypatia_checkout_rev}
+          ],
+          match <- Regex.scan(re, yaml) do
+        sha = if key == "checkout ref", do: Enum.at(match, 2), else: Enum.at(match, 1)
+        %{file: label, key: key, sha: String.downcase(sha)}
+      end
+    end
+  end
+
+  # The rule-order policy names the scanner it was written against.
+  defp hypatia_policy_pin(label, content) do
+    with {:ok, %{"scanner" => %{"repository" => "hyperpolymath/hypatia", "commit" => c}}}
+         when is_binary(c) <- Jason.decode(content),
+         true <- Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, c) do
+      [%{file: label, key: "scanner.commit", sha: String.downcase(c)}]
+    else
+      _ -> []
     end
   end
 

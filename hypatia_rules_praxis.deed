@@ -483,6 +483,14 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/ci_failure_triage/hypatia_pin_drift"
+      :text "Hypatia pinned at different commits (check_hypatia_pin_drift/1)."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/ci_failure_triage/kyaml_format"
       :text "A YAML file is not in KYAML form (quintessence compose.yaml)."
       :class gate
