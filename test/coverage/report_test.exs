@@ -271,6 +271,97 @@ defmodule Hypatia.Coverage.ReportTest do
     end
   end
 
+  describe "evidence binding and robustness in the report" do
+    test "records for another repo or commit do not count" do
+      {:ok, records} = evidence()
+      other_commit = Enum.map(records, &Map.put(&1, "commit", String.duplicate("f", 40)))
+      v = build(%{evidence: {:ok, other_commit}})
+      assert "COV-E005" in codes(v)
+      assert Enum.any?(v["evidence"]["not_counted"], &(&1["reason"] == "wrong_commit"))
+
+      other_repo = Enum.map(records, &Map.put(&1, "repo", "x/y"))
+      v = build(%{evidence: {:ok, other_repo}})
+      assert Enum.any?(v["evidence"]["not_counted"], &(&1["reason"] == "wrong_repo"))
+    end
+
+    test "mutation survivors are listed as not counted, languages without a tool are noted" do
+      {:ok, records} = evidence()
+
+      survived =
+        Enum.map(
+          records,
+          &put_in(&1, ["run", "mutation"], %{"tool" => "t", "killed" => 1, "survived" => 1})
+        )
+
+      assert Enum.any?(
+               build(%{evidence: {:ok, survived}})["evidence"]["not_counted"],
+               &(&1["reason"] == "mutants_survived")
+             )
+
+      zig = Enum.map(records, &Map.put(&1, "language", "zig"))
+      assert "mutation: not measurable for zig" in build(%{evidence: {:ok, zig}})["notes"]
+      refute Enum.any?(build()["notes"], &String.starts_with?(&1, "mutation:"))
+    end
+
+    test "a record with object-typed name and kind still renders" do
+      bad = %{
+        "id" => "weird",
+        "kind" => %{"x" => 1},
+        "test_id" => %{"name" => %{"a" => 1}},
+        "run" => %{"outcome" => "passed"},
+        "fixtures" => %{"cannot_fail_by_design" => "x"}
+      }
+
+      {:ok, records} = evidence()
+      v = build(%{evidence: {:ok, [bad | records]}})
+      md = Report.to_markdown(v)
+      assert md =~ "`weird`"
+      assert Report.to_json(v) =~ "weird"
+    end
+  end
+
+  describe "COV-E003 path escape" do
+    test "parent-relative and absolute paths do not map under the root" do
+      f =
+        files(%{
+          "../evidence.json" => %{lines: %{1 => 1}, branches: %{}},
+          "/etc/hosts" => %{lines: %{1 => 1}, branches: %{}},
+          "src/lib.rs" => %{lines: %{1 => 1}, branches: %{}}
+        })
+
+      v = build(%{raw: {:ok, f}, proven: {:ok, f}})
+      d = one(v, "COV-E003")["detail"]
+      assert d["missing"] == 2 and d["of"] == 3
+      assert Enum.sort(d["sample"]) == ["../evidence.json", "/etc/hosts"]
+    end
+  end
+
+  describe "branch arm identity" do
+    test "two uncovered arms on one line count as two" do
+      raw =
+        files(%{
+          "a" => %{
+            lines: %{1 => 1},
+            branches: %{{14, 0, 0} => 0, {14, 0, 1} => 0, {15, 0, 0} => 1}
+          }
+        })
+
+      v = build(%{raw: {:ok, raw}, proven: {:ok, raw}, root: nil, evidence: {:ok, [counted_r()]}})
+      s = v["sections"]["unrun_branches"]
+      assert s["total"] == 2 and length(s["items"]) == 2
+      assert Enum.map(s["items"], & &1["arm"]) == [0, 1]
+      assert Report.to_markdown(v) =~ "a#L14 (block 0 arm 1)"
+    end
+
+    test "the cap counts arms" do
+      arms = for l <- 1..30, a <- 0..2, into: %{}, do: {{l, 0, a}, 0}
+      raw = files(%{"a" => %{lines: %{1 => 1}, branches: arms}})
+      v = build(%{raw: {:ok, raw}, proven: {:ok, raw}, root: nil, evidence: {:ok, [counted_r()]}})
+      s = v["sections"]["unrun_branches"]
+      assert s["total"] == 90 and length(s["items"]) == 50 and s["cut"] == 40
+    end
+  end
+
   describe "COV-E010 overclaim" do
     test "is flagged but does not by itself make the verdict unjudged" do
       v = build()
@@ -331,6 +422,7 @@ defmodule Hypatia.Coverage.ReportTest do
             do: %{
               "id" => "e#{i}",
               "kind" => "E",
+              "repo" => "example/demo",
               "fixtures" => %{"cannot_fail_by_design" => "example"},
               "run" => %{"outcome" => "passed"}
             }
@@ -403,6 +495,9 @@ defmodule Hypatia.Coverage.ReportTest do
     %{
       "id" => "r",
       "kind" => "R",
+      "language" => "zig",
+      "repo" => "example/demo",
+      "commit" => @sha,
       "test_id" => %{"name" => "p"},
       "fixtures" => %{"silence" => "s", "firing" => %{"source" => "f"}},
       "run" => %{"outcome" => "passed", "property" => %{"seed" => "1", "cases" => 100}}

@@ -112,6 +112,18 @@ defmodule Hypatia.Coverage.PropertiesTest do
     end)
   end
 
+  test "LCOV round trip keeps branch_measurable with zero branch arms" do
+    f =
+      Facts.new(
+        %{"a" => %{lines: %{1 => 1}, branches: %{}}, "b" => %{lines: %{2 => 0}, branches: %{}}},
+        branch_measurable: true
+      )
+
+    text = Lcov.render(f)
+    assert text =~ "BRF:0\nBRH:0\n"
+    assert Lcov.parse(text) == {:ok, f}
+  end
+
   test "ranges/1 covers exactly the input lines, sorted and non-overlapping" do
     Prop.check("ranges", fn ->
       locs = for p <- ~w(a b), l <- Enum.take_random(1..40, :rand.uniform(30)), do: {p, l}

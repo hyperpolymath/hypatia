@@ -6,11 +6,12 @@ defmodule Hypatia.Coverage.Lcov do
   Understood records: `SF:`, `DA:line,hits[,checksum]`,
   `BRDA:line,block,branch,taken` (`taken` of `-` means the block was never
   reached and counts as 0) and `end_of_record`. Other records (`TN:`, `FN:`,
-  `FNDA:`, `LF:`, `LH:`, `BRF:`, `BRH:` ...) are summary data derived from the
-  above and are ignored. This is the plug-in point for Elixir, JS, Julia and
+  `FNDA:`, `LF:`, `LH:`, `BRH:` ...) are summary data derived from the
+  above and are ignored, except that a `BRF:` line makes branches measurable
+  even with zero arms (`BRF:0`). This is the plug-in point for Elixir, JS, Julia and
   Zig later (design §4.1).
 
-  A report with no `BRDA:` line has `branch_measurable: false`.
+  A report with no `BRDA:` and no `BRF:` line has `branch_measurable: false`.
 
   Errors are `{:error, {:parse, "line N: ..."}}`.
   """
@@ -68,6 +69,9 @@ defmodule Hypatia.Coverage.Lcov do
             end
           end)
           |> step(done, true)
+
+        :brf ->
+          {:cont, {cur, done, true}}
       end
     end)
     |> case do
@@ -90,7 +94,9 @@ defmodule Hypatia.Coverage.Lcov do
 
   @doc "Render facts as LCOV. `parse/1` of the result gives the same facts."
   @spec render(Facts.t()) :: String.t()
-  def render(%{files: files}) do
+  def render(%{files: files} = facts) do
+    measurable = Map.get(facts, :branch_measurable, false)
+
     files
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.map(fn {path, f} ->
@@ -101,7 +107,15 @@ defmodule Hypatia.Coverage.Lcov do
         |> Enum.sort()
         |> Enum.map(fn {{l, b, a}, h} -> "BRDA:#{l},#{b},#{a},#{h}\n" end)
 
-      ["SF:", path, "\n", da, brda, "end_of_record\n"]
+      brf =
+        if measurable,
+          do: [
+            "BRF:#{map_size(f.branches)}\n",
+            "BRH:#{Enum.count(f.branches, fn {_, h} -> h > 0 end)}\n"
+          ],
+          else: []
+
+      ["SF:", path, "\n", da, brda, brf, "end_of_record\n"]
     end)
     |> IO.iodata_to_binary()
   end
@@ -117,6 +131,7 @@ defmodule Hypatia.Coverage.Lcov do
   defp record("end_of_record"), do: :eor
   defp record("DA:" <> rest), do: {:da, rest}
   defp record("BRDA:" <> rest), do: {:brda, rest}
+  defp record("BRF:" <> _), do: :brf
   defp record(_other), do: :skip
 
   defp parse_da(args) do

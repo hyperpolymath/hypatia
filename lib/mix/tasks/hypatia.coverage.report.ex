@@ -19,9 +19,9 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
     * `--proven PATH`   coverage of the run of only the COUNTED tests
     * `--evidence PATH` evidence list (`hypatia.proven-coverage.evidence/1`)
     * `--repo OWNER/NAME`, `--sha SHA`   used for permalinks
-    * `--root DIR`      repo checkout; strips it from report paths and checks
+    * `--root DIR`      repo checkout (expanded to an absolute path); strips it from report paths and checks
                         that every reported file exists under it (COV-E003)
-    * `--min-cases N`   property-test case floor (default 100)
+    * `--min-cases N`   property-test case floor (integer, default and floor 100)
     * `--format`        `markdown` (default) or `json`
     * `--out PATH`      write the report there instead of stdout
     * `--shadow`        always exit 0; the true verdict is still printed
@@ -69,11 +69,18 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
   def execute(argv) do
     {opts, _rest, invalid} = OptionParser.parse(argv, strict: @switches)
 
+    invalid =
+      Enum.map(invalid, fn
+        {"--min-cases", _} -> {"--min-cases (must be an integer >= 100)", nil}
+        other -> other
+      end)
+
     with :ok <- check_invalid(invalid),
          :ok <- check_required(opts),
          :ok <- check_repo(opts[:repo]),
+         :ok <- check_min_cases(opts[:min_cases]),
          {:ok, format} <- check_format(opts[:format]) do
-      root = opts[:root]
+      root = if opts[:root], do: Path.expand(opts[:root])
       load_opts = if root, do: [root: root], else: []
 
       verdict =
@@ -124,6 +131,13 @@ defmodule Mix.Tasks.Hypatia.Coverage.Report do
       do: :ok,
       else: {:usage, "--repo must look like OWNER/NAME, got #{inspect(repo)}"}
   end
+
+  defp check_min_cases(nil), do: :ok
+  defp check_min_cases(n) when is_integer(n) and n >= 100, do: :ok
+
+  defp check_min_cases(n),
+    do:
+      {:usage, "--min-cases must be an integer >= 100 (the floor, design Q8), got #{inspect(n)}"}
 
   defp check_format(nil), do: {:ok, "markdown"}
   defp check_format(f) when f in ["markdown", "json"], do: {:ok, f}

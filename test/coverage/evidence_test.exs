@@ -12,6 +12,8 @@ defmodule Hypatia.Coverage.EvidenceTest do
     "file" => "src/Proven/SafeJson/Proofs.idr",
     "line" => 12,
     "checker" => "idris2",
+    "checker_version" => "0.7.0",
+    "statement_sha256" => @sha,
     "check" => "passed"
   }
 
@@ -20,6 +22,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
       %{
         "id" => "x",
         "kind" => kind,
+        "language" => "zig",
         "test_id" => %{"name" => "t"},
         "fixtures" => %{"silence" => "s", "firing" => %{"source" => "f", "defect_class" => "d"}},
         "run" => Map.merge(%{"outcome" => "passed"}, run)
@@ -46,7 +49,15 @@ defmodule Hypatia.Coverage.EvidenceTest do
   defp bench(checksum),
     do: rec("B", %{"benchmark" => %{"iterations" => 10, "checksum" => checksum}})
 
-  defp proof(ladder), do: rec("P", %{"proof" => %{"ladder" => ladder}})
+  defp proof(ladder, decls \\ ["Proven.SafeJson.parseTotal"]),
+    do: rec("P", %{"proof" => %{"ladder" => ladder, "covers_decls" => decls}})
+
+  @mut %{"tool" => "cargo-mutants", "killed" => 4, "survived" => 0}
+  @sha1 "0123456789abcdef0123456789abcdef01234567"
+
+  defp lang(r, l), do: Map.put(r, "language", l)
+  defp mut(r, m), do: put_in(r, ["run", "mutation"], m)
+  defp bound(r), do: Map.merge(r, %{"repo" => "o/r", "commit" => @sha1})
 
   describe "counted records" do
     test "R with seed and cases at the default floor" do
@@ -151,7 +162,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
       r = prop(%{"cases" => 500})
       assert Evidence.counted?(r, min_cases: 500) == :counted
       assert Evidence.counted?(r, min_cases: 501) == {:not_counted, :too_few_cases}
-      assert Evidence.counted?(prop(%{"cases" => 10}), min_cases: 10) == :counted
+      assert Evidence.counted?(prop(%{"cases" => 150}), min_cases: 150) == :counted
     end
   end
 
@@ -211,6 +222,157 @@ defmodule Hypatia.Coverage.EvidenceTest do
     end
   end
 
+  describe "mutation condition (Q7)" do
+    for l <- ~w(rust js ts javascript typescript elixir julia), kind <- [:prop, :conf, :bench] do
+      test "#{l} #{kind}: needs a mutation result" do
+        r =
+          case unquote(kind) do
+            :prop -> prop()
+            :conf -> conf()
+            :bench -> bench(true)
+          end
+          |> lang(unquote(l))
+
+        assert Evidence.counted?(r) == {:not_counted, :no_mutation_result}
+        assert Evidence.counted?(mut(r, @mut)) == :counted
+      end
+    end
+
+    test "malformed or weak results are :no_mutation_result" do
+      r = lang(prop(), "Rust")
+
+      for m <- [
+            nil,
+            "x",
+            %{},
+            %{@mut | "tool" => ""},
+            %{@mut | "tool" => 3},
+            %{@mut | "killed" => 0},
+            %{@mut | "killed" => "4"},
+            Map.delete(@mut, "survived"),
+            %{@mut | "survived" => nil}
+          ] do
+        assert Evidence.counted?(mut(r, m)) == {:not_counted, :no_mutation_result}, inspect(m)
+      end
+    end
+
+    test "surviving mutants" do
+      r = lang(prop(), "elixir") |> mut(%{@mut | "survived" => 2})
+      assert Evidence.counted?(r) == {:not_counted, :mutants_survived}
+      refute Evidence.overclaim?({:not_counted, :mutants_survived})
+      refute Evidence.overclaim?({:not_counted, :no_mutation_result})
+    end
+
+    test "languages without a tool, and P, are exempt" do
+      for l <- ["zig", "idris2", "unknown", nil, 5],
+          do: assert(Evidence.counted?(lang(prop(), l)) == :counted)
+
+      assert Evidence.counted?(lang(proof([@rung]), "rust")) == :counted
+    end
+  end
+
+  describe "proof identity" do
+    test "each identity field is required" do
+      for k <- ~w(line checker_version statement_sha256) do
+        assert Evidence.counted?(proof([Map.delete(@rung, k)])) ==
+                 {:not_counted, :incomplete_rung}
+      end
+
+      for {k, v} <- [
+            {"line", "12"},
+            {"statement_sha256", "abc"},
+            {"statement_sha256", String.duplicate("g", 64)},
+            {"checker_version", ""}
+          ] do
+        assert Evidence.counted?(proof([Map.put(@rung, k, v)])) ==
+                 {:not_counted, :incomplete_rung}
+      end
+    end
+
+    test "covers_decls must be a non-empty list of non-empty strings" do
+      for d <- [[], nil, "x", [""], [1], ["a", " "]] do
+        assert Evidence.counted?(proof([@rung], d)) == {:not_counted, :no_covers_decls},
+               inspect(d)
+      end
+
+      assert Evidence.overclaim?({:not_counted, :no_covers_decls})
+    end
+  end
+
+  describe "evidence binding" do
+    test "counts only for the requested repo and commit" do
+      r = bound(prop())
+      assert Evidence.counted?(r, repo: "o/r", commit: @sha1) == :counted
+      assert Evidence.counted?(r, repo: "O/R", commit: String.upcase(@sha1)) == :counted
+      assert Evidence.counted?(r, repo: "o/other", commit: @sha1) == {:not_counted, :wrong_repo}
+      assert Evidence.counted?(Map.delete(r, "repo"), repo: "o/r") == {:not_counted, :wrong_repo}
+
+      assert Evidence.counted?(Map.delete(r, "commit"), commit: @sha1) ==
+               {:not_counted, :no_commit}
+
+      assert Evidence.counted?(%{r | "commit" => "abc"}, commit: @sha1) ==
+               {:not_counted, :wrong_commit}
+
+      assert Evidence.counted?(%{r | "commit" => String.duplicate("1", 40)}, commit: @sha1) ==
+               {:not_counted, :wrong_commit}
+
+      assert Evidence.counted?(%{r | "commit" => 5}, commit: @sha1) == {:not_counted, :no_commit}
+    end
+
+    test "without options nothing is bound" do
+      assert Evidence.counted?(prop()) == :counted
+    end
+  end
+
+  describe "min_cases floor" do
+    test "the library cannot lower the floor of 100" do
+      assert Evidence.counted?(prop(%{"cases" => 10}), min_cases: 1) ==
+               {:not_counted, :too_few_cases}
+
+      assert Evidence.counted?(prop(%{"cases" => 10}), min_cases: "x") ==
+               {:not_counted, :too_few_cases}
+    end
+  end
+
+  describe "malformed records never crash" do
+    test "wrong-typed fields" do
+      for r <- [
+            %{
+              "kind" => %{},
+              "run" => %{"outcome" => "passed"},
+              "fixtures" => %{"cannot_fail_by_design" => "x"}
+            },
+            %{"kind" => ["R"], "run" => "passed"},
+            %{"kind" => "R", "run" => [1]},
+            %{
+              "kind" => "R",
+              "run" => %{"outcome" => "passed", "property" => 5},
+              "fixtures" => %{"cannot_fail_by_design" => "x"}
+            },
+            %{
+              "kind" => "P",
+              "language" => %{},
+              "run" => %{
+                "outcome" => "passed",
+                "proof" => %{"ladder" => [1], "covers_decls" => 3}
+              },
+              "fixtures" => []
+            },
+            %{"kind" => "R", "fixtures" => 7, "test_id" => 9, "id" => %{}}
+          ] do
+        assert {:not_counted, _} = Evidence.counted?(r, repo: "o/r", commit: @sha1)
+        assert is_binary(Evidence.name(r))
+        assert Evidence.kind(r) == nil or is_binary(Evidence.kind(r))
+      end
+    end
+
+    test "name/1 with non-string parts" do
+      assert Evidence.name(%{"test_id" => %{"name" => %{"a" => 1}}, "id" => "i"}) == "i"
+      assert Evidence.name(%{"test_id" => %{"name" => "n", "module_path" => 3}}) == "n"
+      assert Evidence.name(%{"test_id" => "x", "id" => 4}) == "(unnamed record)"
+    end
+  end
+
   describe "overclaim (COV-E010)" do
     test "kind-requirement failures are overclaims; general exclusions are not" do
       assert Evidence.overclaim?(Evidence.counted?(prop(%{"seed" => nil})))
@@ -240,6 +402,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
           proof([]),
           proof([%{}]),
           proof([Map.delete(@rung, "check")]),
+          proof([@rung], []),
+          lang(prop(), "rust"),
+          lang(prop(), "rust") |> mut(%{@mut | "survived" => 1}),
           rec("E"),
           rec("M"),
           rec("Z"),
@@ -260,7 +425,9 @@ defmodule Hypatia.Coverage.EvidenceTest do
                    :example_test,
                    :mock_test,
                    :unknown_kind,
-                   :not_passed
+                   :not_passed,
+                   :no_mutation_result,
+                   :mutants_survived
                  ] ++
                    Evidence.overclaim_reasons()
                )

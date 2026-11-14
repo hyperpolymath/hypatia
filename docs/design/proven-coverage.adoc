@@ -96,6 +96,8 @@ Lines covered by P (proof) are exempt. Property tests need at least the repo's m
 
 === 2.1 Mutation tools per language (to be confirmed by the experiment)
 
+Note: the first increment checks mutation at record level (`run.mutation`: tool, killed >= 1, survived = 0), not per line.
+
 [cols="1,2,2"]
 |===
 | Language | Tool | Status

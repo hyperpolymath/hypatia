@@ -131,7 +131,11 @@ defmodule Hypatia.Coverage.Report do
     {proven, proven_reasons} = take(input.proven, "proven")
     {records, ev_reasons} = take(input.evidence, "evidence")
 
-    classified = if records, do: Evidence.classify_all(records, min_cases: min_cases), else: []
+    classified =
+      if records,
+        do: Evidence.classify_all(records, min_cases: min_cases, repo: repo, commit: sha),
+        else: []
+
     ev_reasons = ev_reasons ++ evidence_reasons(records, classified)
 
     raw_reasons = raw_reasons ++ raw_sanity(raw)
@@ -155,7 +159,7 @@ defmodule Hypatia.Coverage.Report do
         true -> "FAIL"
       end
 
-    notes = notes(branch, raw, proven, root)
+    notes = notes(branch, raw, proven, root, classified)
 
     sections =
       if outcome == "UNJUDGED" or not both? do
@@ -249,7 +253,7 @@ defmodule Hypatia.Coverage.Report do
               records:
                 for(
                   {r, {:not_counted, why}} <- over,
-                  do: %{name: Evidence.name(r), kind: r["kind"], reason: why}
+                  do: %{name: Evidence.name(r), kind: Evidence.kind(r), reason: why}
                 )
             }
           )
@@ -271,7 +275,7 @@ defmodule Hypatia.Coverage.Report do
       |> Enum.uniq()
       |> Enum.sort()
 
-    missing = Enum.reject(paths, &File.regular?(Path.join(root, &1)))
+    missing = Enum.reject(paths, &under_root_file?(root, &1))
 
     if missing == [],
       do: [],
@@ -289,6 +293,16 @@ defmodule Hypatia.Coverage.Report do
           }
         )
       ]
+  end
+
+  # A report path maps only if it stays under the (expanded) root; `..` and absolute paths
+  # that escape it count as unmapped.
+  defp under_root_file?(root, path) do
+    root = Path.expand(root)
+    full = Path.expand(path, root)
+    prefix = if String.ends_with?(root, "/"), do: root, else: root <> "/"
+
+    Path.type(path) != :absolute and String.starts_with?(full, prefix) and File.regular?(full)
   end
 
   # COV-E011: proven must be a subset of raw.
@@ -366,7 +380,7 @@ defmodule Hypatia.Coverage.Report do
       (branch["measurable"] != true or branch["proven"] == branch["total"])
   end
 
-  defp notes(branch, raw, proven, root) do
+  defp notes(branch, raw, proven, root, classified) do
     n = []
 
     n =
@@ -385,7 +399,15 @@ defmodule Hypatia.Coverage.Report do
         ],
         else: n
 
-    Enum.reverse(n)
+    mutation_notes =
+      for {r, :counted} <- classified,
+          Evidence.kind(r) in ["R", "C", "B"],
+          lang = Evidence.language(r),
+          lang not in Evidence.mutation_languages(),
+          uniq: true,
+          do: "mutation: not measurable for #{lang}"
+
+    Enum.reverse(n) ++ Enum.sort(mutation_notes)
   end
 
   # -- location sections ---------------------------------------------------
@@ -404,14 +426,14 @@ defmodule Hypatia.Coverage.Report do
 
     raw_only_l = for {{p, l} = k, h} <- rl, h > 0, Map.get(pl, k, 0) == 0, do: {p, l}
     unrun_l = for {{p, l}, 0} <- rl, do: {p, l}
-    raw_only_b = for {{p, l, _b, _a} = k, h} <- rb, h > 0, Map.get(pb, k, 0) == 0, do: {p, l}
-    unrun_b = for {{p, l, _b, _a}, 0} <- rb, do: {p, l}
+    raw_only_b = for {k, h} <- rb, h > 0, Map.get(pb, k, 0) == 0, do: k
+    unrun_b = for {k, 0} <- rb, do: k
 
     %{
       "raw_only_lines" => section(raw_only_l, repo, sha),
       "unrun_lines" => section(unrun_l, repo, sha),
-      "raw_only_branches" => section(raw_only_b, repo, sha),
-      "unrun_branches" => section(unrun_b, repo, sha)
+      "raw_only_branches" => arm_section(raw_only_b, repo, sha),
+      "unrun_branches" => arm_section(unrun_b, repo, sha)
     }
   end
 
@@ -426,6 +448,30 @@ defmodule Hypatia.Coverage.Report do
         end),
       "total" => length(ranges),
       "cut" => max(length(ranges) - @cap, 0)
+    }
+  end
+
+  # One entry per branch arm: two uncovered arms on one line are two entries (and count twice
+  # in `total` and in the cap), both linking to the shared line.
+  defp arm_section(arms, repo, sha) do
+    sorted = arms |> Enum.uniq() |> Enum.sort()
+
+    %{
+      "items" =>
+        sorted
+        |> Enum.take(@cap)
+        |> Enum.map(fn {p, l, b, a} ->
+          %{
+            "path" => p,
+            "from" => l,
+            "to" => l,
+            "block" => b,
+            "arm" => a,
+            "url" => permalink(repo, sha, p, l, l)
+          }
+        end),
+      "total" => length(sorted),
+      "cut" => max(length(sorted) - @cap, 0)
     }
   end
 
@@ -468,7 +514,7 @@ defmodule Hypatia.Coverage.Report do
       for {r, {:not_counted, why} = d} <- classified do
         %{
           "name" => Evidence.name(r),
-          "kind" => r["kind"],
+          "kind" => Evidence.kind(r),
           "reason" => Atom.to_string(why),
           "text" => Evidence.reason_text(why),
           "overclaim" => Evidence.overclaim?(d)
@@ -542,6 +588,8 @@ defmodule Hypatia.Coverage.Report do
           if i["from"] == i["to"],
             do: "#{i["path"]}#L#{i["from"]}",
             else: "#{i["path"]}#L#{i["from"]}-L#{i["to"]}"
+
+        label = if i["arm"], do: "#{label} (block #{i["block"]} arm #{i["arm"]})", else: label
 
         "- [#{label}](#{i["url"]})\n"
       end),

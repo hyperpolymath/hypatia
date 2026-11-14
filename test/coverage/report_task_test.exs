@@ -108,6 +108,25 @@ defmodule Mix.Tasks.Hypatia.Coverage.ReportTest do
     assert out =~ "COV-E005"
   end
 
+  test "--min-cases below the floor of 100, or not an integer, is a usage error", %{tmp: tmp} do
+    assert {{:usage, "--min-cases must be an integer >= 100" <> _}, _} =
+             run(args(tmp, ["--min-cases", "99"]))
+
+    assert {{:usage, "unknown or malformed option(s): --min-cases" <> _}, _} =
+             run(args(tmp, ["--min-cases", "lots"]))
+
+    assert {:ok, _, _} = elem(run(args(tmp, ["--min-cases", "100"])), 0)
+  end
+
+  test "a relative --root is expanded so absolute prefixes are stripped", %{tmp: tmp} do
+    rel = Path.relative_to(@demo_root, File.cwd!())
+    assert Path.type(rel) == :relative
+    argv = Enum.drop(args(tmp), -2) ++ ["--root", rel]
+    {{:ok, 1, _}, out} = run(argv)
+    assert out =~ "| Lines | 20/38 (52.6%) | 32/38 (84.2%) |"
+    refute out =~ "COV-E003"
+  end
+
   test "usage errors are tagged, not raised", %{tmp: tmp} do
     assert {{:usage, "missing required option(s): --raw" <> _}, _} = run(tl(tl(args(tmp))))
 
