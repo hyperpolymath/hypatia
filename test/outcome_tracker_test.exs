@@ -150,21 +150,31 @@ defmodule Hypatia.OutcomeTrackerTest do
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
-      assert Hypatia.LearningScheduler.classify_fleet_record(row) == :skip
+      # A row that is not evidence is kept as an audit row (E0-03).
+      assert Hypatia.LearningScheduler.classify_fleet_record(row) ==
+               {:audit, "recipe-a", "example", ".", :success, "unqualified"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 2, "after_hits" => 0})
              ) == {:ok, "recipe-a", "example", ".", :success, "verified"}
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 0, "after_hits" => 0})
-             ) == :skip
+             ) == {:audit, "recipe-a", "example", ".", :success, "unqualified"}
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.put(row, "verdict", "no_op")
-             ) == :skip
+             ) == {:audit, "recipe-a", "example", ".", :success, "no_op"}
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.put(row, "verdict", "unverified")
+             ) == {:audit, "recipe-a", "example", ".", :success, "unverified"}
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "failed", "exit_code" => 1, "outcome" => "failure"})
              ) == {:ok, "recipe-a", "example", ".", :failure, "failed"}
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2, "outcome" => "failure"})
+             ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+      # The fleet writes the legacy outcome "success" beside "incomplete".
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2})
              ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 1, "after_hits" => 0,

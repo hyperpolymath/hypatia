@@ -139,9 +139,12 @@ defmodule Hypatia.OutcomeTrackerRuntimeStoreTest do
     partial = unqualified <> "\n" <> ~s({"recipe_id":)
     fleet_file = write_fleet(fleet_root, partial)
 
+    # The complete first row is not evidence: it is stored as an audit row
+    # (E0-03) with no credit. The partial tail is not acknowledged.
+    unqualified_id = LearningScheduler.fleet_source_id(unqualified, 1)
     assert {0, nil} = LearningScheduler.ingest_fleet_outcomes(nil)
     assert {:ok, ids} = OutcomeTracker.imported_fleet_ids()
-    assert ids == MapSet.new()
+    assert ids == MapSet.new([unqualified_id])
     assert File.read!(fleet_file) == partial
 
     qualified = Jason.encode!(fleet_row(ctx.id <> "-qualified"))
@@ -150,7 +153,7 @@ defmodule Hypatia.OutcomeTrackerRuntimeStoreTest do
     assert {1, signature} = LearningScheduler.ingest_fleet_outcomes(nil)
     qualified_id = LearningScheduler.fleet_source_id(qualified, 2)
     assert {:ok, ids} = OutcomeTracker.imported_fleet_ids()
-    assert ids == MapSet.new([qualified_id])
+    assert ids == MapSet.new([unqualified_id, qualified_id])
     assert File.read!(fleet_file) == complete
     assert {0, ^signature} = LearningScheduler.ingest_fleet_outcomes(signature)
   end
