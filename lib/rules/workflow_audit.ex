@@ -111,6 +111,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
         do: [],
         else: check_actions_lock_tag_keys(opts[:actions_lock], workflow_contents)
 
+    lock_moved_repos =
+      if opts[:partial],
+        do: [],
+        else: check_actions_lock_moved_repositories(opts[:actions_lock], workflow_contents)
+
     %{
       # `flawed_regexes` was computed at the top of this function and
       # counted into `flawed_regex_count:` below, but was never added to
@@ -155,7 +160,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           mirror_visibility ++
           gitleaks_full_history ++
           full_history_remains ++
-          lock_tag_keys,
+          lock_tag_keys ++
+          lock_moved_repos,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -572,6 +578,50 @@ defmodule Hypatia.Rules.WorkflowAudit do
         ]
     end
   end
+
+  @doc """
+  Repository-wide: `actions.lock` records that still point at a moved
+  repository's old home (`ActionsLock.moved_repository_keys/1`). The runner
+  cannot verify such a record, so the calling workflow dies at startup with
+  no job and no log. One advisory info finding per audit, referred to the
+  relock (cicd-squabbler); never rewritten here.
+  """
+  def check_actions_lock_moved_repositories(lock_content, workflow_contents \\ nil)
+
+  def check_actions_lock_moved_repositories(lock_content, workflow_contents)
+      when is_binary(lock_content) do
+    opts =
+      if is_map(workflow_contents),
+        do: [reusable_callers: Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)],
+        else: []
+
+    with {:ok, lock} <- Hypatia.Rules.ActionsLock.parse(lock_content, opts),
+         [_ | _] = moved <- Hypatia.Rules.ActionsLock.moved_repository_keys(lock) do
+      [
+        %{
+          type: :actions_lock_moved_repository,
+          rule_id: "hypatia/workflow_audit/actions_lock_moved_repository",
+          file: "actions.lock",
+          severity: :info,
+          advisory: true,
+          action: :report,
+          keys: Enum.map(moved, & &1.key),
+          moved: moved,
+          detail:
+            "#{length(moved)} actions.lock record(s) point at a moved repository's old " <>
+              "home (e.g. #{describe_moved(hd(moved))}). The runner cannot verify them, so " <>
+              "the calling workflow fails at startup with no job and no log. Referral: " <>
+              "relock against the new owner (cicd-squabbler)."
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  def check_actions_lock_moved_repositories(_, _workflow_contents), do: []
+
+  defp describe_moved(%{key: key, to: to}), do: "#{key} -> #{to}"
 
   defp parse_actions_lock(nil, _workflow_contents, _complete?), do: {:usable, nil}
 

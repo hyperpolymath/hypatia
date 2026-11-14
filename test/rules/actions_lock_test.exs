@@ -146,6 +146,88 @@ defmodule Hypatia.Rules.ActionsLockTest do
     refute Enum.any?(fs, &(&1[:type] == :actions_lock_tag_keyed))
   end
 
+  describe "moved repositories (CASE-054)" do
+    @old_sha "da2c748ab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6"
+
+    defp lock_with(key, owner_id, repo_id) do
+      """
+      version: 'v0.0.2'
+      workflows:
+          '.github/workflows/secret-scanner.yml':
+              - '#{key}'
+      dependencies:
+          '#{key}':
+              ref: '#{@old_sha}'
+              commit: 'sha1-#{@old_sha}'
+              owner_id: #{owner_id}
+              repo_id: #{repo_id}
+      """
+    end
+
+    test "a record still naming hyperpolymath/standards is an old name" do
+      key = "hyperpolymath/standards@#{@old_sha}"
+      lock = lock_with(key, 6_759_885, 1_116_521_501)
+      assert {:ok, parsed} = ActionsLock.parse(lock)
+
+      assert [%{key: ^key, to: "metadatastician/standards", reason: :old_name}] =
+               ActionsLock.moved_repository_keys(parsed)
+
+      assert [
+               %{
+                 type: :actions_lock_moved_repository,
+                 severity: :info,
+                 advisory: true,
+                 action: :report,
+                 keys: [^key]
+               }
+             ] = Hypatia.Rules.WorkflowAudit.check_actions_lock_moved_repositories(lock)
+    end
+
+    test "the new name with the old owner's id is stale" do
+      key = "metadatastician/standards@#{@old_sha}"
+      {:ok, parsed} = ActionsLock.parse(lock_with(key, 6_759_885, 1_116_521_501))
+      assert [%{key: ^key, reason: :stale_owner_id}] = ActionsLock.moved_repository_keys(parsed)
+    end
+
+    test "the new name with the new owner's id is clean" do
+      key = "metadatastician/standards@#{@old_sha}"
+      lock = lock_with(key, 297_579_217, 1_116_521_501)
+      {:ok, parsed} = ActionsLock.parse(lock)
+      assert ActionsLock.moved_repository_keys(parsed) == []
+      assert Hypatia.Rules.WorkflowAudit.check_actions_lock_moved_repositories(lock) == []
+    end
+
+    test "hypatia's own lock has no moved-repository record" do
+      lock = File.read!(Path.expand("../../.github/workflows/actions.lock", __DIR__))
+      {:ok, parsed} = ActionsLock.parse(lock)
+      assert ActionsLock.moved_repository_keys(parsed) == []
+    end
+
+    test "the audit reports it once, and not in a partial audit" do
+      key = "hyperpolymath/standards@#{@old_sha}"
+      lock = lock_with(key, 6_759_885, 1_116_521_501)
+
+      wf =
+        "on: push\njobs:\n  scan:\n    uses: hyperpolymath/standards/.github/workflows/" <>
+          "secret-scanner-reusable.yml@#{@old_sha}\n"
+
+      %{findings: fs} =
+        Hypatia.Rules.WorkflowAudit.audit(["secret-scanner.yml"], %{"secret-scanner.yml" => wf},
+          actions_lock: lock
+        )
+
+      assert Enum.count(fs, &(&1[:type] == :actions_lock_moved_repository)) == 1
+
+      %{findings: partial} =
+        Hypatia.Rules.WorkflowAudit.audit(["secret-scanner.yml"], %{"secret-scanner.yml" => wf},
+          actions_lock: lock,
+          partial: true
+        )
+
+      refute Enum.any?(partial, &(&1[:type] == :actions_lock_moved_repository))
+    end
+  end
+
   test "accepts uppercase hexadecimal commit suffixes" do
     lock =
       String.replace(

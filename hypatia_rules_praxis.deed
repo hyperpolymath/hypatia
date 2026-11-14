@@ -3343,6 +3343,15 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/actions_lock_moved_repository"
+      :text "hypatia/workflow_audit/actions_lock_moved_repository in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/actions_lock_stale"
