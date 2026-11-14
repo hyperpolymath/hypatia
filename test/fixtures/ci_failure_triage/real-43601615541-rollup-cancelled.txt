@@ -1,0 +1,9 @@
+2026-11-14T13:52:24.3079100Z env:
+2026-11-14T13:52:24.3079462Z   CARGO_TERM_COLOR: always
+2026-11-14T13:52:24.3079800Z   RUSTFLAGS: -Dwarnings
+2026-11-14T13:52:24.3080098Z   RUST_BACKTRACE: 1
+2026-11-14T13:52:24.3080384Z   KYAML_CONFORMANCE: cancelled
+2026-11-14T13:52:24.3080671Z ##[endgroup]
+2026-11-14T13:52:24.3285804Z ##[error]kyaml-conformance did not succeed (result: cancelled)
+2026-11-14T13:52:24.3299876Z ##[error]Process completed with exit code 1.
+2026-11-14T13:52:24.3463787Z Cleaning up orphan processes
