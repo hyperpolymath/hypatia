@@ -99,6 +99,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     always_after_cancel = check_always_after_cancel(workflow_contents)
     mirror_visibility = check_mirror_without_visibility_guard(workflow_contents)
     gitleaks_full_history = check_gitleaks_full_history_on_pr(workflow_contents)
+    # Repository-wide: it needs every workflow. A caller that passes only some
+    # (the per-file reviewer) says so with `partial: true`.
+    full_history_remains =
+      if opts[:partial], do: [], else: check_full_history_scan_remains(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -141,7 +145,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           moved_reusable_calls ++
           always_after_cancel ++
           mirror_visibility ++
-          gitleaks_full_history,
+          gitleaks_full_history ++
+          full_history_remains,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -4532,10 +4537,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # `--all` in the --log-opts value, with no revision range or limit beside
+  # it: `--all A..B` (gitleaks' own range example), `^A`, `--not B`,
+  # `--exclude=refs/heads/x`,
+  # `--since`, `-n`.
   defp all_history_log_opts?(text) do
-    @log_opts
-    |> Regex.scan(text, capture: :all_but_first)
-    |> Enum.any?(fn groups -> groups |> Enum.join(" ") |> String.match?(~r/(^|\s)--all\b/) end)
+    # A repeated --log-opts overwrites the earlier one within one command,
+    # so the last value of each command is judged; any command may qualify.
+    text
+    |> String.replace(~r/\\\r?\n[ \t]*/, " ")
+    |> String.split(~r/\n|&&|;|\|\|?|&/)
+    |> Enum.flat_map(&Enum.take(Regex.scan(@log_opts, &1, capture: :all_but_first), -1))
+    |> Enum.any?(fn groups ->
+      value = Enum.join(groups, " ")
+
+      String.match?(value, ~r/(^|\s)--all\b/) and
+        not String.match?(
+          value,
+          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--exclude|--exclude-hidden|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n\d*|-\d+)\b|(^|\s)--(\s|$)/
+        )
+    end)
   end
 
   # Not a PR run when one `&&` conjunct is exactly `github.event_name ==`
@@ -4560,6 +4581,535 @@ defmodule Hypatia.Rules.WorkflowAudit do
           &1
         )
       )
+  end
+
+  # ─── WF032: a full-history secret scan remains off the PR path ─────────
+  #
+  # Owner ruling 2026-11-14: PRs scan base..head; the full-history scan
+  # stays on push, schedule or a manual run. cicd-squabbler's SQ-GEN-05
+  # narrows the PR scan and refers when no full-history scan would remain;
+  # this is the check it refers to. `missing_secret_history_scan` covers a
+  # repo with no scan at all and `secret_scan_without_history` a shallow
+  # one; WF032 covers a repo whose only scans are PR-range ones.
+
+  @non_pr_events ["push", "schedule", "workflow_dispatch"]
+  # A scanner invocation, not a mention: a `run` that calls the binary.
+  # At a command boundary (line start, `;`, `&`, `|`, `(`, backtick), not as
+  # an argument of another command (`echo gitleaks git`). Leading `NAME=value`
+  # assignments (`GITLEAKS_CONFIG=x gitleaks git`), with or without an `env`
+  # launcher, are skipped. `files` and `directory` are gitleaks' `dir` aliases.
+  @scanner_run ~r/(?:^|[;&|(`])\s*(?:env\s+(?:-\S+\s+)*)?(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|files|directory|github|filesystem)\b/m
+  @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/i
+
+  @doc """
+  WF032: the repository runs a secret scan on pull requests, but no scan
+  runs over full history on push, schedule or workflow_dispatch. A secret
+  committed and later deleted, or on another branch, then has no scan at
+  all. One finding per repository, medium, referral only (cicd-squabbler
+  SQ-GEN-05 owns the fix, R1).
+
+  A scan is a scanner *step* (a `run` calling gitleaks or trufflehog, or
+  the gitleaks / trufflehog action), a job calling the estate rail
+  (`hyperpolymath/standards` or `metadatastician/standards`
+  `.github/workflows/#{@secret_history_rail}@<ref>`, nothing else of that
+  name), or a scanner step in a local reusable
+  workflow (`uses: ./.github/workflows/x.yml`, one level), which runs on
+  the caller's events. Its events are the workflow's triggers narrowed by
+  each `if:` on the way (`==` and `!=` on `github.event_name` in a flat
+  `&&` chain; a constant `false` disables the scan). A scan counts as full
+  history when it is:
+  the rail; `gitleaks detect` / `gitleaks git` (not `protect`, not
+  `--no-git`) after an earlier `actions/checkout` of this repository with
+  `fetch-depth: 0` (into the workspace root, or a `path:` the scanner
+  names), with `--log-opts` holding `--all` and no revision range or limit,
+  or with no `--log-opts`; `trufflehog git` with no
+  `--since-commit`/`--base`/`--head`/`--max-depth`/`--branch`, after that
+  deep checkout or on a URL source it clones itself; the gitleaks or
+  trufflehog action (with no `base`/`head` input), after the deep
+  checkout, on a schedule or manual run. Skipped when `audit/3` is told the
+  workflow set is `partial: true`.
+
+  When an `if:` is too complex to read (`||`, grouping, negation), the scan
+  is taken to run on PRs and not to remain: a referral that asks the owner
+  to look is the safer error than a gap left silent. A conjunct that holds
+  only on a PR (`refs/pull/`, `github.event.pull_request`, `github.head_ref`)
+  narrows to PR events; other contexts (`github.ref == 'refs/heads/main'`)
+  are taken not to restrict the event.
+
+  Limits: local reusable workflows are followed one level deep; shell
+  comments are stripped from `run` scripts, but a scanner reached through
+  a script file or a shell function is not seen; scanner arguments held in
+  a shell variable (`gitleaks detect $ARGS`) are not expanded; a scanner
+  name with a separator inside a quoted argument (`echo "x; gitleaks git"`)
+  is read as a call; expressions in `fetch-depth` are not evaluated
+  (`${{ 0 }}` is not `0`); a reusable workflow's `inputs.*` guards are not
+  resolved against caller values or defaults; environment variables that
+  switch trufflehog to pre-commit mode (`PRE_COMMIT`, `HUSKY`, ...) are
+  not read; a scanner run through `docker run` (the official images) is not
+  recognised.
+  """
+  def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
+    parsed =
+      for {filename, content} <- Enum.sort(workflow_contents),
+          {:ok, %Hypatia.Workflow{} = wf} <- [Hypatia.Workflow.parse(content, filename)],
+          do: {filename, wf}
+
+    by_name = Map.new(parsed, fn {filename, wf} -> {Path.basename(filename), {filename, wf}} end)
+
+    scans =
+      for {filename, %{triggers: triggers, jobs: jobs, doc: doc}} <- parsed,
+          job <- jobs,
+          scan <- job_scans(job, filename, triggers, by_name),
+          do: Map.put_new(scan, :wf_doc, doc)
+
+    pr_scans =
+      Enum.filter(scans, fn sc ->
+        case scan_events(sc) do
+          :unknown -> Enum.any?(sc.triggers, &(&1 in @pr_events))
+          events -> Enum.any?(events, &(&1 in @pr_events))
+        end
+      end)
+
+    remains? =
+      Enum.any?(scans, fn sc ->
+        case scan_events(sc) do
+          :unknown -> false
+          events -> Enum.any?(events, &(&1 in @non_pr_events)) and full_history_scan?(sc, events)
+        end
+      end)
+
+    case {pr_scans, remains?} do
+      {[first | _], false} ->
+        [
+          %{
+            rule: "WF032",
+            rule_id: "hypatia/workflow_audit/full_history_scan_missing",
+            type: :full_history_scan_missing,
+            file: first.file,
+            line: first.line,
+            job: first.job.id,
+            severity: :medium,
+            action: :report,
+            reason:
+              "Secret scans run on pull requests (#{first.file} job `#{first.job.id}`), " <>
+                "but no scan runs over full history on push, schedule or " <>
+                "workflow_dispatch. A secret deleted later, or on another branch, is " <>
+                "never scanned. Keep a full-history pass on a non-PR trigger."
+          }
+        ]
+
+      _ ->
+        []
+    end
+  end
+
+  def check_full_history_scan_remains(_), do: []
+
+  # The scans in one job: the rail (job-level `uses`), scanner steps, or the
+  # scanner steps of a local reusable workflow it calls
+  # (`uses: ./.github/workflows/x.yml`), which run on the caller's events.
+  # Followed one level deep.
+  defp job_scans(job, filename, triggers, by_name) do
+    base = %{file: filename, job: job, triggers: triggers, guards: [job.if]}
+
+    cond do
+      is_binary(job.uses) and
+          Regex.match?(
+            ~r{^(?:hyperpolymath|metadatastician)/standards/\.github/workflows/secret-scanner-reusable\.yml@[^\s@]+$},
+            String.trim(job.uses)
+          ) ->
+        [Map.merge(base, %{kind: :rail, step: nil, index: nil, line: job.line})]
+
+      is_binary(job.uses) and String.starts_with?(job.uses, "./.github/workflows/") ->
+        case Map.get(by_name, Path.basename(String.trim(job.uses))) do
+          {callee_file, %{jobs: callee_jobs, doc: callee_doc}} ->
+            for callee_job <- callee_jobs,
+                scan <- step_scans(callee_job),
+                do:
+                  Map.merge(scan, %{
+                    file: callee_file,
+                    job: callee_job,
+                    triggers: triggers,
+                    guards: [job.if, callee_job.if, scan.step.if],
+                    wf_doc: callee_doc
+                  })
+
+          nil ->
+            []
+        end
+
+      true ->
+        for scan <- step_scans(job),
+            do: Map.merge(scan, %{base | guards: [job.if, scan.step.if]})
+    end
+  end
+
+  defp step_scans(job) do
+    for {step, i} <- Enum.with_index(job.steps || []),
+        kind = scanner_kind(step),
+        kind != nil,
+        do: %{kind: kind, step: step, index: i, line: step.line || job.line, job: job}
+  end
+
+  defp scanner_kind(step) do
+    cond do
+      is_binary(step.uses) and Regex.match?(@scanner_action, step.uses) ->
+        :action
+
+      is_binary(step.run) and
+          Regex.match?(@scanner_run, String.replace(run_code(step), ~r/\\\r?\n[ \t]*/, " ")) ->
+        :run
+
+      true ->
+        nil
+    end
+  end
+
+  # A step's `run` with its shell comments removed: `# gitleaks git ...` is
+  # not a scan.
+  defp run_code(%{run: run}) when is_binary(run), do: strip_shell_comments(run)
+  defp run_code(_), do: ""
+
+  # The events a scan can run on: the (calling) workflow's triggers narrowed
+  # by each `if:` on the way to the scanner step, or :unknown when a
+  # condition cannot be read.
+  defp scan_events(%{triggers: triggers, guards: guards}) do
+    Enum.reduce_while(guards, triggers, fn cond_text, events ->
+      case narrow_events(cond_text, events) do
+        :unknown -> {:halt, :unknown}
+        narrowed -> {:cont, narrowed}
+      end
+    end)
+  end
+
+  defp narrow_events(nil, events), do: events
+
+  defp narrow_events(cond_text, events) do
+    expr =
+      cond_text
+      |> String.trim()
+      |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
+
+    cond do
+      expr == "" ->
+        events
+
+      # A constant-false guard never runs.
+      Regex.match?(~r/^\s*false\s*$/, expr) ->
+        []
+
+      # Function calls (`startsWith(...)`) are not grouping.
+      String.contains?(expr, "||") or
+          Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\([^()]*\)/, "fn")) ->
+        if String.contains?(expr, "github.event_name"), do: :unknown, else: events
+
+      true ->
+        expr
+        |> String.split("&&")
+        |> Enum.reduce(events, fn conj, acc ->
+          case Regex.run(~r/^\s*github\.event_name\s*(==|!=)\s*['"]([a-z_]+)['"]\s*$/, conj) do
+            [_, "==", event] ->
+              Enum.filter(acc, &(&1 == event))
+
+            [_, "!=", event] ->
+              Enum.reject(acc, &(&1 == event))
+
+            nil ->
+              cond do
+                String.trim(conj) == "false" ->
+                  []
+
+                # A conjunct that only holds on a PR: a refs/pull/ ref, or a
+                # pull_request or head_ref context that must be set.
+                # `!=` against an empty value is such a conjunct too; a
+                # logical `!`, or `!=` against anything else, is not.
+                not Regex.match?(~r/!(?!=)/, conj) and
+                  not Regex.match?(~r/==\s*(?:''|""|null|false)\s*$/, conj) and
+                  not Regex.match?(~r/!=(?!\s*(?:''|""|null|false)\s*$)/, conj) and
+                    Regex.match?(
+                      ~r/refs\/pull\/|github\.event\.pull_request\b|github\.head_ref\b/,
+                      conj
+                    ) ->
+                  Enum.filter(acc, &(&1 in @pr_events))
+
+                true ->
+                  acc
+              end
+          end
+        end)
+    end
+  end
+
+  defp full_history_scan?(%{kind: :rail}, _events), do: true
+
+  @trufflehog_limits ~r/--(?:since-commit|base|head|max-depth|branch|skip-additional-refs)\b/
+
+  defp full_history_scan?(%{kind: kind, step: step, job: job, index: i} = sc, events) do
+    wf_doc = Map.get(sc, :wf_doc)
+    run = run_code(step)
+
+    cond do
+      kind == :action ->
+        # An action scans everything only on a schedule or manual run, and
+        # the checkout must run on that same event. trufflehog's action is a
+        # range with `base`/`head`, or with a limit in `extra_args`.
+        full_events = Enum.filter(events, &(&1 in ["schedule", "workflow_dispatch"]))
+
+        # Only trufflehog's action takes these inputs; gitleaks' has none.
+        trufflehog? =
+          String.starts_with?(
+            String.downcase(String.trim(step.uses)),
+            "trufflesecurity/trufflehog@"
+          )
+
+        ranged? =
+          trufflehog? and
+            (Enum.any?(["base", "head"], &(Hypatia.Workflow.input(step, &1) not in [nil, ""])) or
+               Regex.match?(@trufflehog_limits, Hypatia.Workflow.input(step, "extra_args") || ""))
+
+        full_events != [] and not ranged? and
+          deep_checkout_before?(job, i, full_events, wf_doc)
+
+      true ->
+        # Each scanner command line is judged on its own; the step counts
+        # when any one of them is a full-history scan.
+        run
+        |> String.replace(~r/\\\r?\n[ \t]*/, " ")
+        |> String.split(~r/\n|&&|;|\|\|?|&/)
+        |> Enum.map(
+          &String.replace(
+            &1,
+            ~r/^[\s(`]*(?:env\s+(?:-\S+\s+)*)?(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*/,
+            ""
+          )
+        )
+        |> Enum.any?(&full_history_command?(&1, job, i, events, wf_doc))
+    end
+  end
+
+  defp full_history_command?(cmd, job, i, events, wf_doc) do
+    cond do
+      Regex.match?(~r/^\s*(?:\S*\/)?gitleaks\s+(?:detect|git)\b/, cmd) ->
+        # `protect`, `dir`, `--staged` and `--pre-commit` read uncommitted
+        # changes or the tree only; so does `--no-git`.
+        not Regex.match?(~r/--(?:no-git|staged|pre-commit)\b/, cmd) and
+          (all_history_log_opts?(cmd) or not Regex.match?(@log_opts, cmd)) and
+          deep_checkout_before?(job, i, events, wf_doc, cmd)
+
+      Regex.match?(~r/^\s*(?:\S*\/)?trufflehog\s+git\b/, cmd) ->
+        # A URL source is cloned by trufflehog itself, and counts only when
+        # it is this repository; a local one needs the deep checkout. Every
+        # ref is scanned unless a flag limits it.
+        source_ok? =
+          case trufflehog_url(cmd) do
+            nil -> deep_checkout_before?(job, i, events, wf_doc, cmd)
+            url -> self_repo_url?(url)
+          end
+
+        source_ok? and not Regex.match?(@trufflehog_limits, cmd)
+
+      true ->
+        false
+    end
+  end
+
+  # The URL source of `trufflehog git`, if it has one: any argument that is
+  # a URL, so a flag value before it (`--exclude-paths x.txt`) is not taken
+  # for the source. `${{ github.server_url }}` counts as a URL.
+  defp trufflehog_url(cmd) do
+    cmd = String.replace(cmd, ~r/\$\{\{\s*([\w.]+)\s*\}\}/, "${{\\1}}")
+
+    case Regex.split(~r/\btrufflehog\s+git\b/, cmd, parts: 2) do
+      [_, args] ->
+        args
+        |> String.split(~r/\s+/, trim: true)
+        |> Enum.map(&unquote_arg/1)
+        |> Enum.find(
+          &Regex.match?(~r/^(?:(?:https?|ssh|git):\/\/|git@|\$\{\{github\.server_url)/, &1)
+        )
+
+      _ ->
+        nil
+    end
+  end
+
+  # A URL naming exactly this repository on GitHub.
+  defp self_repo_url?(url) do
+    Regex.match?(
+      ~r/^(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/|git@github\.com:|\$\{\{github\.server_url\}\}\/)\$\{\{github\.repository\}\}(?:\.git)?\/?$/,
+      url
+    )
+  end
+
+  # An actions/checkout of this repository (no `repository:` input) with
+  # `fetch-depth: 0`, before step `i` of the job, that runs on one of the
+  # scan's non-PR `events` (its own `if:` narrows them). Read from the parsed
+  # step: the job text holds values, not keys.
+  defp deep_checkout_before?(job, i, events, wf_doc, cmd \\ nil) do
+    steps = job.steps || []
+    scanner = Enum.at(steps, i)
+    non_pr = Enum.filter(events, &(&1 in @non_pr_events))
+
+    # On each event, the last checkout that runs then and lands where the
+    # scanner reads decides what history it sees; one deep event is enough.
+    Enum.any?(non_pr, fn event ->
+      target = norm_path(scanner_target(scanner, job, wf_doc, cmd))
+
+      # A checkout into the scanner's place or an ancestor of it (a fresh
+      # root checkout clears the workspace) replaces what was there; the
+      # last such checkout must be into the place itself, deep, and ours.
+      steps
+      |> Enum.take(i)
+      |> Enum.filter(fn step ->
+        # A checkout whose condition cannot be read may run, so it may
+        # replace an earlier one; it cannot itself be the deep checkout.
+        is_binary(step.uses) and
+          String.starts_with?(String.downcase(String.trim(step.uses)), "actions/checkout@") and
+          narrow_events(step.if, [event]) != [] and
+          covers?(norm_path(Hypatia.Workflow.input(step, "path")), target)
+      end)
+      |> List.last()
+      |> case do
+        nil ->
+          false
+
+        checkout ->
+          narrow_events(checkout.if, [event]) != :unknown and
+            norm_path(Hypatia.Workflow.input(checkout, "path")) == target and
+            Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
+            self_repository?(Hypatia.Workflow.input(checkout, "repository"))
+      end
+    end)
+  end
+
+  defp self_repository?(nil), do: true
+
+  defp self_repository?(repo),
+    do: String.replace(repo, ~r/\s+/, "") in ["", "${{github.repository}}"]
+
+  # A checkout feeds the scanner when it lands where the scanner reads: the
+  # scanner's `--source`/`file://` path, else the action's `path` input,
+  # else its working directory (the step's own, the job's or the workflow's
+  # `defaults.run.working-directory`), else the workspace root.
+  defp covers?(path, target),
+    do: path == target or path == "" or String.starts_with?(target, path <> "/")
+
+  # `cmd`, when given, is the one scanner command whose source is read.
+  defp scanner_target(scanner, job, wf_doc, cmd) do
+    run = cmd || if(scanner, do: run_code(scanner), else: "")
+
+    # `working-directory` and `defaults.run` apply to `run` steps only; an
+    # action reads its own `path` input or the workspace root.
+    run_step? = scanner != nil and is_binary(scanner.run)
+
+    wd =
+      [
+        # Only trufflehog's action has a `path` input; gitleaks' has none.
+        scanner && is_binary(scanner.uses) &&
+          String.starts_with?(
+            String.downcase(String.trim(scanner.uses)),
+            "trufflesecurity/trufflehog@"
+          ) &&
+          scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
+        run_step? && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
+        run_step? && default_wd(job && job.node),
+        run_step? && default_wd(wf_doc)
+      ]
+      |> Enum.find(& &1)
+      |> case do
+        nil -> ""
+        node -> norm_path(Hypatia.Workflow.text(node))
+      end
+
+    case Regex.run(~r/(?:--source[=\s]+|file:\/\/)(?:"([^"]*)"|'([^']*)'|(\S+))/, run) do
+      [_ | groups] ->
+        # A relative source is read from the scanner's working directory.
+        in_wd(wd, norm_path(Enum.find(groups, "", &(&1 != ""))))
+
+      nil ->
+        # `gitleaks git` takes the repository as a positional target after
+        # its flags (`gitleaks git -v source`).
+        case gitleaks_git_target(run) do
+          nil -> wd
+          source -> in_wd(wd, norm_path(source))
+        end
+    end
+  end
+
+  defp norm_path(nil), do: ""
+
+  # Component-wise: `.` and empty parts drop, `..` pops its parent, so
+  # `source/../source` and `./source/` both read as `source`.
+  defp norm_path(path) do
+    path = String.trim(path)
+    lead = if String.starts_with?(path, "/"), do: "/", else: ""
+
+    path
+    |> String.split("/")
+    |> Enum.reduce([], fn
+      part, acc when part in ["", "."] -> acc
+      "..", [prev | rest] when prev != ".." -> rest
+      part, acc -> [part | acc]
+    end)
+    |> Enum.reverse()
+    |> Enum.join("/")
+    |> then(&(lead <> &1))
+  end
+
+  # gitleaks flags that take their value as the next word.
+  @gitleaks_value_flags ~w(-c --config -r --report-path -f --report-format
+    --report-template -b --baseline-path -i --gitleaks-ignore-path -l
+    --log-level --log-opts --max-target-megabytes --max-decode-depth
+    --max-archive-depth --enable-rule --timeout --exit-code)
+
+  defp gitleaks_git_target(run) do
+    case Regex.split(~r/\bgitleaks\s+git\b/, run, parts: 2) do
+      [_, rest] ->
+        ~r/(?:[^\s"']+|"[^"]*"|'[^']*')+/
+        |> Regex.scan(rest)
+        |> Enum.map(&hd/1)
+        |> Enum.take_while(&(not Regex.match?(~r/^(?:[;&|<>]|\d?>)/, &1)))
+        |> first_positional()
+
+      _ ->
+        nil
+    end
+  end
+
+  defp first_positional([]), do: nil
+
+  defp first_positional([flag, _value | rest]) when flag in @gitleaks_value_flags,
+    do: first_positional(rest)
+
+  defp first_positional(["-" <> _ | rest]), do: first_positional(rest)
+  defp first_positional([arg | _]), do: unquote_arg(arg)
+
+  # Remove one matching pair of outer quotes; leave anything else as is.
+  defp unquote_arg(arg) do
+    case Regex.run(~r/^(["'])(.*)\1$/s, arg) do
+      [_, _, inner] -> inner
+      nil -> arg
+    end
+  end
+
+  defp in_wd(wd, source) do
+    cond do
+      String.starts_with?(source, "/") -> source
+      wd == "" -> source
+      source == "" -> wd
+      true -> norm_path(wd <> "/" <> source)
+    end
+  end
+
+  defp default_wd(nil), do: nil
+
+  defp default_wd(node) do
+    with defaults when not is_nil(defaults) <- Hypatia.Kyaml.get(node, "defaults"),
+         run when not is_nil(run) <- Hypatia.Kyaml.get(defaults, "run") do
+      Hypatia.Kyaml.get(run, "working-directory")
+    else
+      _ -> nil
+    end
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────

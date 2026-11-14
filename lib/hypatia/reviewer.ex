@@ -269,7 +269,9 @@ defmodule Hypatia.Reviewer do
     try do
       workflow_contents = %{path => content}
 
-      case WorkflowAudit.audit([path], workflow_contents) do
+      # One file only: repository-wide workflow rules (WF032) need every
+      # workflow, so they are skipped here.
+      case WorkflowAudit.audit([path], workflow_contents, partial: true) do
         %{findings: findings} -> normalize_findings(findings)
         result -> normalize_findings(result)
       end

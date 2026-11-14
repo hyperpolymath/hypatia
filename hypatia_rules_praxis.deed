@@ -3283,6 +3283,15 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/WF032"
+      :text "a full-history secret scan remains off the PR path"
+      :class gate
+      :severity medium
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/actions_expression_injection"
@@ -3433,6 +3442,15 @@
       :text "grep with unescaped dot -- may match unintended characters"
       :class gate
       :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text class excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/full_history_scan_missing"
+      :text "hypatia/workflow_audit/full_history_scan_missing in lib/rules/workflow_audit.ex."
+      :class gate
+      :severity medium
       :excusable-at repo
       :scope-form exact-paths
       :status active)
