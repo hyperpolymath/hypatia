@@ -5326,7 +5326,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # `needs.x.result`, `needs['x'].result` or `needs['x']['result']`: both
   # property and index syntax (Codex on #1105).
-  @needs_result_read ~r/\bneeds(?:\.[A-Za-z0-9_-]+|\[\s*['"][A-Za-z0-9_-]+['"]\s*\])(?:\.result\b|\[\s*['"]result['"]\s*\])/
+  # A read of a need's result, by property, index or wildcard:
+  # `needs.x.result`, `needs['x']['result']`, `needs.*.result` (Codex on
+  # #1105). Group 1 or 2 names the need; neither means `*`.
+  @needs_result_read ~r/\bneeds(?:\.([A-Za-z0-9_-]+)|\[\s*['"]([A-Za-z0-9_-]+)['"]\s*\]|\.\*)(?:\.result\b|\[\s*['"]result['"]\s*\])/
 
   # A bare `[ … success … ]` / `test … success` line (see can_fail?/1).
   @bare_success_test ~r/^\s*(?:\[\[?|test)\s[^\n]*\bsuccess\b[^\n]*$/m
@@ -5337,12 +5340,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
     needs = direct_needs(job)
 
     # WF029 already reports the artifact form of the same job.
+    reads = result_reads(job, text)
+
     Regex.match?(~r/\balways\(\)/, cond_text) and
       not excludes_cancellation?(cond_text) and
-      not every_need_must_succeed?(cond_text, needs) and
       not tolerated_failure?(job) and
       needs != [] and
-      Regex.match?(@needs_result_read, text) and
+      reads != [] and
+      not judged_needs_must_succeed?(cond_text, reads, needs) and
       can_fail?(job) and
       not handles_cancelled?(text) and
       not always_after_cancel?(job, jobs)
@@ -5357,6 +5362,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp can_fail?(job) do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
+        not excludes_cancellation?(step.if || "", :step) and
         (Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run) or bare_test_fails?(step.run))
     end)
   end
@@ -5371,20 +5377,44 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # Cancellation is handled only by a comparison against `cancelled`
   # (`= cancelled`, `== 'cancelled'`, `"cancelled")` in a case arm), not by
-  # the word appearing in an echo or a step name (Codex on #1105).
+  # the word appearing in an echo or a step name (Codex on #1105), and not
+  # by the `cancelled()` status function, which is a guard, not a handler.
   defp handles_cancelled?(text),
     do:
       Regex.match?(
-        ~r/(?:[!=]=?\s*["']?cancelled\b|\bcancelled["']?\s*\)|["']cancelled["']\s*[!=]=)/,
+        ~r/(?:[!=]=?\s*["']?cancelled\b(?!\s*\()|\bcancelled["']?\s*\)|["']cancelled["']\s*[!=]=)/,
         text
       )
 
+  # The needs whose result the job reads, from expression context only:
+  # `${{ … }}` regions in any scalar, plus job and step `if:` values (which
+  # are expressions without the braces). A name or an echo that merely
+  # mentions `needs.x.result` is not a read (Codex on #1105). `*` stands for
+  # a wildcard read of every need.
+  defp result_reads(job, text) do
+    exprs =
+      Regex.scan(~r/\$\{\{(.*?)\}\}/s, text, capture: :all_but_first) |> List.flatten()
+
+    ifs = [job.if | Enum.map(job.steps, & &1.if)] |> Enum.filter(&is_binary/1)
+
+    for e <- exprs ++ ifs,
+        m <- Regex.scan(@needs_result_read, e, capture: :all_but_first),
+        uniq: true do
+      case m do
+        [id] when id != "" -> id
+        [_, id] when id != "" -> id
+        _ -> "*"
+      end
+    end
+  end
+
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
-  # but it only protects x: a sibling need can still be cancelled while x
-  # succeeded (CodeRabbit on #1105). So it is a guard only when every direct
-  # need has its own success conjunct. Same structural reading as
-  # excludes_cancellation?/1: `||` or grouping make it uncertain.
-  defp every_need_must_succeed?(cond_text, needs) do
+  # but it only protects x (CodeRabbit on #1105). It is a guard when every
+  # need the job judges has its own success conjunct, in property or index
+  # form; a wildcard read judges every direct need (Codex on #1105). Same
+  # structural reading as excludes_cancellation?/1: `||` or grouping make it
+  # uncertain.
+  defp judged_needs_must_succeed?(cond_text, reads, needs) do
     expr =
       cond_text
       |> String.trim()
@@ -5393,14 +5423,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     guarded =
       for c <- String.split(expr, "&&"),
-          [_, id] <- [
-            Regex.run(~r/\Aneeds\.([A-Za-z0-9_-]+)\.result==(?:'success'|"success")\z/, c)
-          ],
+          m <-
+            [
+              Regex.run(
+                ~r/\Aneeds(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")\z/,
+                c,
+                capture: :all_but_first
+              )
+            ],
+          is_list(m),
           into: MapSet.new(),
-          do: id
+          do: Enum.find(m, &(&1 != ""))
 
-    not String.contains?(expr, "||") and needs != [] and
-      Enum.all?(needs, &MapSet.member?(guarded, &1))
+    judged = if "*" in reads, do: needs, else: reads
+
+    not String.contains?(expr, "||") and judged != [] and
+      Enum.all?(judged, &MapSet.member?(guarded, &1))
   end
 
   # Every scalar under a job node, joined: env values, step `run:` and `if:`.

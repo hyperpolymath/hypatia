@@ -188,6 +188,59 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert check(%{"f.yml" => wf}) == []
   end
 
+  # Codex on #1105, third round.
+  test "a result read outside an expression is not a read" do
+    wf =
+      @verdict
+      |> String.replace("DEED_RESULT: ${{ needs.deed.result }}", "DEED_RESULT: needs.deed.result")
+      |> String.replace("K9_RESULT: ${{ needs.k9.result }}", "K9_RESULT: see needs.k9.result")
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "a guard covers the needs the job judges, not every need" do
+    wf =
+      @verdict
+      |> String.replace("K9_RESULT: ${{ needs.k9.result }}", "K9_RESULT: x")
+      |> String.replace("if: always()", "if: always() && needs.deed.result == 'success'")
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "an index-form success guard is a guard" do
+    wf =
+      String.replace(
+        @verdict,
+        "if: always()",
+        "if: ${{ always() && needs['deed']['result'] == 'success' && needs['k9'].result == 'success' }}"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "a failing step guarded by !cancelled() cannot fail on a cancelled run" do
+    wf =
+      String.replace(
+        @verdict,
+        "      - run: |\n",
+        "      - if: ${{ !cancelled() }}\n        run: |\n"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "a wildcard needs.*.result read is a read of every need" do
+    wf =
+      @verdict
+      |> String.replace(
+        "DEED_RESULT: ${{ needs.deed.result }}",
+        "ALL: ${{ toJSON(needs.*.result) }}"
+      )
+      |> String.replace("K9_RESULT: ${{ needs.k9.result }}", "K9_RESULT: x")
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
   test "a job that only prints its needs' results cannot turn red" do
     wf = String.replace(@verdict, "|| exit 1", "|| echo \"some lane did not pass\"")
     assert check(%{"f.yml" => wf}) == []
