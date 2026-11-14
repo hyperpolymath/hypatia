@@ -5458,6 +5458,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp later_command?(line) do
     line
+    # A backslash-escaped byte is a literal, not an operator (Codex on #1129).
+    |> String.replace(~r/\\./s, "  ")
     |> String.replace("&&", "  ")
     # `&>`, `>&2` and `<&` are redirections, not a new command (Codex on #1110).
     |> String.split(~r/;|(?<![<>&])&(?![>&])/)

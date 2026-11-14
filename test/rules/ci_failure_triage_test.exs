@@ -877,6 +877,84 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ss.yml", wf)) == []
     end
 
+    # Codex on #1129, after merge.
+    test "a case arm inside $(...) ends the word, so its # is a comment" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ca.yml", wf)) == []
+    end
+
+    test "the substitution still closes after esac" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case y in y) echo;; esac)#x --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce.yml", wf))
+      assert [%{file: "ce.yml"}] = Enum.filter(found, &(&1.file == "ce.yml"))
+    end
+
+    test "a case after then or do opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(if true; then case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac; fi)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr.yml", wf)) == []
+    end
+
+    test "esac as the case subject does not close the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case esac in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs2.yml", wf)) == []
+    end
+
+    test "esac with a redirection attached still closes the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in x) echo yes;; esac>/dev/null)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr2.yml", wf))
+      assert [%{file: "cr2.yml"}] = Enum.filter(found, &(&1.file == "cr2.yml"))
+    end
+
+    test "a case after time opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(time case x in x)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ct.yml", wf)) == []
+    end
+
+    test "an escaped ; does not make case a command" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: v=$(echo \\; case x in x)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce2.yml", wf))
+      assert [%{file: "ce2.yml"}] = Enum.filter(found, &(&1.file == "ce2.yml"))
+    end
+
+    test "in( with no blank still enters the case body" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in(x) echo yes;; esac)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ci.yml", wf))
+      assert [%{file: "ci.yml"}] = Enum.filter(found, &(&1.file == "ci.yml"))
+    end
+
+    test "the word case as an argument does not open a case" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
+      assert [%{file: "cw.yml"}] = Enum.filter(found, &(&1.file == "cw.yml"))
+    end
+
     test "a variable HYPATIA_SHA is not a pin" do
       set = Map.put(template_set(@new), "v.yml", "env:\n  HYPATIA_SHA: ${{ inputs.sha }}\n")
       assert T.check_hypatia_pin_drift(set) == []

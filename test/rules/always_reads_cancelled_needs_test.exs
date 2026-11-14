@@ -344,6 +344,18 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
   end
 
+  # Codex on #1129, after merge.
+  test "an escaped > before a background & does not make a redirection" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "test \"$DEED_RESULT\" = success && echo \\>& echo done"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
   test "it is part of the full audit" do
     %{findings: fs} =
       WorkflowAudit.audit(["fork-governance.yml"], %{"fork-governance.yml" => @verdict})
