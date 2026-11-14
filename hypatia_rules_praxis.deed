@@ -3300,6 +3300,15 @@
       :excusable-at repo
       :scope-form exact-paths
       :status active)
+    ;; defaulted: excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/WF033"
+      :text "`if: always()` job that judges its needs' results"
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
     ;; defaulted: text class excusable-at scope-form
     (rule-def
       :id "hypatia/workflow_audit/actions_expression_injection"
@@ -3331,6 +3340,15 @@
     (rule-def
       :id "hypatia/workflow_audit/actions_lock_tag_keyed"
       :text "hypatia/workflow_audit/actions_lock_tag_keyed in lib/rules/workflow_audit.ex."
+      :class advisory
+      :severity minor
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: text excusable-at scope-form
+    (rule-def
+      :id "hypatia/workflow_audit/always_reads_cancelled_needs"
+      :text "hypatia/workflow_audit/always_reads_cancelled_needs in lib/rules/workflow_audit.ex."
       :class advisory
       :severity minor
       :excusable-at repo
