@@ -32,7 +32,7 @@ Commit `4d7f059`, measured on 2026-11-14.
 
 |`.claude/CLAUDE.md`: "33 rule modules" (2 places)
 |`find lib/rules -maxdepth 1 -name '*.ex' \| wc -l`
-|44
+|44 source files: rule modules and their helpers. This is not a count of rule modules.
 
 |`.claude/CLAUDE.md`: "43 recipes"
 |`just --summary \| wc -w`
@@ -40,7 +40,7 @@ Commit `4d7f059`, measured on 2026-11-14.
 
 |`.claude/CLAUDE.md`: "`mix test` excludes 242 `:verisim_data` tests"
 |`mix test` (last line)
-|246 excluded, over 5 tags
+|246 excluded, over 5 tags. This is not the count of `:verisim_data` alone.
 
 |`.claude/CLAUDE.md`, Known Gaps 5: the ESN learns from a stale shape
 |`mix test test/neural_training_qualification_test.exs`
@@ -63,6 +63,10 @@ Commit `4d7f059`, measured on 2026-11-14.
 
 . Run each measuring command. Use your own result, not the table.
 . Edit only the claims in the table. For a count, write the measured number.
+  Keep the noun true to the command. `lib/rules` holds rule modules and
+  helpers, so write "source files", as `README.adoc` does. The last line of
+  `mix test` counts the tests of all 5 excluded tags, so write it as that
+  total, and give no number for `:verisim_data` alone.
   For a claim with no producer, remove the figure and say that no producer exists.
 . Do not edit a workflow, a licence line or an SPDX header.
 . Put the command and its output for each edit in the pull request body.
