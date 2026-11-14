@@ -4539,6 +4539,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # `--all` in the --log-opts value, with no revision range or limit beside
   # it: `--all A..B` (gitleaks' own range example), `^A`, `--not B`,
+  # `--exclude=refs/heads/x`,
   # `--since`, `-n`.
   defp all_history_log_opts?(text) do
     @log_opts
@@ -4549,7 +4550,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       String.match?(value, ~r/(^|\s)--all\b/) and
         not String.match?(
           value,
-          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n|-\d+)\b|(^|\s)--(\s|$)/
+          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--exclude|--exclude-hidden|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n|-\d+)\b|(^|\s)--(\s|$)/
         )
     end)
   end
@@ -4989,14 +4990,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
         in_wd(wd, norm_path(Enum.find(groups, "", &(&1 != ""))))
 
       nil ->
-        # `gitleaks git` takes the repository as a positional target right
-        # after the subcommand (`gitleaks git source`).
-        case Regex.run(~r/\bgitleaks\s+git\s+(?:"([^"]+)"|'([^']+)'|([^\s\-<>|&;]\S*))/, run) do
-          [_ | groups] ->
-            in_wd(wd, norm_path(Enum.find(groups, "", &(&1 != ""))))
-
-          nil ->
-            wd
+        # `gitleaks git` takes the repository as a positional target after
+        # its flags (`gitleaks git -v source`).
+        case gitleaks_git_target(run) do
+          nil -> wd
+          source -> in_wd(wd, norm_path(source))
         end
     end
   end
@@ -5020,6 +5018,34 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.join("/")
     |> then(&(lead <> &1))
   end
+
+  # gitleaks flags that take their value as the next word.
+  @gitleaks_value_flags ~w(-c --config -r --report-path -f --report-format
+    --report-template -b --baseline-path -i --gitleaks-ignore-path -l
+    --log-level --log-opts --max-target-megabytes --max-decode-depth
+    --max-archive-depth --enable-rule --timeout --exit-code)
+
+  defp gitleaks_git_target(run) do
+    case Regex.split(~r/\bgitleaks\s+git\b/, run, parts: 2) do
+      [_, rest] ->
+        ~r/(?:[^\s"']+|"[^"]*"|'[^']*')+/
+        |> Regex.scan(rest)
+        |> Enum.map(&hd/1)
+        |> Enum.take_while(&(not Regex.match?(~r/^(?:[;&|<>]|\d?>)/, &1)))
+        |> first_positional()
+
+      _ ->
+        nil
+    end
+  end
+
+  defp first_positional([]), do: nil
+
+  defp first_positional([flag, _value | rest]) when flag in @gitleaks_value_flags,
+    do: first_positional(rest)
+
+  defp first_positional(["-" <> _ | rest]), do: first_positional(rest)
+  defp first_positional([arg | _]), do: String.trim(arg, ~s("'))
 
   defp in_wd(wd, source) do
     cond do

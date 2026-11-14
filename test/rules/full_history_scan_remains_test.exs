@@ -452,7 +452,8 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
           "--all --max-age=1700000000",
           "--all --first-parent",
           "--all -50",
-          "--all --not main"
+          "--all --not main",
+          "--exclude=refs/heads/legacy --all"
         ] do
       wf = String.replace(@scheduled_full, ~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
       assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
@@ -849,6 +850,18 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
 
     away = String.replace(wf, "      - run: gitleaks git ", "      - run: gitleaks git other ")
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => away})
+
+    for flags <- ["-v ", "--report-path out.json -v ", ~s(--log-opts="--all" --redact )] do
+      later =
+        String.replace(
+          wf,
+          "      - run: " <> @full_run,
+          ~s(      - run: gitleaks git #{flags}--log-opts="--all" source)
+        )
+
+      assert later =~ "source\n"
+      assert check(%{"pr.yml" => @pr_range, "full.yml" => later}) == [], flags
+    end
 
     root =
       String.replace(
