@@ -22,6 +22,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 
 == Guides
 
+* link:guides/claude-api-agents.adoc[`claude-api-agents.adoc`]: how to run work orders on Claude API credit, with prices, models, budget controls and the launch command.
 * link:guides/user-guide.adoc[`user-guide.adoc`] — end-to-end usage walkthrough.
 * link:guides/developer-guide.adoc[`developer-guide.adoc`] — adding rules, recipes, neural networks.
 * link:guides/admin-guide.adoc[`admin-guide.adoc`] — deployment + operations.
