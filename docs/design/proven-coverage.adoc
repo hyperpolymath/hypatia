@@ -455,6 +455,7 @@ Each error says: what happened, why, what to run locally, and who owns it (repo 
 | COV-E008 | Carried-forward result older than 14 days | Run the flag's suite.
 | COV-E009 | Exclusion invalid (no reason, no review date, range moved) | Fix the exclusion file.
 | COV-E013 | Coverage report is not bound to a commit (no readable metadata sidecar `hypatia.proven-coverage.report-meta/1`) | Have the collector write the sidecar (`Hypatia.Coverage.ReportMeta.write!/2`). Unjudged.
+| COV-E014 | A test ran in the proven run but does not count, or a counted test was left out of it | Tag exactly the counted tests `@tag :proven`. Unjudged.
 | COV-E010 | Evidence claims a kind it cannot back (e.g. P with no checker result) | Overclaim. The record is downgraded and flagged.
 |===
 

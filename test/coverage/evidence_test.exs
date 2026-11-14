@@ -522,6 +522,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
           rec("Z"),
           Map.put(rec("R"), "fixtures", %{"debt" => "x"}),
           Map.delete(rec("R"), "fixtures"),
+          Map.put(prop(), "in_proven_run", false),
           rec("R", %{"outcome" => "failed"})
         ]
         |> Enum.map(fn r ->
@@ -534,6 +535,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
                  [
                    :fixture_debt,
                    :no_fixtures,
+                   :not_in_proven_run,
                    :example_test,
                    :mock_test,
                    :unknown_kind,

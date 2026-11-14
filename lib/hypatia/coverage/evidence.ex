@@ -210,7 +210,7 @@ defmodule Hypatia.Coverage.Evidence do
       dig(record, ["run", "outcome"]) != "passed" -> {:not_counted, :not_passed}
       debt?(record) -> {:not_counted, :fixture_debt}
       not admissible?(record) -> {:not_counted, :no_fixtures}
-      true -> bound_by_kind(record, opts, min_cases)
+      true -> record |> bound_by_kind(opts, min_cases) |> proven_run_member(record)
     end
   end
 
@@ -243,6 +243,14 @@ defmodule Hypatia.Coverage.Evidence do
 
   defp full_sha?(s), do: is_binary(s) and Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, String.trim(s))
 
+  # A record that would count but says it was not in the proven run produced none of
+  # the proven coverage, so it cannot back it. Absent field (non-Elixir collectors): no
+  # claim either way.
+  defp proven_run_member(:counted, %{"in_proven_run" => false}),
+    do: {:not_counted, :not_in_proven_run}
+
+  defp proven_run_member(decision, _record), do: decision
+
   @doc "Classify every record: `[{record, decision}]`, in input order (same options as `counted?/2`)."
   @spec classify_all([record()], keyword()) :: [{record(), decision()}]
   def classify_all(records, opts \\ []), do: Enum.map(records, &{&1, counted?(&1, opts)})
@@ -268,6 +276,9 @@ defmodule Hypatia.Coverage.Evidence do
   @spec reason_text(atom()) :: String.t()
   def reason_text(:not_passed), do: "did not pass in this run"
   def reason_text(:fixture_debt), do: "FixtureDebt (no silence/firing fixtures)"
+
+  def reason_text(:not_in_proven_run),
+    do: "not in the proven run (no @tag :proven), so it produced none of the proven coverage"
 
   def reason_text(:no_fixtures),
     do: "not admissible: needs silence and firing fixtures, or a cannot-fail-by-design reason"

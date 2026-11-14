@@ -15,7 +15,12 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
       module: __MODULE__.Sample,
       state: state,
       time: 12_345,
-      tags: Map.merge(%{file: Path.join(File.cwd!(), "test/sample_test.exs"), line: 7}, tags)
+      # Tests here run "in the proven run" unless a case says otherwise.
+      tags:
+        Map.merge(
+          %{file: Path.join(File.cwd!(), "test/sample_test.exs"), line: 7, proven: true},
+          tags
+        )
     }
   end
 
@@ -31,6 +36,31 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
       r = EvidenceFormatter.record(test_struct(:"test prop", nil, tag), @cfg)
       refute Map.has_key?(r, "fixtures")
       assert counted?(r) == {:not_counted, :no_fixtures}
+    end
+
+    test "proven-run membership comes from @tag :proven" do
+      tag = %{
+        evidence: %{
+          kind: "R",
+          generator: "g",
+          seed: "1",
+          cases: 500,
+          fixtures: %{cannot_fail_by_design: "x"},
+          mutation: %{tool: "muex", killed: 1, survived: 0}
+        }
+      }
+
+      out =
+        EvidenceFormatter.record(
+          test_struct(:"test out", nil, Map.put(tag, :proven, false)),
+          @cfg
+        )
+
+      inn =
+        EvidenceFormatter.record(test_struct(:"test in", nil, Map.put(tag, :proven, true)), @cfg)
+
+      assert out["in_proven_run"] == false and inn["in_proven_run"] == true
+      assert counted?(out) == {:not_counted, :not_in_proven_run}
     end
 
     test "parameters that differ only in type stay distinct" do
@@ -220,6 +250,18 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
         EvidenceFormatter.handle_cast({:test_finished, test_struct(:"test one", nil, %{})}, state)
 
       {:noreply, state} = EvidenceFormatter.handle_cast(:max_failures_reached, state)
+
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        {:noreply, _} = EvidenceFormatter.handle_cast({:suite_finished, %{run: 1}}, state)
+      end)
+
+      refute File.exists?(out)
+    end
+
+    test "an abort also removes an evidence file left by an earlier run", %{out: out} do
+      File.mkdir_p!(Path.dirname(out))
+      File.write!(out, "{\"old\": true}")
+      state = %{config: Keyword.put(@cfg, :out, out), records: [], aborted: true}
 
       ExUnit.CaptureIO.capture_io(:stderr, fn ->
         {:noreply, _} = EvidenceFormatter.handle_cast({:suite_finished, %{run: 1}}, state)

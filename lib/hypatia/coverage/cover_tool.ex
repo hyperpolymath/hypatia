@@ -56,6 +56,10 @@ defmodule Hypatia.Coverage.CoverTool do
           :ok
 
         partitioned?(opts) ->
+          path = opts[:export_lcov]
+          File.rm(path)
+          File.rm(path <> ".meta.json")
+
           # A partition only holds its own shard; Mix exports .coverdata for
           # `mix test.coverage` to merge. A shard LCOV with a valid sidecar would be
           # judged as a whole run, so none is written here.

@@ -125,8 +125,8 @@
       "fixtures": {
         "silence": "int -100..99",
         "firing": {
-          "source": "classify(n) returning 'large' for n <= 100",
-          "defect_class": "wrong-branch"
+          "source": "clamp(value, lo, hi) returning value unchanged when value > hi",
+          "defect_class": "missing-bound"
         }
       },
       "run": {

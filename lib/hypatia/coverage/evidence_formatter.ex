@@ -81,8 +81,14 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   def handle_cast(:max_failures_reached, state), do: {:noreply, Map.put(state, :aborted, true)}
 
   def handle_cast({:suite_finished, _times}, %{aborted: true} = state) do
+    # A file from an earlier run at the same path would otherwise be read as this run's.
+    case out_path(state.config) do
+      nil -> :ok
+      path -> File.rm(path)
+    end
+
     IO.warn(
-      "Hypatia.Coverage.EvidenceFormatter: run stopped at --max-failures; no evidence file written"
+      "Hypatia.Coverage.EvidenceFormatter: run stopped at --max-failures; no evidence file written (any old one removed)"
     )
 
     {:noreply, state}
@@ -94,6 +100,13 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   end
 
   def handle_cast(_event, state), do: {:noreply, state}
+
+  defp out_path(config) do
+    case config[:out] || System.get_env("HYPATIA_EVIDENCE_OUT") do
+      path when is_binary(path) and path != "" -> path
+      _ -> nil
+    end
+  end
 
   defp write(%{config: config, records: records}) do
     case config[:out] || System.get_env("HYPATIA_EVIDENCE_OUT") do
@@ -147,6 +160,9 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
       "language" => "elixir",
       "kind" => kind,
       "test_id" => test_id,
+      # Membership of the proven run (`@tag :proven`, run with `--only proven`). The report
+      # refuses a pair where a counted test was not in that run, or a non-counted one was.
+      "in_proven_run" => test.tags[:proven] in [true, "true"],
       "fixtures" => fixtures(tag),
       "run" => run(test, tag)
     }
