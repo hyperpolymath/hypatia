@@ -21,7 +21,10 @@ Work order to run: `$ARGUMENTS`
    - First run (the branch does not exist, here or on `origin`): start it
      from `origin/main` with `git switch -c <branch> origin/main`.
    - Continued run (the branch exists): `git switch <branch>`. Keep its
-     commits. Do not start it again from `main`, and do not reset it.
+     commits. Do not start it again from `main`, and do not reset it. Then
+     run `git merge --no-edit origin/main`, so that the branch has each
+     dependency that merged after the branch started. If the merge stops
+     with a conflict, stop and report it.
 
    Do each later step on this branch, so that the code that you measure is
    the code that you change.
@@ -55,7 +58,9 @@ Work order to run: `$ARGUMENTS`
 9. **Commit and push.** Commit in the form that part 5 of `estate-gates`
    gives. Then run `git status --short`: it must print nothing, so that the
    commit holds exactly what the checks ran on. Push the branch with
-   `git push -u origin <branch>`. Record `git rev-parse HEAD` for the receipts.
+   `git push -u origin <branch>`. Use this exact command, with nothing after
+   it: an unattended run has no other push rule. Record `git rev-parse HEAD`
+   for the receipts.
 10. **Report.** Open one draft pull request. Use
     `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
     `claim-receipt` skill for each claim. Then stop. Do not merge. Do not mark

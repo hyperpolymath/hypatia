@@ -20,7 +20,9 @@ launch script, so keep one value on each line.
 1. **Find the authority.** A work order needs a ruling, an issue or a plan
    item that permits it, with a link. If you find none, ask the owner. Do not
    write the work order.
-2. **Measure.** Read the code and run the commands yourself. Record the
+2. **Measure.** Read the code and run the commands yourself. Measure on a
+   clean tree (`git status --short` prints nothing), so that the commit that
+   you record is the code that you measured. Record the
    commit. For each fact give the path, the function with its arity, and the
    line. Say which facts you read and which you ran. A status document is not
    a measurement.
