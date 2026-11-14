@@ -17,9 +17,10 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
       else the bundled test fixture)
     * `--standards P` root of a checked-out `hyperpolymath/standards` (for the SSOT)
     * `--write`       write `REPO/.machine_readable/scorecards/rsr-scorecard_praxis.deed`,
-      the RSR scorecard deed (standards `clauses/rsr-scorecard.abnf`, DRAFT; owner
-      ruling 2026-11-14). It replaced `rsr.scorecard.a2ml`: A2ML is retired, so the
-      oracle no longer writes one, and leaves any already in the repo alone (its
+      the RSR scorecard deed (standards `clauses/rsr-scorecard.abnf` v0.2.0; owner
+      ruling 2026-11-14), stamped with `:assessor` and `:assessed-at` (UTC). It
+      replaced `rsr.scorecard.a2ml`: A2ML is retired, so the oracle no longer
+      writes one, and leaves any already in the repo alone (its
       removal is the repo's own migration PR)
     * `--source-commit SHA` record the scored commit (40 lowercase hex) in the
       scorecard; only with `--write`
