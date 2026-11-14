@@ -453,7 +453,8 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
           "--all --first-parent",
           "--all -50",
           "--all --not main",
-          "--exclude=refs/heads/legacy --all"
+          "--exclude=refs/heads/legacy --all",
+          "--all -n10"
         ] do
       wf = String.replace(@scheduled_full, ~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
       assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
@@ -700,6 +701,29 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
         "      - uses: Gitleaks/Gitleaks-Action@ff98106e4c7b2bc287b24eaf42907196329070c7\n"
 
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr})
+  end
+
+  test "an env launcher and gitleaks' dir aliases are scanner calls" do
+    for run <- [
+          "env GITLEAKS_CONFIG=c.toml gitleaks git --log-opts=x..HEAD",
+          "gitleaks files .",
+          "gitleaks directory ."
+        ] do
+      pr =
+        "on:\n  pull_request:\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: #{run}\n"
+
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr}), run
+    end
+
+    full = full_with("      - run: " <> @full_run, "      - run: env -i A=1 " <> @full_run)
+    assert full =~ "env -i"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => full}) == []
+  end
+
+  test "checkout slugs match whatever their case" do
+    wf = String.replace(@scheduled_full, "actions/checkout@", "Actions/Checkout@")
+    assert wf =~ "Actions/Checkout@"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
   end
 
   test "a remote trufflehog scan counts only for this repository" do

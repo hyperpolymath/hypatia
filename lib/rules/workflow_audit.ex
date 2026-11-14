@@ -4550,7 +4550,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       String.match?(value, ~r/(^|\s)--all\b/) and
         not String.match?(
           value,
-          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--exclude|--exclude-hidden|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n|-\d+)\b|(^|\s)--(\s|$)/
+          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--exclude|--exclude-hidden|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n\d*|-\d+)\b|(^|\s)--(\s|$)/
         )
     end)
   end
@@ -4592,8 +4592,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # A scanner invocation, not a mention: a `run` that calls the binary.
   # At a command boundary (line start, `;`, `&`, `|`, `(`, backtick), not as
   # an argument of another command (`echo gitleaks git`). Leading `NAME=value`
-  # assignments (`GITLEAKS_CONFIG=x gitleaks git`) are skipped.
-  @scanner_run ~r/(?:^|[;&|(`])\s*(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
+  # assignments (`GITLEAKS_CONFIG=x gitleaks git`), with or without an `env`
+  # launcher, are skipped. `files` and `directory` are gitleaks' `dir` aliases.
+  @scanner_run ~r/(?:^|[;&|(`])\s*(?:env\s+(?:-\S+\s+)*)?(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|files|directory|github|filesystem)\b/m
   @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/i
 
   @doc """
@@ -4856,7 +4857,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
         run
         |> String.replace(~r/\\\r?\n[ \t]*/, " ")
         |> String.split(~r/\n|&&|;|\|\|?|&/)
-        |> Enum.map(&String.replace(&1, ~r/^[\s(`]*(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*/, ""))
+        |> Enum.map(
+          &String.replace(
+            &1,
+            ~r/^[\s(`]*(?:env\s+(?:-\S+\s+)*)?(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*/,
+            ""
+          )
+        )
         |> Enum.any?(&full_history_command?(&1, job, i, events, wf_doc))
     end
   end
@@ -4935,7 +4942,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
       steps
       |> Enum.take(i)
       |> Enum.filter(fn step ->
-        is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
+        is_binary(step.uses) and
+          String.starts_with?(String.downcase(String.trim(step.uses)), "actions/checkout@") and
           runs_on_any?(step.if, [event]) and
           covers?(norm_path(Hypatia.Workflow.input(step, "path")), target)
       end)
