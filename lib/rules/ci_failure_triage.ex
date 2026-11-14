@@ -550,7 +550,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "sonar_not_authorized",
       layer: :config,
-      patterns: [~r/Not authorized or organization not found/],
+      patterns: [
+        ~r/Not authorized or organization not found/,
+        # The scanner's own call to SonarCloud refused the token (aerie#103:
+        # JRE metadata GET -> HTTP 403). 401/403 only; a 5xx is Sonar's outage.
+        ~r/https:\/\/(?:api\.)?sonarcloud\.io\/\S+ failed with HTTP 40[13]\b/
+      ],
       # An app may log the phrase; only a Sonar scanner run ties it to Sonar.
       context: [~r/sonar-scanner|SonarQube|SonarCloud/i],
       action: :owner,
@@ -559,7 +564,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       escalation: :owner,
       reason:
         "The Sonar scanner's token or project binding is not valid for this " <>
-          "organization (lithoglyph). The owner fixes the setting."
+          "organization (lithoglyph), or SONAR_TOKEN was refused (aerie). The " <>
+          "owner renews the token or fixes the setting."
     },
     %{
       name: "pages_not_enabled",

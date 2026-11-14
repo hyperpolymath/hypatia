@@ -57,6 +57,8 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"uuid-non-v8.txt", "uuid_conformance", :owner},
     {"kyaml-format.txt", "kyaml_format", :fix},
     {"sonar-not-authorized.txt", "sonar_not_authorized", :owner},
+    # #u5 fixer, 2026-11-14: aerie#103, SONAR_TOKEN refused (HTTP 403).
+    {"sonar-token-403.txt", "sonar_not_authorized", :owner},
     {"capnp-generated-e0451.txt", "compile_error", :report},
     {"codeql-config-error.txt", "codeql_setup_conflict", :owner},
     {"dependabot-bun.txt", "dependabot_ecosystem_mismatch", :fix},
@@ -476,6 +478,13 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
     test "the public rule inventory encodes as JSON (no matcher regexes leak)" do
       for r <- T.rules(), do: assert(is_binary(Jason.encode!(r)))
+    test "a SonarCloud 5xx is not read as a refused token" do
+      log =
+        "INFO  Communicating with SonarQube Cloud\n" <>
+          "ERROR GET https://api.sonarcloud.io/analysis/jres?os=linux failed with HTTP 503 Service Unavailable\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("sonar_not_authorized")))
     end
 
     test "startup_failure with no log is a referral, never a rerun" do
