@@ -66,17 +66,21 @@ Commit `4d7f059`, read and run on 2026-11-14.
   `_build/test`. Run only this file and see it fail.
 . Add `fleet_path: Path.join(test_store, "fleet")` to `config/test.exs`, and
   extend the comment above it to name the fleet outcome file.
-. Run `mix test`. Then, when `../gitbot-fleet` is a git checkout, run
-  `git -C ../gitbot-fleet status --short` and copy the output.
+. When `../gitbot-fleet` is a git checkout, run
+  `git -C ../gitbot-fleet status --short` and `git -C ../gitbot-fleet diff --stat`,
+  and copy the output. Run `mix test`. Then run the 2 commands again and
+  copy the output.
 
 == Acceptance
 
 * `mix test test/test_store_isolation_test.exs` passes. The pull request body
   shows its failing output from before step 4.
 * `mix test` has 0 failures.
-* After `mix test`, a sibling `gitbot-fleet` checkout has no change (the
-  output of step 5 is empty), or the pull request body says that no sibling
-  checkout was present.
+* `mix test` leaves a sibling `gitbot-fleet` checkout as it was: the output
+  of the 2 commands of step 5 is the same before and after the suite. That
+  checkout can have changes from before the run, so an empty output is not
+  the condition. Or the pull request body says that no sibling checkout
+  was present.
 * No file that was formatted before the change is unformatted after it.
 * The change touches only `config/test.exs` and the new test file.
 

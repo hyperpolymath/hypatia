@@ -43,6 +43,8 @@ esac
 for tool in curl tar unzip xz sha256sum; do
   command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
+# The Idris 2 build clones its source, so it needs git. Say so before any download.
+[ "$with_idris2" = 0 ] || command -v git >/dev/null 2>&1 || die "missing required tool: git (--with-idris2 needs it)"
 
 if [ "$(id -u)" = 0 ]; then def_root=/opt/hypatia-tools; def_bin=/usr/local/bin
 else def_root="$HOME/.local/hypatia-tools"; def_bin="$HOME/.local/bin"; fi

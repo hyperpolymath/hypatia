@@ -235,7 +235,9 @@ once each week.
 * `.claude/settings.json` holds the rules for each session in this repository.
   `.claude/profiles/e0-headless.json` adds the rules of an unattended run: it
   can commit, push the branch of its work order and open a draft pull
-  request. It cannot merge, approve, comment or fetch from the web, and its
+  request. It cannot merge, approve or comment. It cannot use the web tools,
+  `curl` or `wget`, but it is not offline: `git fetch`, `mix deps.get`, the
+  toolchain installer and `gh` use the network. Its
   file tools cannot read the secret files that `.gitignore` names (`.env`,
   `.envrc`, `*.pem`, `*.key`, `secrets/`).
 * A permission rule is not a security boundary. A run can edit code and run
@@ -249,7 +251,8 @@ once each week.
   a branch rule.
 * Put the API key in the environment of the run. Do not write it to a file
   that git tracks, to a pull request or to a chat.
-* A run on a workstation signs its commits with the key of that workstation.
+* A run on a workstation signs its commits only when git is set to sign
+  there (`commit.gpgSign`). The launch script does not check this.
   A run in a cloud container makes commits with no signature. That is a
   platform matter. Do not put a signing key into a container to change it.
 

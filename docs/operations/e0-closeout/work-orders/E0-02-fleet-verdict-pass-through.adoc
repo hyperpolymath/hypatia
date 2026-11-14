@@ -50,6 +50,9 @@ gitbot-fleet commit `7fc2778`, read on 2026-11-14.
   `mix help hypatia.record_outcome` names `--verdict` only when it does. Do
   not learn it from an exit code. An older Hypatia ignores the option, so a
   `no_op` call could be recorded as a success.
+  If the help command itself fails (an exit code that is not 0), stop the
+  run with a visible error. A Hypatia that does not answer is not an older
+  Hypatia, and the legacy call is for an older Hypatia only.
 . When Hypatia knows the option: add the verdict as one more argument of
   `hypatia_record_outcome()` and pass `--verdict "$verdict"` for each of the 5
   verdicts. Use the `--outcome` value of the pair table of `E0-01`: `success`

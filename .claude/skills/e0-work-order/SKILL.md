@@ -17,7 +17,9 @@ Work order to run: `$ARGUMENTS`
 
 1. **Get on the branch of the work order.** Run `git fetch origin`. Find the
    work order in `docs/operations/e0-closeout/work-orders/` on `origin/main`.
-   Its `:wo-branch:` line names the branch.
+   Its `:wo-branch:` line names the branch, and its `:wo-repo:` line names
+   the repository. If that is not the repository of this checkout, stop:
+   this procedure runs a work order only in its own repository.
    - First run (the branch does not exist, here or on `origin`): start it
      from `origin/main` with `git switch -c <branch> origin/main`.
    - Continued run (the branch exists): `git switch <branch>`. Keep its
@@ -48,8 +50,8 @@ Work order to run: `$ARGUMENTS`
 7. **Check.** Run, in this order, and copy each result line:
    - the test files that "Acceptance" names;
    - `mix format --check-formatted <file>` for each changed file that was
-     formatted before your change, and for each new file (see the note on
-     formatting below);
+     formatted before your change, and for each new Elixir file (`.ex`,
+     `.exs`; see the note on formatting below);
    - `mix test` (about 1 minute);
    - `bash scripts/check-verdicts.sh`, only when you changed `src/Hypatia/ABI/`;
    - `mix escript.build && ./hypatia scan . --format json`, and look for
@@ -59,7 +61,9 @@ Work order to run: `$ARGUMENTS`
    gives. Then run `git status --short`: it must print nothing, so that the
    commit holds exactly what the checks ran on. Push the branch with
    `git push -u origin <branch>`. Use this exact command, with nothing after
-   it: an unattended run has no other push rule. Record `git rev-parse HEAD`
+   it: an unattended run has no other push rule. If a commit hook changes a
+   file, add the change, commit, and run the checks of step 7 again before
+   you push. Record `git rev-parse HEAD`
    for the receipts.
 10. **Report.** Open one draft pull request. Use
     `docs/operations/e0-closeout/templates/pr-body.adoc` for the body and the
