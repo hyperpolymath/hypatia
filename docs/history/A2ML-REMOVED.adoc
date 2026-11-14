@@ -235,8 +235,8 @@ control still needs exactly that input. Neither has a deed form to move to.
 | Path | Why it stays
 
 | `audits/assail-classifications.a2ml`
-| panic-attack (>= 2.5.5, `load_user_classifications` in its
-`src/assail/mod.rs`) reads only `audits/assail-classifications.a2ml` or
+| panic-attack (>= 2.5.5, `load_user_classifications` in its assail module,
+in the panic-attack repository) reads only `audits/assail-classifications.a2ml` or
 `.panic-attack-classifications.a2ml`. No mapping spec covers it and
 panic-attack has no deed reader, so deleting it would unsuppress the audited
 findings it records. It goes when panic-attack reads a deed form first.
