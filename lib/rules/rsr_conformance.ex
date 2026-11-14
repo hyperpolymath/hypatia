@@ -134,12 +134,25 @@ defmodule Hypatia.Rules.RsrConformance do
      }}
   end
 
+  # The assessor written into every scorecard: this tool and hypatia's version
+  # from mix.exs, fixed at compile time (as Hypatia.Verdict does).
+  @assessor "hypatia rsr_score #{Mix.Project.config()[:version]}"
+
+  @doc "The `:assessor` `to_deed/2` writes: `\"hypatia rsr_score <version>\"`."
+  @spec assessor() :: String.t()
+  def assessor, do: @assessor
+
   @doc """
   Serialize a scorecard as an RSR scorecard deed: the one `(rsr-scorecard …)`
   clause of a `praxis-deed` with `:profile rsr-scorecard` (standards
-  `1-formats/deed/spec/abnf/clauses/rsr-scorecard.abnf` v0.1.0, DRAFT;
-  owner ruling 2026-11-14). It replaces the A2ML `rsr.scorecard.a2ml`: A2ML is
-  retired, and the oracle no longer produces it.
+  `1-formats/deed/spec/abnf/clauses/rsr-scorecard.abnf` v0.2.0; owner ruling
+  2026-11-14, ratified the same day with `:assessor` and `:assessed-at`). It
+  replaces the A2ML `rsr.scorecard.a2ml`: A2ML is retired, and the oracle no
+  longer produces it.
+
+  Always written: `:assessor`, hypatia's name and version (`assessor/0`), and
+  `:assessed-at`, the run time as an RFC 3339 UTC timestamp with whole seconds
+  (`"2026-11-14T19:33:12Z"`), the one spelling the standards checker accepts.
 
   Options, all optional:
 
@@ -148,6 +161,9 @@ defmodule Hypatia.Rules.RsrConformance do
     * `:beholding_chora` — the scored repo's estate chora, as a deed literal
       (`#uuid"…"` or `#u8"…"`), copied from its chora deed.
     * `:source_commit` — the scored commit, 40 lowercase hex characters.
+    * `:assessed_at` — the run time as a `DateTime` (default
+      `DateTime.utc_now/0`). Any offset is converted to UTC and the fraction
+      dropped; inject a fixed one for a deterministic file.
 
   Every criterion is written, `na` included, so a reader can recompute the
   score and coverage from the criteria, which the standards checker does.
@@ -159,6 +175,7 @@ defmodule Hypatia.Rules.RsrConformance do
     repo = Keyword.get(opts, :repo) || sc.repo
     beholding = Keyword.get(opts, :beholding_chora)
     commit = Keyword.get(opts, :source_commit)
+    assessed_at = deed_timestamp(Keyword.get_lazy(opts, :assessed_at, &DateTime.utc_now/0))
 
     header = [
       ";; SPDX-License-Identifier: MPL-2.0\n",
@@ -174,6 +191,8 @@ defmodule Hypatia.Rules.RsrConformance do
       "    :repo #{deed_string(repo)}\n",
       "    :spec rsr-criteria-v2\n",
       "    :spec-version #{deed_string(sc.spec_version || "unknown")}\n",
+      "    :assessor #{deed_string(@assessor)}\n",
+      "    :assessed-at #{deed_string(assessed_at)}\n",
       "    :tier #{sc.tier}\n",
       "    :score #{deed_decimal(sc.score, 2)}\n",
       "    :provisional #{deed_bool(sc.provisional)}\n",
@@ -224,6 +243,15 @@ defmodule Hypatia.Rules.RsrConformance do
     else
       _ -> []
     end
+  end
+
+  # sc-timestamp: RFC 3339 in UTC, whole seconds, "Z". Going through Unix
+  # seconds converts any offset without a time-zone database.
+  defp deed_timestamp(%DateTime{} = dt) do
+    dt
+    |> DateTime.to_unix()
+    |> DateTime.from_unix!()
+    |> DateTime.to_iso8601()
   end
 
   # A deed string: the four escapes the grammar allows, and nothing else.
