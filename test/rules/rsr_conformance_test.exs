@@ -605,8 +605,8 @@ defmodule Hypatia.Rules.RsrConformanceTest do
 
       assert {:ok, %Scorecard{} = sc} = RsrConformance.score(catalogue, repo_root)
       # hypatia carries its descriptiles as chora-deed clauses (A2ML retired
-      # 2026-11-14) and has no descriptiles/ directory: the deed is the
-      # substrate (3.1.1) and the one carrier 3.2.1 validates.
+      # 2026-11-14) and has no descriptiles/ directory, which 3.1.1 still names:
+      # the oracle must report that honestly rather than crash or invent a pass.
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["3.1.1"] == :pass
       assert verdicts["3.2.1"] == :pass

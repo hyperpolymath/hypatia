@@ -36,14 +36,19 @@ Run the checks that match your change. Copy each result line for the receipt.
 
 | You changed | Run |
 |---|---|
-| Elixir | `mix compile --warnings-as-errors`, `mix test`, and `mix format --check-formatted <file>` for each new file and each file that was formatted before your change (`git show origin/main:<file> \| mix format --check-formatted -` gives exit code 0 for such a file) |
+| Elixir | `mix compile --warnings-as-errors`, `mix test`, and `mix format --check-formatted <file>` for each new Elixir file and each file that was formatted before your change (`git show origin/main:<file> \| mix format --check-formatted -` gives exit code 0 for such a file) |
 | `src/Hypatia/ABI/` | `bash scripts/check-verdicts.sh` (needs Idris 2) |
-| Rust | The commands of `ci.yml`: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, `cargo test --workspace --doc --locked` |
-| `ffi/zig/` | `zig build test --summary all` in `ffi/zig`. Read the `Build Summary:` line: it must report 8 tests or more. A run with 0 tests also ends with exit code 0 |
+| Rust | The commands of `ci.yml`: `cargo check --workspace --all-targets --locked`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, `cargo test --workspace --doc --locked` |
+| `ffi/zig/` | `zig build test --summary all` in `ffi/zig`. Read the `Build Summary:` line: it must report 8 tests or more. A run with 0 tests also ends with exit code 0. The tests do not see the exported functions. If you add, remove or rename a `hypatia_*` export, also run the commands of the step `Pin the C ABI export surface` in `.github/workflows/zig.yml`, or say in the pull request that CI is the only check of the ABI |
 | a shell script | `shellcheck` on the file |
 | an `.adoc` file | `asciidoctor --failure-level WARN -o /dev/null <file>` |
 | README, EXPLAINME, docs index, `lib/rules`, Mix tasks, the Justfile | `bash scripts/check-readme-claims.sh` |
 | anything | `mix escript.build && ./hypatia scan . --format json` |
+
+CI scans a pull request with the scanner of its base commit, not with the
+scanner of your branch (`.github/workflows/governance.yml`). So if you change
+a rule or the scanner, a clean local scan does not show what CI reports. Say
+so in the pull request.
 
 Hypatia scans itself in CI. For a finding on a file that you changed, use
 this order: fix the code; then an inline directive with a reason

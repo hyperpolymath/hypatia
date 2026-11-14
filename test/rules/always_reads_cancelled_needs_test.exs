@@ -246,6 +246,73 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert check(%{"f.yml" => wf}) == []
   end
 
+  # Codex on #1105, fourth round.
+  test "a test that ends the script in an && list fails the step" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "echo start\n          test \"$DEED_RESULT\" = success && echo ok"
+      )
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
+  test "an && list followed by another command is a condition" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "test \"$DEED_RESULT\" = success && echo ok\n          echo done"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "a reversed success comparison is a guard" do
+    wf =
+      String.replace(
+        @verdict,
+        "if: always()",
+        "if: ${{ always() && 'success' == needs.deed.result && \"success\" == needs['k9'].result }}"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "exit inside quotes or a comment is not a failure path" do
+    wf =
+      String.replace(
+        @verdict,
+        "|| exit 1",
+        "|| echo \"use exit 1 on failure\" # exit 1 if this becomes a gate"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "exit with a quoted variable is still a failure path" do
+    wf = String.replace(@verdict, "|| exit 1", "|| exit \"$CODE\"")
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
+  # Codex on #1110.
+  test "exit with a quoted zero is not a failure path" do
+    wf = String.replace(@verdict, "|| exit 1", "|| exit \"0\"")
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  test "a later command on the same line decides the step, not the && list" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "test \"$DEED_RESULT\" = success && echo ok; echo done"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
   test "it is part of the full audit" do
     %{findings: fs} =
       WorkflowAudit.audit(["fork-governance.yml"], %{"fork-governance.yml" => @verdict})
