@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= <ID>: <one result, in 12 words or fewer>
+:wo-id: <ID>
+:wo-repo: <owner/name>
+:wo-size: <small | medium | design>
+:wo-agent: <e0-executor | e0-supervisor | e0-scout>
+:wo-model: <haiku | sonnet | opus | fable>
+:wo-effort: <low | medium | high>
+:wo-cap-usd: <whole dollars for one run>
+:wo-max-turns: <a number>
+:wo-branch: <branch name for the run>
+:wo-depends: <ids, or none>
+
+// Copy this file. Replace every <...>. Keep the six headings and their order.
+// The launch script reads the `:wo-...:` lines, so keep one value on each line.
+
+== Goal
+
+<One or two sentences. State the result, not the activity.>
+
+== Authority
+
+<The ruling, issue or plan item that permits this work, with a link. A work
+order with no authority does not run.>
+
+== Facts measured
+
+<Each fact has a commit, a path, a function name and a line. Say how you
+measured it. Separate a fact you read from a fact you ran.>
+
+* Commit: `<sha>`, measured `<date>`.
+* `<path>`, `<function/arity>` (line <n>): <what the code does>.
+* Ran: `<command>` gave `<result>`.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. <Write the failing test first, where the work order changes behaviour.>
+. <The change.>
+. <The checks.>
+. Open a draft pull request with `templates/pr-body.adoc`.
+
+== Acceptance
+
+* `<command>` passes. Name the new tests.
+* <One statement that a reader can check without the agent.>
+* The change touches only: `<paths>`.
+
+== Stop and ask
+
+* <A design question that this work order does not answer.>
+* <A fact under "Facts measured" that is no longer true.>
+* The cost reaches the cap before the acceptance checks pass.

@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= <Experiment id>: <the question, as a question>
+:author: <who ran it>
+:date: <YYYY-MM-DD>
+
+// The shape follows the experiment table of the Kautz-ladder ultraplan:
+// question, method, result, what it decides. Report a count with its
+// denominator. Do not report a percentage alone.
+
+== Question
+
+<One sentence. The answer must be able to be "no".>
+
+== Method
+
+* Sample: <what, how many, how chosen>.
+* Procedure: <the commands, in order>.
+* Commit and tool versions: <sha, versions>.
+
+== Result
+
+* <n> of <N> <unit> <outcome>.
+* <What could not be checked, with its count.>
+
+== What it decides
+
+<The decision that this result changes. If it changes none, say so.>
+
+== Limits
+
+<What the sample does not cover. What a reader must not conclude.>
+
+== Data
+
+<Path of the raw output in the repository, or the reason that none is kept.>
