@@ -29,6 +29,30 @@ The mix task lives in this repo at `lib/mix/tasks/hypatia.record_outcome.ex`.
 It auto-derives `category` from the recipe registry and
 auto-invokes panic-attack for re-scan verification.
 
+=== The `--verdict` option
+
+The runner MAY also pass `--verdict <verdict>`, the postcondition verdict that
+the fleet computed for the fix. Hypatia stores it as `"verdict"` in each row
+that the call writes. A verdict can lower trust. It never raises trust by
+itself: only `verified` with `success`, and `incomplete` or `failed` with
+`failure`, can count as evidence (`Hypatia.OutcomeTracker.qualified_outcome_counts/1`).
+A runner can learn whether this option exists from
+`mix help hypatia.record_outcome`.
+
+[cols="1,1,3",options="header"]
+|===
+|`--verdict` |`--outcome` |Behaviour
+|`verified` |`success` |The re-scan of Hypatia still decides `"verification"`.
+|`no_op` |`success` |No re-scan. `"verification"` is `no_op`. No credit.
+|`unverified` |`success` |No re-scan. `"verification"` is `unverified`. No credit.
+|`incomplete` |`failure` |No re-scan. `"verification"` is `incomplete`. Counts as a failure.
+|`failed` |`failure` |No re-scan. `"verification"` is `failed`. Counts as a failure.
+|===
+
+Any other verdict, any other pair, `--outcome false_positive` with a verdict,
+and any option that the task does not know exit 1 and write no row. A call
+without `--verdict` behaves as before and writes no `"verdict"` key.
+
 === Exit codes
 
   0   outcome recorded; verification verified-clean OR scan_unavailable
