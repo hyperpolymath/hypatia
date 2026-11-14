@@ -194,7 +194,14 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   defp evidence_tag(_), do: %{}
 
   defp to_key(k) when is_atom(k), do: k
-  defp to_key(k) when is_binary(k), do: String.to_atom(k)
+  # Only keys the formatter reads exist as atoms; any other string key stays a string,
+  # so a tag cannot grow the atom table.
+  defp to_key(k) when is_binary(k) do
+    String.to_existing_atom(k)
+  rescue
+    ArgumentError -> k
+  end
+
   defp to_key(k), do: k
 
   defp kind(tag) do
