@@ -185,8 +185,12 @@ if [ "$with_idris2" = 1 ]; then
   # A wrapper, not a link: the launcher finds idris2_app beside its own path.
   # No wrapper when the link target is the Idris 2 directory itself.
   if [ "$(CDPATH='' cd -- "$bin" && pwd -P)" != "$(CDPATH='' cd -- "$HOME/.idris2/bin" && pwd -P)" ]; then
-    printf '#!/bin/sh\nexec "%s" "$@"\n' "$idris" > "$bin/idris2"
-    chmod 755 "$bin/idris2"
+    # Write a new file and rename it over the name. A redirect to the name
+    # follows an existing link, and would overwrite the launcher itself.
+    tmp="$bin/.idris2.$$"
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$idris" > "$tmp"
+    chmod 755 "$tmp"
+    mv -f "$tmp" "$bin/idris2"
   fi
 fi
 
