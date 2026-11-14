@@ -121,7 +121,9 @@ Conditions: the checker passed in this run or on a cached content hash; no `#[tr
 or equivalent inside the covered function; the contract names the function.
 *Bounded* checkers (Kani, bounded model checking, TLA+ with a finite model) do not count as P. They count as R,
 with the bound recorded in place of the case count.
-In the first increment no P record counts: proof hashes are not yet bound to the checkout (COV-E006) and `covers_decls` are not yet resolved into line/branch facts, so complete P records are reported as `proof_binding_not_implemented`.
+A P record counts when its ladder is complete and passed, its checker is approved, and every entry in `run.proof.covers` is bound to the checkout being judged (§3.1, COV-E006).
+A P record is checked, not executed, so it is exempt from `in_proven_run`. Records of kind R, C and B still need `in_proven_run: true`.
+A source hash that no longer matches gives `proof_stale`. Judging without a checkout (no root) gives `proof_unbound`. A record with no usable `covers` entries gives `no_covers`.
 Every evidence record that is *not* counted carries a `not_counted_reason` (see §8). Nothing is silently dropped.
 
 == 3. Data model
@@ -150,11 +152,16 @@ All records are JSON, versioned, and validated. A2ML is used only where the esta
           "proof":       {"ladder": [{"theorem": "...", "file": "...", "line": 0,
                                       "checker": "idris2", "checker_version": "...",
                                       "statement_sha256": "..."}],
-                          "covers_decls": ["Proven.SafeJson.parse"]}},
+                          "covers": [{"decl": "Proven.SafeJson.parse", "file": "src/SafeJson.idr",
+                                      "lines": [10, 42], "source_sha256": "..."}]}},
   "counted": true,
   "not_counted_reason": null
 }
 ----
+
+`proof.covers` lists what the proof covers. Each entry has a qualified `decl`, a repo-relative `file`, an inclusive 1-based `lines` range `[start, end]`, and `source_sha256`.
+`source_sha256` is the SHA-256 of the exact bytes of those lines, joined with `"\n"` and with no trailing newline, at the commit the checker ran on.
+`covers_decls` (a list of names) is still accepted but is not enough: only `covers` can be bound. `statement_sha256` on a rung is the identity of the theorem; it is not recomputed.
 
 This is a superset of the proven-tests v2 submission contract. A v2 receipt maps into it with no loss.
 The 17 x 14 taxonomy cell (`category`, `aspect`) is kept as optional fields so the existing cell matrix still works.
@@ -231,8 +238,12 @@ Each repo runs its suite once under instrumentation, with *per-test or per-kind 
 * Cheapest: run the counted subset (kinds P, R, C, B) as one instrumented run, then the rest as a second. Proven coverage is the first run alone. Raw coverage is the union.
 * Better (later): per-test attribution (nextest for Rust; ExUnit tags per test; c8 per file). Needed for "which test covers this line" and for the adequacy questions in §5.4.
 
-Proof coverage (kind P) needs no execution. A checked theorem covers every line and branch of each declaration in `covers_decls`.
-If a covered declaration's content hash changed since the proof was checked, the proof does not count (COV-E006).
+Proof coverage (kind P) needs no execution. A checked theorem covers every line and branch of each declaration it covers.
+Binding: for each `covers` entry the report recomputes the hash of those lines from the file under the checkout root.
+If every entry matches, the record is bound and counts. If a file is missing, a range is outside the file, a path leaves the root, or a hash differs, the proof does not count (`proof_stale`, COV-E006). With no checkout root it does not count either (`proof_unbound`).
+Coverage: each counted P record adds, to the proven facts, every line in its ranges that the raw report lists as executable, and every branch arm the raw report has on those lines. Lines the raw report does not list are ignored, so proof never adds to the universe.
+This is merged into the proven facts before the verdict is computed.
+COV-E011 compares the proven test run with the raw run, so it is judged before proof coverage is added. A proof can cover lines no test ran.
 
 === 4.3 Merge
 
@@ -452,7 +463,7 @@ Each error says: what happened, why, what to run locally, and who owns it (repo 
 | COV-E003 | Report paths do not map to repo files (sample shown) | Set the path prefix in the collector. Owner: repo.
 | COV-E004 | Unit not measurable by this tool (branch in Elixir, Julia, Zig; all of Idris2) | Per owner ruling Q2. Owner: owner-only until ruled.
 | COV-E005 | Zero counted evidence: tests ran but none qualified | Panel lists each test and why. Usually: examples only, FixtureDebt, no seed.
-| COV-E006 | Proof is stale: covered declaration changed since check | Re-run the proof checker.
+| COV-E006 | Proof is stale: a covered range changed, moved or is missing since the check. The record does not count. Flagged with the record names; it does not make the verdict UNJUDGED. | Re-run the proof checker on the head.
 | COV-E007 | Upload is from a different repo, commit, role or run than the head (checked against the report's metadata sidecar; raw and proven run_ids must agree) | Re-run on the head. Owner: squabbler first-line (re-run category).
 | COV-E008 | Carried-forward result older than 14 days | Run the flag's suite.
 | COV-E009 | Exclusion invalid (no reason, no review date, range moved) | Fix the exclusion file.

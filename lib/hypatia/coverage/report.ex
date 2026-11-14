@@ -39,6 +39,7 @@ defmodule Hypatia.Coverage.Report do
   | COV-E003 | report paths not found under the root (sample shown) |
   | COV-E005 | zero counted evidence |
   | COV-E010 | evidence record claims a kind it cannot back (flagged, not fatal) |
+  | COV-E006 | a proof (kind P) record was checked against different source: a covered range changed, moved or is missing (flagged, not counted, not fatal) |
   | COV-E007 | a report's sidecar names a different repo, commit, role or run than the one judged |
   | COV-E011 | proven run covers something the raw run does not (proven must be a subset of raw) |
   | COV-E012 | raw and proven runs were instrumented differently (branch data in one only) |
@@ -51,7 +52,7 @@ defmodule Hypatia.Coverage.Report do
   verdict reason, in this increment.
   """
 
-  alias Hypatia.Coverage.{Evidence, Facts, LlvmCov, Lcov}
+  alias Hypatia.Coverage.{Evidence, Facts, LlvmCov, Lcov, Merge, ProofBinding}
 
   @different "coverage report is from a different repo, commit or run"
   @cap 50
@@ -152,14 +153,25 @@ defmodule Hypatia.Coverage.Report do
 
     classified =
       if records,
-        do: Evidence.classify_all(records, min_cases: min_cases, repo: repo, commit: sha),
+        do:
+          Evidence.classify_all(records,
+            min_cases: min_cases,
+            repo: repo,
+            commit: sha,
+            root: root
+          ),
         else: []
 
     ev_reasons = ev_reasons ++ evidence_reasons(records, classified)
 
+    # E011 compares the proven RUN with the raw run, so it is judged before proof coverage is
+    # added: a proof covers lines without running them, which need not be lines raw ran.
+    proven_run = proven
+    proven = add_proof_coverage(raw, proven, classified, root)
+
     raw_reasons = raw_reasons ++ raw_sanity(raw)
     path_reasons = path_reasons(root, raw, proven)
-    incons = if raw && proven, do: inconsistency(raw, proven), else: nil
+    incons = if raw && proven_run, do: inconsistency(raw, proven_run), else: nil
     incons_reasons = if incons, do: [incons.reason], else: []
 
     instr_reasons =
@@ -283,6 +295,21 @@ defmodule Hypatia.Coverage.Report do
       ]
   end
 
+  # Counted P records (already bound by Evidence) add proven coverage without execution:
+  # every raw-executable line, and every raw branch arm on those lines, in each covered range.
+  defp add_proof_coverage(raw, proven, classified, root) when raw != nil and proven != nil do
+    ranges =
+      for {r, :counted} <- classified,
+          Evidence.kind(r) == "P",
+          {:ok, rs} <- [ProofBinding.bind(r, root)],
+          range <- rs,
+          do: range
+
+    if ranges == [], do: proven, else: Merge.merge(proven, ProofBinding.coverage(raw, ranges))
+  end
+
+  defp add_proof_coverage(_raw, proven, _classified, _root), do: proven
+
   defp take({:ok, v}, _name), do: {v, []}
 
   defp take({:error, {:missing, path}}, name),
@@ -362,7 +389,11 @@ defmodule Hypatia.Coverage.Report do
     # COV-E014: the proven run must be exactly the counted tests. A record that says it
     # ran in the proven run but does not count put unproven coverage into that run.
     intruders =
-      for {r, d} <- classified, r["in_proven_run"] == true, d != :counted, do: Evidence.name(r)
+      for {r, d} <- classified,
+          r["in_proven_run"] == true,
+          Evidence.kind(r) != "P",
+          d != :counted,
+          do: Evidence.name(r)
 
     mixed =
       if intruders == [],
@@ -375,7 +406,22 @@ defmodule Hypatia.Coverage.Report do
           )
         ]
 
-    zero ++ overclaim ++ mixed
+    # COV-E006: a proof whose covered source changed since it was checked. Not unjudging:
+    # the stale proof simply does not count (like COV-E010).
+    stale = for {r, {:not_counted, :proof_stale}} <- classified, do: Evidence.name(r)
+
+    stale_reason =
+      if stale == [],
+        do: [],
+        else: [
+          reason(
+            "COV-E006",
+            "#{length(stale)} proof record(s) were checked against different source (stale); not counted. Re-run the proof checker.",
+            %{records: Enum.take(stale, @cap)}
+          )
+        ]
+
+    zero ++ overclaim ++ stale_reason ++ mixed
   end
 
   # COV-E003: report paths that do not exist under the root.
@@ -413,13 +459,7 @@ defmodule Hypatia.Coverage.Report do
 
   # A report path maps only if it stays under the (expanded) root; `..` and absolute paths
   # that escape it count as unmapped.
-  defp under_root_file?(root, path) do
-    root = Path.expand(root)
-    full = Path.expand(path, root)
-    prefix = if String.ends_with?(root, "/"), do: root, else: root <> "/"
-
-    Path.type(path) != :absolute and String.starts_with?(full, prefix) and File.regular?(full)
-  end
+  defp under_root_file?(root, path), do: ProofBinding.under_root_file?(root, path)
 
   # COV-E011: proven must be a subset of raw.
   defp inconsistency(raw, proven) do
