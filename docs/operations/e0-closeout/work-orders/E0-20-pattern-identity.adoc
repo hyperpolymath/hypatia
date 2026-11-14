@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-20: The pattern identity: design and ruling packet
+:wo-id: E0-20
+:wo-repo: hyperpolymath/hypatia
+:wo-size: design
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 10
+:wo-max-turns: 160
+:wo-branch: docs/e0-20-pattern-identity
+:wo-depends: none
+
+== Goal
+
+A design note proposes an identity for a pattern that does not depend on the
+wording of a description, with a way to move the old patterns to it. The
+owner rules on it. No code changes in this work order.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 3.
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/pattern_registry.ex`, `fingerprint/1` (line 380): the identity is the
+  rule and the first 30 characters of the description, in lower case, with
+  each run of other characters as 1 hyphen.
+* Same file, line 203: a category with no entry in `@pa_rule_map` (line 51)
+  gets the rule `PA000`.
+* Inferred, no test: 2 findings with the same rule and the same first 30
+  characters are 1 pattern, so a label on the outcome row cannot tell them
+  apart. A reworded description gives a new pattern, and the old one loses
+  its recipe link.
+* `test/pattern_registry_test.exs` has the tag `:verisim_data`.
+
+== Steps
+
+. Measure the facts again. Show the 2 inferred results with a test or a
+  short script, and put the output in the note.
+. Count, from `patterns/registry.json` of the test fixtures or of a store
+  that the owner names, how many patterns have the rule `PA000`.
+. Write `docs/design/pattern-identity.adoc`, status PROPOSED. It gives:
+.. 2 or 3 candidate keys, each with what it merges and what it splits;
+.. what happens to the history and the recipe link of each old pattern;
+.. who else reads the pattern id (name each reader with file and line);
+.. the option that is most correct for the long term, with its label.
+. Write a ruling packet. Stop after it.
+
+== Acceptance
+
+* The note has the measured output for both inferred results.
+* Each candidate key has 1 example of 2 findings that it keeps apart and 1
+  example of 2 findings that it joins.
+* `asciidoctor --failure-level WARN` builds the note. The docs index has its line.
+
+== Stop and ask
+
+* A candidate key needs data that the scanner does not give today.
+* The cost reaches the cap before the note is complete.

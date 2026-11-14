@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-18: Each outcome names its pattern and its kind of match
+:wo-id: E0-18
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 10
+:wo-max-turns: 200
+:wo-branch: feat/e0-18-merge-label
+:wo-depends: none
+
+== Goal
+
+Each outcome row records the pattern that it is about and the kind of match
+that chose its recipe: `exact`, `category` or `fuzzy`. A merge of 2
+findings under 1 recipe then has a label.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 1 (option C: label now, split after a measurement).
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14. The cited files have no change up to `3b8551c`.
+
+* `lib/recipe_matcher.ex`, `best_recipe_for_pattern/2` (line 123) tries an
+  exact match, then `category_match_recipe/2` (line 142), then
+  `fuzzy_match_recipe/2` (line 156). It returns the recipe only. The caller
+  cannot see which of the 3 matched.
+* `lib/triangle_router.ex`, `route/3` (line 35) carries no kind of match.
+* `lib/outcome_tracker.ex`, `persist_outcome/6` (line 116) writes
+  `"pattern_id" => nil` (line 122).
+* `test/recipe_matcher_test.exs` has the tag `:verisim_data`, so CI does not run it.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in a new test file that has no `:verisim_data` tag
+  and that uses recipes of its own in a temporary folder.
+. Add a function beside `best_recipe_for_pattern/2` that returns the recipe
+  and the kind of match. Keep the old function and its result, so that no
+  caller breaks.
+. Carry the pattern id and the kind of match from the router to the outcome
+  row through the `metadata` map of `record_outcome/5`. Write them as
+  `"pattern_id"` and `"match_kind"`.
+. Do not change confidence, the annealing stage or a tier in this work order.
+
+== Acceptance
+
+* New tests show the kind `exact`, `category` and `fuzzy`, 1 test for each.
+* A test shows a row with the pattern id and the kind of match of its dispatch.
+* A row from a caller that gives no kind has `"match_kind" => "unknown"`. It
+  is not written as `exact`.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* A path writes an outcome and has no pattern at that point. List each such
+  path in the pull request body. Do not invent a pattern id.
+* The change needs a new field in the fleet outcome file of `gitbot-fleet`.
+* The cost reaches the cap before the acceptance checks pass.

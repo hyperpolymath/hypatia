@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-19: A merged match reaches review at most
+:wo-id: E0-19
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 5
+:wo-max-turns: 120
+:wo-branch: fix/e0-19-merged-match-tier
+:wo-depends: E0-18
+
+== Goal
+
+A recipe that a `category` match or a `fuzzy` match chose never runs with
+no person. Its highest tier is `review`. Only an `exact` match can reach
+`auto_execute`.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 2.
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/neural/dispatch_guard.ex`, `enforce/2` (line 69) already lowers an
+  action for a novel finding.
+* The tiers are: `auto_execute` from confidence 0.95, `review` from 0.85,
+  `report_only` below (`.claude/CLAUDE.md`, design constants).
+* `E0-18` gives each dispatch its kind of match.
+
+== Steps
+
+. Confirm that `E0-18` is merged. Stop if it is not.
+. Measure the facts again. Find the 1 place where the tier of a dispatch is
+  decided, and name it in the pull request body.
+. Write the tests first.
+. Apply the cap there. An unknown kind of match gets the cap too.
+
+== Acceptance
+
+* Tests show: confidence 0.99 with `exact` gives `auto_execute`; confidence
+  0.99 with `category`, with `fuzzy` and with `unknown` gives `review`.
+* A test shows that the cap never raises a tier.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* The tier is decided in more than 1 place and the places disagree.
+* The cost reaches the cap before the acceptance checks pass.

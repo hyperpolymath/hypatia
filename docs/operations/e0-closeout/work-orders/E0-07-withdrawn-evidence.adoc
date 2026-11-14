@@ -51,6 +51,26 @@ Commit `4d7f059`, read on 2026-11-14.
 * A fleet row has the identity `fleet_import_id` (`lib/outcome_tracker.ex`, line 55).
   A local row has only a provisional identity (file and line).
 
+== Theory inputs
+
+Read on 2026-11-14 at echo-types `dedda75` and residual-evidence-types
+`6f94640`. Each file has `--safe --without-K --cubical-compatible`. No prover
+was run for this work order. Use these results as design rules. A use in
+Hypatia is a transcription, and its match to the Agda is assumed, not proved.
+
+* Apply a withdrawal to the log, then compute again. Do not correct the
+  stored confidence. An aggregation that merges 2 inputs has no canonical
+  inverse (echo-types `EchoAggregation.agda`, line 210), and a filter
+  commutes with a summary only when the summary keeps what the filter reads
+  (`EchoSelectiveProjection.agda`, line 106). The count does not keep the row.
+* Check each row against the log that remains, in 1 place. Survival is proved
+  against the retracted context, never against the full one
+  (residual-evidence-types `Revision.agda`, lines 180 to 191).
+* A stable id for a local row is a need, not a choice: exact recovery forces
+  distinct residues for distinct inputs (`EchoFiniteResidue.agda`, line 36).
+* Not proved anywhere: that retraction is idempotent or free of order, and
+  any statement on confidence. A withdrawal of a failure row raises confidence.
+
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.

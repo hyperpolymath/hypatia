@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-24: An untrained novelty network means novel
+:wo-id: E0-24
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 5
+:wo-max-turns: 120
+:wo-branch: fix/e0-24-novelty-fail-closed
+:wo-depends: none
+
+== Goal
+
+Until the novelty network is trained, each finding counts as novel and goes
+to `report_only`.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 5 (fail closed).
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/neural/radial_neural_network.ex`, `detect_novelty/2` (line 145)
+  returns `:untrained` for a network that is not trained.
+* `lib/neural/coordinator.ex` (line 765) sets
+  `is_novel: match?({:novel, _}, novelty)`, so `:untrained` gives `false`.
+  `is_novel?/1` (line 999) reads that field.
+* `lib/neural/dispatch_guard.ex`, `enforce/2` (line 69) acts on `is_novel: true`.
+* `test/neural_dispatch_guard_test.exs` tests the guard with a given
+  `is_novel`. No test covers the untrained case from end to end.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first.
+. Make `:untrained` give `is_novel: true`. Keep the board status `:unknown`,
+  so that a reader can tell "untrained" from "novel by distance".
+. Find each other caller that asks for novelty, and name each in the pull
+  request body with its result for an untrained network.
+
+== Acceptance
+
+* A test shows: untrained network, confidence 0.99, and the action is
+  lowered to `report_only`.
+* A test shows: trained network and a known finding, and the action is not lowered.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* The change stops every automatic fix in the test suite or in a fixture,
+  and a test of another module depends on that. Report the count.
+* The cost reaches the cap before the acceptance checks pass.
