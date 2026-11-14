@@ -43,23 +43,63 @@ defmodule Hypatia.OutcomeTracker do
   (`record_fleet_outcome/6`) can stamp `"verified"`.
   """
   def record_outcome(recipe_id, repo, file, outcome, metadata \\ %{}) do
-    persist_outcome(recipe_id, repo, file, outcome, untrusted_verification(metadata), true)
+    persist_outcome(
+      recipe_id,
+      repo,
+      file,
+      outcome,
+      metadata |> canonical_fields() |> untrusted_verification(),
+      true
+    )
   end
+
+  # A row field is named by a string in every stored row. A caller's map may
+  # name a field by an atom, and the JSON encoder writes an atom key and an
+  # atom value as the same string, so the guards below would be compared
+  # against one representation and written under another. Every map that a
+  # caller can hand in is therefore made canonical first. Two keys that name
+  # the same field are refused: choosing between them silently could choose
+  # the one that the guard did not read.
+  defp canonical_fields(fields) when is_map(fields) do
+    pairs = Enum.map(fields, fn {key, value} -> {field_name(key), value} end)
+    names = Enum.map(pairs, &elem(&1, 0))
+
+    if names != Enum.uniq(names) do
+      raise ArgumentError,
+            "two keys of a row name the same field: #{inspect(names -- Enum.uniq(names))}"
+    end
+
+    Map.new(pairs)
+  end
+
+  defp field_name(key) when is_binary(key), do: key
+  defp field_name(key) when is_atom(key), do: Atom.to_string(key)
+
+  defp field_name(key),
+    do: raise(ArgumentError, "a row field is named by a string or an atom, got #{inspect(key)}")
+
+  # The text that a value is written as. Only a string or an atom can be
+  # written as the string "verified".
+  defp field_text(value) when is_binary(value), do: value
+  defp field_text(value) when is_atom(value), do: Atom.to_string(value)
+  defp field_text(_value), do: nil
 
   # `"verified"` is the one value that makes a success row positive evidence
   # (see `qualified_outcome_counts/1`), so a caller of the public entry point
   # cannot set it. Any other value can only lower or keep trust.
-  defp untrusted_verification(%{"verification" => "verified"} = metadata) do
-    Logger.warning(
-      "OutcomeTracker: a caller claimed verification \"verified\"; stored as \"unverified\""
-    )
+  defp untrusted_verification(metadata) do
+    if field_text(Map.get(metadata, "verification")) == "verified" do
+      Logger.warning(
+        "OutcomeTracker: a caller claimed verification \"verified\"; stored as \"unverified\""
+      )
 
-    metadata
-    |> Map.put("verification", "unverified")
-    |> Map.put("claimed_verification", "verified")
+      metadata
+      |> Map.put("verification", "unverified")
+      |> Map.put("claimed_verification", "verified")
+    else
+      metadata
+    end
   end
-
-  defp untrusted_verification(metadata), do: metadata
 
   @doc """
   Import a fleet attempt without echoing it into the source fleet log. The
@@ -83,7 +123,7 @@ defmodule Hypatia.OutcomeTracker do
       repo,
       file,
       outcome,
-      Map.merge(audit, %{
+      Map.merge(canonical_fields(audit), %{
         "fleet_import_id" => source_id,
         "origin" => "gitbot-fleet",
         "verification" => verification
@@ -382,7 +422,7 @@ defmodule Hypatia.OutcomeTracker do
   the map, so the map can add a field but cannot change what the rescan found.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
-    extra = Keyword.get(opts, :metadata, %{})
+    extra = opts |> Keyword.get(:metadata, %{}) |> canonical_fields()
     category = Keyword.get(opts, :category, "")
     verify_requested? = Keyword.get(opts, :verify, false) and outcome == :success
 
