@@ -661,6 +661,20 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
              "pr.yml" => @pr_range,
              "r.yml" => remote.("https://github.com/${{ github.repository }}")
            }) == []
+
+    assert check(%{
+             "pr.yml" => @pr_range,
+             "r.yml" => remote.("${{ github.server_url }}/${{ github.repository }}.git")
+           }) == []
+
+    for other <- [
+          "https://gitlab.com/${{ github.repository }}",
+          "https://github.com/${{ github.repository }}-mirror",
+          "https://github.com/someone/else/${{ github.repository }}"
+        ] do
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => remote.(other)}),
+             other
+    end
   end
 
   test "each scanner command in a step is judged on its own" do

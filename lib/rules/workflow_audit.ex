@@ -4862,15 +4862,40 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # it is this repository; a local one needs the deep checkout. Every
         # ref is scanned unless a flag limits it.
         source_ok? =
-          if Regex.match?(~r/\btrufflehog\s+git\s+(?:https?|ssh|git):\/\//, cmd),
-            do: Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, cmd),
-            else: deep_checkout_before?(job, i, events, wf_doc)
+          case trufflehog_url(cmd) do
+            nil -> deep_checkout_before?(job, i, events, wf_doc)
+            url -> self_repo_url?(url)
+          end
 
         source_ok? and not Regex.match?(@trufflehog_limits, cmd)
 
       true ->
         false
     end
+  end
+
+  # The URL source of `trufflehog git`, if it has one: the first argument
+  # after `git` that is not a flag. `${{ github.server_url }}` counts as a URL.
+  defp trufflehog_url(cmd) do
+    cmd = String.replace(cmd, ~r/\$\{\{\s*([\w.]+)\s*\}\}/, "${{\\1}}")
+
+    case Regex.run(~r/\btrufflehog\s+git\s+(?:--?\S+\s+)*['"]?([^\s'"]+)/, cmd) do
+      [_, arg] ->
+        if Regex.match?(~r/^(?:(?:https?|ssh|git):\/\/|git@|\$\{\{github\.server_url)/, arg),
+          do: arg,
+          else: nil
+
+      _ ->
+        nil
+    end
+  end
+
+  # A URL naming exactly this repository on GitHub.
+  defp self_repo_url?(url) do
+    Regex.match?(
+      ~r/^(?:https:\/\/github\.com\/|\$\{\{github\.server_url\}\}\/)\$\{\{github\.repository\}\}(?:\.git)?\/?$/,
+      url
+    )
   end
 
   # An actions/checkout of this repository (no `repository:` input) with
