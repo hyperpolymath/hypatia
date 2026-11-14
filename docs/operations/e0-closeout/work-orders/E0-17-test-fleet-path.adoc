@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-17: The test suite does not write into the fleet checkout
+:wo-id: E0-17
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 3
+:wo-max-turns: 80
+:wo-branch: fix/e0-17-test-fleet-path
+:wo-depends: none
+
+== Goal
+
+`mix test` writes no row outside the hypatia checkout. The fleet outcome rows
+of the suite go to the test store under `_build/test`.
+
+== Authority
+
+`config/test.exs` states the rule for the verisim store: the suite never
+writes into a canonical store, because test rows pollute the learning data.
+The fleet outcome file is a canonical store of another repository. Each other
+work order in this folder runs `mix test`, so this one runs first.
+
+The owner has not ruled on this work order. It comes from a measurement of
+2026-11-14 (see the facts).
+
+== Facts measured
+
+Commit `4d7f059`, read and run on 2026-11-14.
+
+* `config/config.exs` (line 11): `fleet_path` is the value of
+  `HYPATIA_FLEET_PATH`, or `../gitbot-fleet`.
+* `config/test.exs` (lines 15 to 20) moves `verisimdb_data_path` and
+  `annealing_state_path` to `_build/test/verisim-data`. It does not set
+  `fleet_path`.
+* `lib/outcome_tracker.ex`, `write_fleet_outcome/1` (line 887) appends a row
+  with `"bot" => "hypatia"` to
+  `<fleet path>/shared-context/learning/fix-outcomes.jsonl`. It makes the
+  directory when it is absent. `persist_outcome/6` calls it for each row of
+  `record_outcome/5` (line 135).
+* Ran: `mix test` in a checkout with a sibling `gitbot-fleet` checkout added
+  71 rows to that file, which git tracks there (64 rows for the repo `r`, 7
+  for `test-repo`).
+* Ran at `main` commit `ecec9c5`: with the line
+  `fleet_path: Path.join(test_store, "fleet")` in `config/test.exs`,
+  `mix test` gave `3151 tests, 0 failures, 246 excluded`,
+  the sibling checkout had no change, and the rows were in
+  `_build/test/verisim-data/fleet/shared-context/learning/fix-outcomes.jsonl`.
+* `lib/self_diagnostics.ex` (line 32) reads `:fleet_path` with
+  `Application.compile_env`. So the fix belongs in `config/test.exs`. An
+  environment variable for one run of a compiled build stops the application
+  with a compile-environment error.
+* `test/outcome_tracker_runtime_store_test.exs` and
+  `test/learning_runtime_store_test.exs` set `:fleet_path` themselves.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Do not run the whole suite before step 4. It writes rows into a sibling
+  `gitbot-fleet` checkout.
+. Write the test first, in a new file `test/test_store_isolation_test.exs`:
+  in the test environment, `Path.expand(Hypatia.Paths.fleet())` is inside
+  `_build/test`. Run only this file and see it fail.
+. Add `fleet_path: Path.join(test_store, "fleet")` to `config/test.exs`, and
+  extend the comment above it to name the fleet outcome file.
+. Run `mix test`. Then, when `../gitbot-fleet` is a git checkout, run
+  `git -C ../gitbot-fleet status --short` and copy the output.
+
+== Acceptance
+
+* `mix test test/test_store_isolation_test.exs` passes. The pull request body
+  shows its failing output from before step 4.
+* `mix test` has 0 failures.
+* After `mix test`, a sibling `gitbot-fleet` checkout has no change (the
+  output of step 5 is empty), or the pull request body says that no sibling
+  checkout was present.
+* No file that was formatted before the change is unformatted after it.
+* The change touches only `config/test.exs` and the new test file.
+
+== Stop and ask
+
+* A test needs the real fleet checkout.
+* One of the 2 test files that set `:fleet_path` fails after the change.
+* The cost reaches the cap before the acceptance checks pass.

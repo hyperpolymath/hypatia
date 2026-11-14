@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-14: Cross-repo residuals
+:wo-id: E0-14
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 140
+:wo-branch: fix/e0-14-cross-repo-residuals
+:wo-depends: none
+
+== Goal
+
+Tests pin what cross-repo learning does with a qualified false positive and
+with a small sample. Where the present behaviour may be wrong, the pull
+request gives the owner the options. This work order changes no rule that
+computes a confidence or an anomaly rate.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A6:
+"Cross-repo consumers cannot re-introduce unqualified confidence."
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/cross_repo_learning.ex` filters with `qualified_rows/1` (line 137) for
+  the local counts (line 152), for the transfer sources, for the anomalies
+  and for the index.
+* `compute_transferred_confidence/3`: the confidence of a source repo is
+  `successes / max(total, 1)` (line 382). The sources need a minimum count
+  (`@min_transfer_outcomes`, which is 3), and the weight is the count times a
+  drift discount. So 1 source with 3 verified successes and 0 failures gives
+  a transferred confidence of 1.0, with no prior. A target repo with no local
+  rows takes that value (`blend_confidence/4`).
+* `detect_recipe_anomalies/1` (line 522) and `detect_language_anomalies/1`
+  (line 557) count each row whose outcome is not `"success"` as a failure. A
+  qualified `false_positive` row is therefore a failure for the anomaly rate.
+* Ran: `mix test test/cross_repo_learning_test.exs` gave 0 failures.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write tests that state the present behaviour for:
+.. a source repo with 3 verified successes and 0 failures;
+.. a recipe with 2 verified successes and 2 qualified false positives;
+.. a mix of qualified and unqualified rows (the unqualified rows change nothing).
+. For the first 2 cases, write a ruling packet in the pull request body. Each
+  case has 2 to 3 options, the consequence of each, and a label on the option
+  that is most correct in the long term. The small-sample case asks: transfer
+  the raw rate, or smooth it with a prior. The false-positive case asks:
+  count a qualified false positive as a failure in the anomaly rate, or not.
+. Do not change how a confidence or an anomaly rate is computed. Those are
+  policy decisions for the owner. Add a comment at lines 382, 522 and 557
+  that states the present rule and names the test that pins it.
+
+== Acceptance
+
+* The new tests pass and are in `test/cross_repo_learning_test.exs`.
+* The third case shows that an unqualified row changes no confidence and no anomaly.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The diff touches only `lib/cross_repo_learning.ex` and its test file. The
+  diff of `lib/cross_repo_learning.ex` has comments only.
+* The pull request body has the ruling packet for the first 2 cases.
+
+== Stop and ask
+
+* The third test shows that an unqualified row changes a confidence or an
+  anomaly. That is a defect. Report it with the output. Do not fix it here.
+* A test needs a change to the annealing or to `OutcomeTracker`.
+* The cost reaches the cap before the acceptance checks pass.

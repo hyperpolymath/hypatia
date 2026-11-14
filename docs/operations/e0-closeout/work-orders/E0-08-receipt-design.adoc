@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-08: The receipt: design and ruling packet
+:wo-id: E0-08
+:wo-repo: hyperpolymath/hypatia
+:wo-size: design
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 10
+:wo-max-turns: 150
+:wo-branch: docs/e0-08-receipt-design
+:wo-depends: none
+
+== Goal
+
+One design document defines the E0 receipt: its fields, its identity, its
+storage and its revision rule. A short ruling packet gives the owner the
+decisions that only the owner can make. This work order changes no code.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 10
+("Receipt") and acceptance A7. The issue also sets the limit: "Do not create a
+grand new data model before fixing the actual false-learning path."
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* The names `chain_version`, `parent_event_ids`, `subject_id` and
+  `missing_evidence` do not occur in `lib/`, `schema/` or `src/`. `head_sha`
+  occurs only in the merge orchestration and in 3 rule modules.
+* The identity of an imported row is provisional. The code says so:
+  `lib/learning_scheduler.ex`, lines 528 and 807 ("A future producer event_id
+  supersedes this").
+* Conventions that exist and that the design must reuse or name:
+** `schema/findings.ncl` (a Nickel contract with a derived level);
+** `src/Hypatia/ABI/Verdict.idr` and `Retraction.idr`, checked by
+   `scripts/check-verdicts.sh` with `tests/accept/` and `tests/reject/`;
+** `lib/hypatia/ci_changed.ex` (execution receipts of local CI runs);
+** `verification/proof-ledger.jsonl` (one canonical JSON object on each line).
+* Estate rules: JSON is I-JSON in JCS form, and a new identifier follows
+  ADR-008 (see `.claude/CLAUDE.md` of `metadatastician/standards`).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Read the 13 field names of issue 984, step 10. For each one write: type,
+  source, whether E0 can fill it, and what `missing_evidence` says when it cannot.
+. Decide and write down, with the rejected options:
+.. the unit: one receipt for each learning update, or one for each event chain;
+.. the entry points: each place where a qualified learning update starts.
+   There are 3: the confidence update (`OutcomeTracker.update_confidence_file/5`),
+   the fleet import (`LearningScheduler.import_fleet_lines/2`) and the neural
+   path (`FleetDispatcher.ingest_fix_outcome/1`, see `E0-05`);
+.. the identity: the format of `event_id` under ADR-008, who mints it, and
+   with which tool (`E0-11` and `E0-12` build on this);
+.. the start record: where the fleet writes the identity of an attempt before
+   the fix runs, in which form, and how the import treats that record. It
+   must not be stored as an outcome, and it must not make the later outcome
+   row look like a replay;
+.. the storage: path, append-only rule and canonical form;
+.. the failure rule: the order in which an update and its receipt are
+   written, and how a later run finds and repairs an update with no receipt
+   or a receipt with no update;
+.. the revision rule: how a withdrawal (`E0-07`) links to a receipt with no loss of history;
+.. the 3 to 5 properties that the Idris2 model of `E0-10` must prove.
+. Write the document as `docs/design/e0-receipt.adoc` with the status `PROPOSED`.
+. Write the ruling packet in the pull request body: 8 decisions at most. Each
+  has 2 to 4 options, the consequence of each option, and a label on the
+  option that is most correct in the long term.
+
+== Acceptance
+
+* `asciidoctor` builds `docs/design/e0-receipt.adoc` with no warning.
+* The document has all 13 fields in 1 table.
+* Each decision names the option that it rejects and the reason.
+* The document names the 3 entry points, the start record and the failure rule.
+* The diff has no file under `lib/`, `schema/`, `src/` or `test/`.
+
+== Stop and ask
+
+* The identifier format needs a rule that ADR-008 does not give.
+* The design needs a store other than flat files.
+* The cost reaches the cap before the acceptance checks pass.

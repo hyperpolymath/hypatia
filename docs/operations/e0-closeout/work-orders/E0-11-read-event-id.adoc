@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-11: Hypatia reads a producer event id
+:wo-id: E0-11
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 140
+:wo-branch: fix/e0-11-read-event-id
+:wo-depends: E0-08
+
+== Goal
+
+When a fleet row carries an `event_id`, the import uses it as the identity of
+the row. A row with no `event_id` keeps the provisional identity. Old logs
+give the same result as today.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 6 ("Do
+not use a hash of the JSON contents as an attempt ID") and step 8. The id
+format is the one that the owner rules on in the packet of `E0-08`.
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/learning_scheduler.ex`, line 808: the identity of a fleet row is
+  `sha256("fleet-jsonl-v1:" <> line_number <> ":" <> line)`. Line 807 says that
+  a producer `event_id` will replace it.
+* Same file, line 529: a local row uses
+  `sha256("local-jsonl-v1:" <> file <> ":" <> line_number)`.
+* `import_fleet_lines/2` skips a row whose identity is in the set of known ids.
+* `lib/outcome_tracker.ex`, `record_fleet_outcome/6` (line 48) stores the
+  identity as `"fleet_import_id"` (line 55).
+* Tests exist for replay and for 2 identical attempts
+  (`test/learning_scheduler_test.exs`, `test/outcome_tracker_test.exs`).
+
+== Steps
+
+. Confirm that the owner has ruled the id format in `E0-08`. Stop if not.
+. Measure the facts again.
+. Write the tests first:
+.. 2 rows with the same `event_id` on different lines are imported once;
+.. 2 rows with the same content and different `event_id` values are imported twice;
+.. a row with a malformed `event_id` is not imported and is reported, and the
+   rows after it are imported;
+.. a log with no `event_id` gives the same ids as before this change;
+.. a start record of an attempt, in the form that the design names, is not
+   stored, and the outcome row with the same `event_id` is imported once.
+. Use the `event_id` when it is present and valid. Keep the provisional
+  identity only for a row that has no `event_id` field. A row with an
+  `event_id` that is present and not valid is not imported: log it with its
+  line number and continue with the next row.
+. Skip a start record. It is not an outcome, and its id does not count as
+  imported.
+. Store the `event_id` in the row.
+
+== Acceptance
+
+* The 5 tests pass in `test/learning_scheduler_test.exs`.
+* The older replay and identical-attempt tests pass with no change.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The diff touches only `lib/learning_scheduler.ex`, `lib/outcome_tracker.ex` and test files.
+
+== Stop and ask
+
+* The ruled format needs a validation rule that the design does not give.
+* The design does not say where the start record is or what it looks like.
+* A stored log already has an `event_id` field with another meaning.
+* The cost reaches the cap before the acceptance checks pass.
