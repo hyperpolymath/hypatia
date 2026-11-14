@@ -608,7 +608,32 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :js_exec_sync,
       severity: :high,
-      pattern: ~r/execSync\s*\(|child_process/,
+      # Only calls a shell parses:
+      #   * execSync(, and exec( under a name the file imports from
+      #     node:child_process ({exec}, {exec as run}, {exec: run}) --
+      #     a local function named exec is not a shell;
+      #   * <ns>.exec( / <ns>.execSync( where <ns> is the name the file binds
+      #     node:child_process to (import * as ns / import ns / require /
+      #     await import), the compiled TypeScript form `(0, ns.exec)(`, and
+      #     require('child_process').exec( -- any argument shape;
+      #   * spawn/spawnSync/execFile/execFileSync (or a name the file imports
+      #     them as, or `(0, ns.spawn)(`) whose options object has its own
+      #     `shell` key (bare or quoted) set to true or to a string. This is
+      #     read by Hypatia.Rules.JsCallScan, not a regex: strings, templates
+      #     and comments are skipped, and a `shell` key inside a nested
+      #     object (`{env: {shell: 'x'}}`) is not the call's option.
+      #     fork() ignores `shell`, so it is not here.
+      # Importing node:child_process is not a finding, nor is a shell-free
+      # call with an argv array, RegExp.exec, or a `shell` key outside a
+      # process call. Bindings are read from the file before any inline
+      # `hypatia:ignore` blanks a line, so ignoring the import line does not
+      # hide the calls below it; every call counts, on its own line.
+      # Not covered: a shell option passed through a variable, tainted argv to
+      # a shell-free call, and the JsCallScan limits (a regex literal holding
+      # a quote, a call inside a template's ${...}) (mathesis#90).
+      pattern:
+        ~r/\bexecSync\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(/,
+      bound_calls: :child_process,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
     },
@@ -832,6 +857,9 @@ defmodule Hypatia.Rules.CodeSafety do
     # as in `content` — and in the raw line array below. If a future stripper
     # breaks that invariant it must say so here.
     orig_lines = String.split(content, "\n")
+    # A tuple gives constant-time access by line number; `Enum.at/3` on the
+    # list made every rule quadratic in file length.
+    orig_tuple = List.to_tuple(orig_lines)
 
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
@@ -878,8 +906,8 @@ defmodule Hypatia.Rules.CodeSafety do
         |> String.split("\n")
         |> Enum.with_index(1)
         |> Enum.map(fn {line, line_number} ->
-          raw = Enum.at(orig_lines, line_number - 1, line)
-          prev = if line_number >= 2, do: Enum.at(orig_lines, line_number - 2)
+          raw = line_at(orig_tuple, line_number, line)
+          prev = line_at(orig_tuple, line_number - 1, nil)
 
           if Hypatia.ScannerSuppression.inline_allowed?(
                raw,
@@ -898,7 +926,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # line where the match starts) is not a finding; nor is `unsafe {`
       # inside a string literal. Matches are excused after the scan, so a
       # block whose brace is on the next line is judged as one block.
-      matches = Regex.scan(rule.pattern, subject, return: :index)
+      matches = rule_matches(rule, subject, content)
 
       matches =
         if rule.id == :unsafe_block,
@@ -910,16 +938,17 @@ defmodule Hypatia.Rules.CodeSafety do
           []
 
         matches ->
-          lines =
-            matches
-            |> Enum.map(fn [{byte_off, _len} | _] ->
-              subject
-              |> binary_part(0, byte_off)
-              |> :binary.matches("\n")
-              |> length()
-              |> Kernel.+(1)
+          # Matches arrive in offset order, so one pass through the newline
+          # offsets gives every line number.
+          newlines = subject |> :binary.matches("\n") |> Enum.map(&elem(&1, 0))
+
+          {lines, _} =
+            Enum.map_reduce(matches, {newlines, 1, 0}, fn [{off, _} | _], pos ->
+              {_, line_number, _} = pos = advance_line(pos, off)
+              {line_number, pos}
             end)
-            |> Enum.uniq()
+
+          lines = Enum.uniq(lines)
 
           [
             %{
@@ -962,6 +991,12 @@ defmodule Hypatia.Rules.CodeSafety do
     do: advance_line({rest, line + 1, nl + 1}, off)
 
   defp advance_line(pos, _off), do: pos
+
+  # The 1-based line `n` of the source tuple, or `default` when out of range.
+  defp line_at(tuple, n, _default) when n >= 1 and n <= tuple_size(tuple),
+    do: elem(tuple, n - 1)
+
+  defp line_at(_tuple, _n, default), do: default
 
   # An odd number of unescaped double quotes before the match means it is
   # inside a string on this line. Character literals ('"', '\\"') are removed
@@ -1624,10 +1659,130 @@ defmodule Hypatia.Rules.CodeSafety do
   """
   def stub_crypto_patterns, do: @stub_crypto_patterns
 
+  # A file's bindings of node:child_process. A regex cannot carry a binding
+  # to every later call (a match consumes it), so the rule's pattern is
+  # widened per file:
+  #   * namespaces (`import * as cp from`, `import cp from`,
+  #     `const cp = require(...)`) add `cp.exec(` and `cp.execSync(`;
+  #   * destructured exec or execSync (`import {exec, execSync as run}
+  #     from`, `const {exec: run} = require(...)`) adds `exec(` / `run(`;
+  #   * a renamed spawn/spawnSync/execFile/execFileSync (`{spawn as run}`)
+  #     is handed to JsCallScan, like the unrenamed names.
+  # `require(...)` may also be `import(...)` or `await import(...)`.
+  # Regex sources, compiled at call time: a compiled regex in a module
+  # attribute does not survive OTP 28.
+  @cp_source ~S|['"](?:node:)?child_process['"]|
+  @cp_load ~S/(?:require|(?:await\s+)?import)\(\s*/
+  @cp_namespace ~S|(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*| <>
+                  @cp_source <>
+                  ~S/|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*/ <>
+                  @cp_load <> @cp_source <> ~S|\s*\))|
+  @cp_destructured ~S|(?:import\s*\{([^}]*)\}\s*from\s*| <>
+                     @cp_source <>
+                     ~S/|(?:const|let|var)\s*\{([^}]*)\}\s*=\s*/ <>
+                     @cp_load <> @cp_source <> ~S|\s*\))|
+  @doc false
+  def child_process_bindings(content) do
+    namespaces = captures(Regex.compile!(@cp_namespace), content)
+
+    bindings =
+      @cp_destructured
+      |> Regex.compile!()
+      |> captures(content)
+      |> Enum.flat_map(&String.split(&1, ","))
+      |> Enum.flat_map(fn entry ->
+        case Regex.run(
+               ~r/^\s*(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/,
+               entry
+             ) do
+          [_, name, local] -> [{name, local}]
+          [_, name] -> [{name, name}]
+          nil -> []
+        end
+      end)
+      |> Enum.uniq()
+
+    %{
+      namespaces: namespaces,
+      # exec/execSync run a shell whatever the arguments.
+      execs: for({name, local} <- bindings, name in ["exec", "execSync"], do: local),
+      # The spawn family does only with a `shell` option; the plain names
+      # are always looked for, so only renamed ones are listed.
+      spawns:
+        for(
+          {name, local} <- bindings,
+          name not in ["exec", "execSync"],
+          local != name,
+          do: local
+        )
+    }
+  end
+
+  @doc false
+  def pattern_for(%{bound_calls: :child_process} = rule, content) do
+    %{namespaces: namespaces, execs: execs} = child_process_bindings(content)
+
+    extra =
+      Enum.flat_map(namespaces, fn ns ->
+        e = Regex.escape(ns)
+
+        [
+          "(?<![\\w$.])" <> e <> "\\.exec(?:Sync)?\\s*\\(",
+          "\\(\\s*0\\s*,\\s*" <> e <> "\\s*\\.\\s*exec(?:Sync)?\\s*\\)\\s*\\("
+        ]
+      end) ++
+        Enum.map(execs, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\s*\\("))
+
+    case extra do
+      [] -> rule.pattern
+      extra -> Regex.compile!(Enum.join([Regex.source(rule.pattern) | extra], "|"))
+    end
+  end
+
+  def pattern_for(rule, _content), do: rule.pattern
+
+  # Match offsets ([[{offset, length}]], as Regex.scan return: :index) of a
+  # rule in `subject`. `content` is the unsuppressed file: a binding is read
+  # there even when an inline directive blanked its line in `subject`.
+  @doc false
+  def rule_matches(%{bound_calls: :child_process} = rule, subject, content) do
+    hits = Regex.scan(pattern_for(rule, content), subject, return: :index)
+
+    # A call written in a string, template or comment is not a call.
+    code =
+      MapSet.new(
+        Hypatia.Rules.JsCallScan.code_offsets(
+          subject,
+          Enum.map(hits, fn [{off, _} | _] -> off end)
+        )
+      )
+
+    regex_hits = Enum.filter(hits, fn [{off, _} | _] -> MapSet.member?(code, off) end)
+
+    shell_hits =
+      subject
+      |> Hypatia.Rules.JsCallScan.shell_option_calls(child_process_bindings(content).spawns)
+      |> Enum.map(&[{&1, 1}])
+
+    (regex_hits ++ shell_hits)
+    |> Enum.uniq_by(fn [{off, _} | _] -> off end)
+    |> Enum.sort_by(fn [{off, _} | _] -> off end)
+  end
+
+  def rule_matches(rule, subject, _content), do: Regex.scan(rule.pattern, subject, return: :index)
+
+  defp captures(regex, content) do
+    regex
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
   @doc "Scan JavaScript/TypeScript content for web security issues"
   def scan_web_security(content) do
     Enum.flat_map(@javascript_patterns, fn rule ->
-      case Regex.scan(rule.pattern, content) do
+      case rule_matches(rule, content, content) do
         [] ->
           []
 

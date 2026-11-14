@@ -4479,6 +4479,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # gitbot-fleet#673: a secret scan run on pull_request with
   # `--log-opts=--all` reads every branch, so one secret anywhere reddens
   # every PR. Owner ruling 2026-11-13: base..head on PRs, full history on main.
+  # 2026-11-14: and on a schedule; every scanning job carries a hard timeout
+  # (WH006 and missing_timeout_minutes already flag a job without one).
 
   @pr_events ["pull_request", "pull_request_target"]
   @gitleaks ~r/\bgitleaks\b/
@@ -4503,7 +4505,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 text = Map.fetch!(texts, job.id),
                 Regex.match?(@gitleaks, text),
                 all_history_log_opts?(text),
-                not push_only?(job.if || "") do
+                not non_pr_only?(job.if || "") do
               %{
                 rule: "WF031",
                 rule_id: "hypatia/workflow_audit/gitleaks_full_history_on_pr",
@@ -4536,21 +4538,28 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.any?(fn groups -> groups |> Enum.join(" ") |> String.match?(~r/(^|\s)--all\b/) end)
   end
 
-  # Push-only when one `&&` conjunct is exactly `github.event_name == 'push'`
+  # Not a PR run when one `&&` conjunct is exactly `github.event_name ==`
+  # 'push', 'schedule' or 'workflow_dispatch'
   # and no `||` can bypass it.
-  defp push_only?(cond_text) do
+  defp non_pr_only?(cond_text) do
     expr =
       cond_text
       |> String.trim()
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
 
-    # `||`, negation or grouping can make the push comparison optional, so
-    # only a flat `&&` chain proves it is required.
+    # Owner ruling 2026-11-14: a full-history scan may run on push, on a
+    # schedule or by hand, never on a PR. `||`, negation or grouping can make
+    # the event comparison optional, so only a flat `&&` chain proves it.
     not String.contains?(expr, "||") and
       not Regex.match?(~r/!\s*\(|\((?!\))/, String.replace(expr, ~r/\w+\(\)/, "")) and
       expr
       |> String.split("&&")
-      |> Enum.any?(&Regex.match?(~r/^\s*github\.event_name\s*==\s*['"]push['"]\s*$/, &1))
+      |> Enum.any?(
+        &Regex.match?(
+          ~r/^\s*github\.event_name\s*==\s*['"](?:push|schedule|workflow_dispatch)['"]\s*$/,
+          &1
+        )
+      )
   end
 
   # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────

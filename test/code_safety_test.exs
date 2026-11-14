@@ -842,6 +842,31 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     end
   end
 
+  describe "scan_content scales with file size" do
+    test "a large file with many findings scans in linear time" do
+      src = String.duplicate("fn f() {\n    let v = unsafe { op(p) };\n}\n", 5000)
+      {us, findings} = :timer.tc(fn -> CodeSafety.scan_content(src, "rust") end)
+
+      unsafe = Enum.find(findings, &(&1.rule == :unsafe_block))
+      assert unsafe.occurrences == 5000
+      assert Enum.take(unsafe.lines, 3) == [2, 5, 8]
+      assert List.last(unsafe.lines) == 14_999
+      assert us < 3_000_000, "took #{div(us, 1000)} ms"
+    end
+
+    test "an inline directive still suppresses its own line and the line below" do
+      code = """
+      let a = unsafe { op(p) };
+      // hypatia: allow code_safety/unsafe_block -- test fixture
+      let b = unsafe { op(q) };
+      let c = unsafe { op(r) };
+      """
+
+      unsafe = code |> CodeSafety.scan_content("rust") |> Enum.find(&(&1.rule == :unsafe_block))
+      assert unsafe.lines == [1, 4]
+    end
+  end
+
   describe "from_raw only flags raw-pointer constructors" do
     defp from_raw?(code) do
       code |> CodeSafety.scan_content("rust") |> Enum.any?(&(&1.rule == :from_raw))
@@ -865,6 +890,225 @@ defmodule Hypatia.Rules.CodeSafetyTest do
           ] do
         assert from_raw?(code <> "\n"), code
       end
+    end
+  end
+
+  describe "js_exec_sync flags only calls a shell parses (mathesis#90)" do
+    defp exec_sync?(code),
+      do: Enum.any?(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+
+    test "importing node:child_process is not a finding" do
+      refute exec_sync?("import {spawnSync} from 'node:child_process';\n")
+      refute exec_sync?("const cp = require('child_process');\n")
+    end
+
+    test "spawnSync and execFileSync with an argv array and no shell are not findings" do
+      code = """
+      import {spawnSync, execFileSync} from 'node:child_process';
+      const git = findTool('git');
+      const r = spawnSync(git, ['ls-remote', `https://github.com/${repo}`], {encoding: 'utf8'});
+      execFileSync('/usr/bin/sha256sum', [path], {encoding: 'utf8'});
+      """
+
+      refute exec_sync?(code)
+    end
+
+    test "RegExp.exec and a function named exec are not findings" do
+      refute exec_sync?("const m = /^v(\\d+)/.exec(tag);\nconst n = re.exec(line);\n")
+      refute exec_sync?("const t = re.exec(`${prefix}-${name}`);\n")
+      refute exec_sync?("function exec(cmd) { return cmd; }\nexec('safe');\n")
+      refute exec_sync?("const exec = (c) => c;\nexec(cmd);\n")
+    end
+
+    test "a shell key outside a process call is not a finding" do
+      refute exec_sync?("const preferences = {shell: true};\n")
+      refute exec_sync?("spawnSync(git, ['status'])\nconst prefs = {shell: true}\n")
+    end
+
+    test "execSync and exec run a shell" do
+      assert exec_sync?("const out = execSync(`git log ${ref}`);\n")
+      assert exec_sync?("import {exec} from 'node:child_process';\nexec(cmd, cb);\n")
+      assert exec_sync?("import {spawn, exec as run} from 'child_process';\nrun(cmd);\n")
+      assert exec_sync?("const { exec: sh } = require('node:child_process');\nsh(cmd);\n")
+      assert exec_sync?("import {execSync as run} from 'node:child_process';\nrun(cmd);\n")
+      assert exec_sync?("const {execSync: run} = require('child_process');\nrun(cmd);\n")
+      refute exec_sync?("import {spawnSync} from 'node:child_process';\nexec(cmd);\n")
+      assert exec_sync?("require('child_process').exec(`ls ${dir}`, cb);\n")
+    end
+
+    test "exec through the name child_process is bound to, any argument shape" do
+      assert exec_sync?("import * as cp from 'node:child_process';\ncp.exec('rm -rf ' + dir);\n")
+      assert exec_sync?("import cp from 'child_process';\ncp.execSync(cmd);\n")
+      assert exec_sync?("const proc = require('child_process');\nproc.exec(cmd, cb);\n")
+      refute exec_sync?("import * as cp from 'node:child_process';\nother.exec(cmd);\n")
+    end
+
+    test "the finding is on the call's line, not the import's" do
+      code = "import * as cp from 'node:child_process';\n\n\ncp.exec(cmd);\n"
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [4]
+    end
+
+    test "every call through a bound name counts, each on its own line" do
+      code = "const cp = require('child_process');\ncp.exec('first');\ncp.exec('second');\n"
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.occurrences == 2
+      assert f.lines == [2, 3]
+
+      [w] = Enum.filter(CodeSafety.scan_web_security(code), &(&1.rule == :js_exec_sync))
+      assert w.occurrences == 2
+    end
+
+    test "two bindings in one file are both followed" do
+      code =
+        "import * as cp from 'node:child_process';\nconst proc = require('child_process');\n" <>
+          "proc.execSync(a);\ncp.exec(b);\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [3, 4]
+    end
+
+    test "a shell option makes spawn and execFile shell calls" do
+      assert exec_sync?("spawnSync(cmd, args, {shell: true});\n")
+      assert exec_sync?("spawn(cmd, { shell : '/bin/bash' });\n")
+      assert exec_sync?("execFileSync(cmd, args, {encoding: 'utf8', shell: true});\n")
+      assert exec_sync?("spawnSync(cmd, args, {'shell': true});\n")
+      assert exec_sync?("spawnSync(cmd, args, {\"shell\": true});\n")
+      assert exec_sync?("spawn(path.join(dir, 'x'), [a], {\n  shell: true\n});\n")
+      refute exec_sync?("spawnSync(cmd, args, {shell: false});\n")
+      assert exec_sync?("spawn(resolve(path.join(dir, 'x')), args, {shell: true});\n")
+    end
+
+    test "fork ignores the shell option" do
+      refute exec_sync?(
+               "import {fork} from 'node:child_process';\nfork(mod, args, {shell: true});\n"
+             )
+    end
+
+    test "a renamed spawn or execFile with a shell option is a shell call" do
+      assert exec_sync?(
+               "import {spawn as run} from 'node:child_process';\nrun(cmd, a, {shell: true});\n"
+             )
+
+      assert exec_sync?(
+               "const {execFileSync: x} = require('child_process');\nx(cmd, a, {shell: true});\n"
+             )
+
+      refute exec_sync?("import {spawn as run} from 'node:child_process';\nrun(cmd, a);\n")
+    end
+
+    test "a shell key nested inside another option is not the call's option (A)" do
+      refute exec_sync?("spawn(c, a, {env: {shell: '/bin/bash'}});\n")
+      refute exec_sync?("spawnSync(c, a, {env: {...process.env, shell: true}, cwd});\n")
+      assert exec_sync?("spawn(c, a, {env: {shell: 'x'}, shell: true});\n")
+    end
+
+    test "an ignore directive on the import line does not hide the calls below it (1)" do
+      code =
+        "import * as cp from 'node:child_process'; // hypatia:ignore js_exec_sync -- import only\n" <>
+          "\ncp.exec(command);\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [3]
+    end
+
+    test "the compiled TypeScript call form is followed (2)" do
+      code =
+        "const child_process_1 = require(\"child_process\");\n" <>
+          "(0, child_process_1.exec)(cmd);\n(0, child_process_1.execSync)(cmd);\n" <>
+          "(0, child_process_1.spawn)(cmd, args, { shell: true });\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [2, 3, 4]
+      refute exec_sync?("const cp_1 = require('child_process');\n(0, cp_1.spawn)(cmd, args);\n")
+    end
+
+    test "a ; or bracket inside a string or template argument does not end the call (3)" do
+      assert exec_sync?("spawn(`echo ${input}; date`, [], {shell: true});\n")
+      assert exec_sync?("spawnSync('a); b', ['(', ']'], {shell: true});\n")
+      assert exec_sync?("execFile(cmd, [x], /* ; ) */ {shell: '/bin/sh'});\n")
+    end
+
+    test "a spawn call written inside a string or comment is not a call" do
+      refute exec_sync?("const doc = 'spawn(cmd, a, {shell: true})';\n")
+      refute exec_sync?("// spawn(cmd, a, {shell: true})\n")
+    end
+
+    test "a comment before the shell key does not hide it" do
+      assert exec_sync?("spawn(c, a, { /* use shell */ shell: true });\n")
+      assert exec_sync?("spawn(c, a, {\n  // needs a shell\n  shell: true\n});\n")
+    end
+
+    test "exec calls written in a string or comment are not calls" do
+      bound = "const cp_1 = require('child_process');\n"
+
+      for line <- [
+            "const s = '(0, cp_1.exec)(cmd)';\n",
+            "// (0, cp_1.execSync)(cmd)\n",
+            "const t = `cp_1.exec(cmd)`;\n",
+            "/* cp_1.exec(cmd) */\n"
+          ] do
+        refute exec_sync?(bound <> line), line
+      end
+
+      assert exec_sync?(bound <> "(0, cp_1.exec)(cmd);\n")
+      assert exec_sync?(bound <> "cp_1.exec(cmd);\n")
+    end
+
+    test "a parenthesised options object is still the call's options" do
+      assert exec_sync?("spawn(c, a, ({shell: true}));\n")
+      assert exec_sync?("spawn(c, a, (\n /* x */ {shell: true}));\n")
+      refute exec_sync?("spawn(c, a, ({env: {shell: true}}));\n")
+    end
+
+    test "an inline spread object contributes its own keys" do
+      assert exec_sync?("spawn(c, a, {...{shell: true}});\n")
+      assert exec_sync?("spawn(c, a, {cwd, ...({shell: '/bin/sh'})});\n")
+      refute exec_sync?("spawn(c, a, {...{env: {shell: true}}});\n")
+    end
+
+    test "a comma expression's value is its last operand" do
+      refute exec_sync?("spawn(c, a, ({shell: true}, {shell: false}));\n")
+      # Accepted over-report: any top-level operand object counts.
+      assert exec_sync?("spawn(c, a, {shell: true} && opts);\n")
+      assert exec_sync?("spawn(c, a, (({shell: true})));\n")
+      assert exec_sync?("spawn(c, a, ({shell: true} /* why */));\n")
+    end
+
+    test "an options object that is any top-level operand counts" do
+      assert exec_sync?("spawn(c, a, useShell ? {shell: true} : {shell: false});\n")
+      assert exec_sync?("spawn(c, a, useShell ? {} : {shell: '/bin/sh'});\n")
+      assert exec_sync?("spawn(c, a, {shell: true} as SpawnOptions);\n")
+      assert exec_sync?("spawn(c, a, {shell: true} satisfies SpawnOptions);\n")
+      assert exec_sync?("spawn(c, a, opts || {shell: true});\n")
+      refute exec_sync?("spawn(c, a, cond ? f({shell: true}) : x);\n")
+      refute exec_sync?("spawn(c, a, [{shell: true}]);\n")
+    end
+
+    test "a computed string key names the shell option too" do
+      for key <- ["['shell']", ~s(["shell"]), "[`shell`]", "[ 'shell' ]"] do
+        assert exec_sync?("spawn(c, a, {#{key}: true});\n"), key
+      end
+
+      refute exec_sync?("spawn(c, a, {[shellKey]: true});\n")
+    end
+
+    test "string and comment offsets are found in one pass over many calls" do
+      calls = Enum.map_join(1..400, "", fn i -> "spawn(c#{i}, a, {shell: true}); // x\n" end)
+
+      [f] =
+        Enum.filter(CodeSafety.scan_content(calls, "javascript"), &(&1.rule == :js_exec_sync))
+
+      assert f.occurrences == 400
+    end
+
+    test "arguments nested deeper than two levels no longer hide the option" do
+      assert exec_sync?("spawn(a(b(c(d))), [e(f(g()))], {shell: true});\n")
+    end
+
+    test "a dynamic import binds child_process too" do
+      assert exec_sync?("const cp = await import('node:child_process');\ncp.exec(command);\n")
+      assert exec_sync?("const {exec: sh} = await import('child_process');\nsh(command);\n")
     end
   end
 end
