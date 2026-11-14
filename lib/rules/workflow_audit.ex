@@ -4874,16 +4874,20 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  # The URL source of `trufflehog git`, if it has one: the first argument
-  # after `git` that is not a flag. `${{ github.server_url }}` counts as a URL.
+  # The URL source of `trufflehog git`, if it has one: any argument that is
+  # a URL, so a flag value before it (`--exclude-paths x.txt`) is not taken
+  # for the source. `${{ github.server_url }}` counts as a URL.
   defp trufflehog_url(cmd) do
     cmd = String.replace(cmd, ~r/\$\{\{\s*([\w.]+)\s*\}\}/, "${{\\1}}")
 
-    case Regex.run(~r/\btrufflehog\s+git\s+(?:--?\S+\s+)*['"]?([^\s'"]+)/, cmd) do
-      [_, arg] ->
-        if Regex.match?(~r/^(?:(?:https?|ssh|git):\/\/|git@|\$\{\{github\.server_url)/, arg),
-          do: arg,
-          else: nil
+    case Regex.split(~r/\btrufflehog\s+git\b/, cmd, parts: 2) do
+      [_, args] ->
+        args
+        |> String.split(~r/\s+/, trim: true)
+        |> Enum.map(&String.trim(&1, "'\""))
+        |> Enum.find(
+          &Regex.match?(~r/^(?:(?:https?|ssh|git):\/\/|git@|\$\{\{github\.server_url)/, &1)
+        )
 
       _ ->
         nil

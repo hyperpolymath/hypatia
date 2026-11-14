@@ -670,11 +670,22 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     for other <- [
           "https://gitlab.com/${{ github.repository }}",
           "https://github.com/${{ github.repository }}-mirror",
-          "https://github.com/someone/else/${{ github.repository }}"
+          "https://github.com/someone/else/${{ github.repository }}",
+          "--exclude-paths excludes.txt https://gitlab.com/${{ github.repository }}"
         ] do
       assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => remote.(other)}),
              other
     end
+
+    deep =
+      String.replace(
+        remote.("--exclude-paths excludes.txt https://gitlab.com/${{ github.repository }}"),
+        "    steps:\n",
+        "    steps:\n      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 0\n"
+      )
+
+    assert deep =~ "fetch-depth: 0"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => deep})
   end
 
   test "each scanner command in a step is judged on its own" do
