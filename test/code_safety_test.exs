@@ -867,4 +867,44 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       end
     end
   end
+
+  describe "js_exec_sync flags only calls a shell parses (mathesis#90)" do
+    defp exec_sync?(code),
+      do: Enum.any?(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+
+    test "importing node:child_process is not a finding" do
+      refute exec_sync?("import {spawnSync} from 'node:child_process';\n")
+      refute exec_sync?("const cp = require('child_process');\n")
+    end
+
+    test "spawnSync and execFileSync with an argv array and no shell are not findings" do
+      code = """
+      import {spawnSync, execFileSync} from 'node:child_process';
+      const git = findTool('git');
+      const r = spawnSync(git, ['ls-remote', `https://github.com/${repo}`], {encoding: 'utf8'});
+      execFileSync('/usr/bin/sha256sum', [path], {encoding: 'utf8'});
+      """
+
+      refute exec_sync?(code)
+    end
+
+    test "RegExp.exec and a function named exec are not findings" do
+      refute exec_sync?("const m = /^v(\\d+)/.exec(tag);\nconst n = re.exec(line);\n")
+      refute exec_sync?("function exec(cmd) { return cmd; }\n")
+    end
+
+    test "execSync and exec run a shell" do
+      assert exec_sync?("const out = execSync(`git log ${ref}`);\n")
+      assert exec_sync?("import {exec} from 'node:child_process';\nexec(cmd, cb);\n")
+      assert exec_sync?("require('child_process').exec(`ls ${dir}`, cb);\n")
+      assert exec_sync?("cp.exec(`rm -rf ${dir}`);\n")
+    end
+
+    test "a shell option makes spawn and execFile shell calls" do
+      assert exec_sync?("spawnSync(cmd, args, {shell: true});\n")
+      assert exec_sync?("spawn(cmd, { shell : '/bin/bash' });\n")
+      assert exec_sync?("execFileSync(cmd, args, {encoding: 'utf8', shell: true});\n")
+      refute exec_sync?("spawnSync(cmd, args, {shell: false});\n")
+    end
+  end
 end

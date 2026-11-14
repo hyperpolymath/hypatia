@@ -608,7 +608,15 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :js_exec_sync,
       severity: :high,
-      pattern: ~r/execSync\s*\(|child_process/,
+      # Only calls a shell parses: execSync( and exec( (always /bin/sh -c),
+      # a `.exec(` given a template string, and any call with a `shell:`
+      # option set to true or a shell path. Importing node:child_process is
+      # not a finding, nor is spawn/spawnSync/execFile/execFileSync with an
+      # argv array and no `shell:` option: no shell sees the arguments.
+      # A pattern cannot tell where a program or argument came from, so
+      # tainted argv to a shell-free call is out of reach here (mathesis#90).
+      pattern:
+        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|\.exec\s*\(\s*`|\bshell\s*:\s*(?:true\b|['"`])/,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
     },
