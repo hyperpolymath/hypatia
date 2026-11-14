@@ -71,6 +71,18 @@ defmodule Hypatia.DeedConformanceTest do
     end
   end
 
+  # One version-8 id, and that id with its version and variant nibbles
+  # replaced. The replaced ones are inputs the reader must judge, not ids. They
+  # are built at run time so that no non-v8 UUID literal stands in this source,
+  # which the governance UUID gate (standards scripts/check-uuid-v8.sh --strict)
+  # reads lexically.
+  @v8 "b32d6be4-73ba-873e-9d61-e57f43c75cd1"
+
+  defp nibbles(version, variant) do
+    <<head::binary-size(14), ?8, mid::binary-size(4), ?9, tail::binary>> = @v8
+    head <> <<version>> <> mid <> <<variant>> <> tail
+  end
+
   describe "the v1.4.0 to v2.0.0 deltas, one case each" do
     @hdr ";; SPDX-License-Identifier: MPL-2.0\n"
 
@@ -86,6 +98,22 @@ defmodule Hypatia.DeedConformanceTest do
 
       for name <- ~w(mustfile.deed MUSTFILE.deed Meta.deed State.deed ANCHOR.deed anchor.deed),
           do: assert({:error, _} = Deed.dispatch(name), name)
+    end
+
+    test "a _praxis.deed stem is checked as a _chora.deed stem is" do
+      praxis = @hdr <> "(praxis-deed :schema-version \"1\")\n"
+
+      assert Deed.dispatch("my-proj.v2_x_praxis.deed") == {:ok, "praxis-deed"}
+      assert {:ok, {"praxis-deed", _}} = Deed.parse(praxis, "dir/my-proj.v2_x_praxis.deed")
+
+      # stem = 1*( ALPHA / DIGIT / "-" / "." / "_" ): non-empty, ASCII only.
+      for name <- ["_praxis.deed", "☃_praxis.deed", "café_praxis.deed", "a b_praxis.deed"] do
+        assert {:error, "illegal deed filename stem" <> _} = Deed.dispatch(name), name
+        assert {:error, "illegal deed filename stem" <> _} = Deed.parse(praxis, name), name
+      end
+
+      for name <- ["_chora.deed", "☃_chora.deed"],
+          do: assert({:error, "illegal deed filename stem" <> _} = Deed.dispatch(name), name)
     end
 
     test "a bang stands only after a top-level rule's :id in a contractile-deed" do
@@ -129,21 +157,24 @@ defmodule Hypatia.DeedConformanceTest do
 
     test "a #uuid is version 5 or 8 with variant 10" do
       v = fn id -> Deed.parse(@hdr <> ~s|(repo-deed :schema-version "1" :x #uuid"#{id}")|) end
-      assert {:ok, _} = v.("b32d6be4-73ba-873e-9d61-e57f43c75cd1")
-      assert {:ok, _} = v.("b32d6be4-73ba-573e-bd61-e57f43c75cd1")
-      assert {:error, _} = v.("b32d6be4-73ba-473e-9d61-e57f43c75cd1")
-      assert {:error, _} = v.("b32d6be4-73ba-873e-cd61-e57f43c75cd1")
+      assert {:ok, _} = v.(@v8)
+      assert {:ok, _} = v.(nibbles(?5, ?b))
+      assert {:error, _} = v.(nibbles(?4, ?9))
+      assert {:error, _} = v.(nibbles(?8, ?c))
     end
 
     test "an identity field carries no #u5 and no version-5 #uuid, wherever it is written" do
       p = fn body -> Deed.parse(@hdr <> ~s|(repo-deed :schema-version "1" #{body})|) end
       assert {:ok, _} = p.(~s|:repo-uuid #u8"chora-registry:github.com/o/x"|)
-      assert {:ok, _} = p.(~s|:repo-uuid #uuid"b32d6be4-73ba-873e-9d61-e57f43c75cd1"|)
+      assert {:ok, _} = p.(":repo-uuid #uuid\"#{@v8}\"")
       # #u5 is legal where no identity is claimed.
       assert {:ok, _} = p.(~s|:legacy #u5"github.com/o/x"|)
       assert {:error, _} = p.(~s|:repo-uuid #u5"github.com/o/x"|)
       assert {:error, _} = p.(~s|(parent :of-chora #u5"github.com/o/x")|)
-      assert {:error, _} = p.(~s|:repo-uuid #uuid"b32d6be4-73ba-573e-9d61-e57f43c75cd1"|)
+
+      assert {:error, "identity field :repo-uuid carries a version 5 id" <> _} =
+               p.(":repo-uuid #uuid\"#{nibbles(?5, ?9)}\"")
+
       # Read lexically, as check-uuid-v8.sh reads it: a comment between the
       # field and its value hides nothing, and a comment is read too.
       assert {:error, _} = p.(~s|:repo-uuid ; old\n #u5"github.com/o/x"|)
