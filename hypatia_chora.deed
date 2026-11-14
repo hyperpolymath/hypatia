@@ -26,7 +26,7 @@
   :schema-version "1.0.0"
   :canonical-name "hypatia"
   :repo-uuid #u8"gv-clade-index:github.com/hyperpolymath/hypatia"
-  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
+  :beholding-chora #u8"chora:estate/github.com/hyperpolymath"
   (identity :owner "hyperpolymath" :primary-forge github :prefixed-name "ax-hypatia")
   (clade
     :primary ax
