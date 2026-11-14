@@ -118,7 +118,8 @@ learning:
     format: scm  # ERROR-CATALOG.scm format
 
   # Distillation settings. Learned rules are Elixir modules in
-  # lib/rules/*.ex (see rules.a2ml lifecycle); the machine-readable
+  # lib/rules/*.ex (rule lifecycle: the retired rules.a2ml, kept in git
+  # history, see docs/history/A2ML-REMOVED.adoc); the machine-readable
   # export for cross-repo consumers is the learned-security-rules JSON.
   distillation:
     min_occurrences: 3

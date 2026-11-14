@@ -34,7 +34,7 @@
 
     ; Structure
     (must ".machine_readable/ directory preserved")
-    (must "0-AI-MANIFEST.a2ml preserved")
+    (must "0-AI-MANIFEST.deed preserved")
     (must "no SCM files in repo root — only in .machine_readable/")
 
     ; CI

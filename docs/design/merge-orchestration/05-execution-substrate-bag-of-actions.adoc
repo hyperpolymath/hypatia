@@ -154,4 +154,5 @@ Bag.Mesh.submit(%{
 * `00-decision-contract.adoc` — the decision tuple the Baton carries.
 * `02-attestation.adoc` — the signed verdict that becomes the trust-chain link.
 * `04-pool-lease-spec.adoc` — the lease that becomes the routing capability.
-* `.machine_readable/merge-orchestration/LEDGER.a2ml` — workstream state.
+* The workstream ledger (`LEDGER.a2ml`, retired 2026-11-14; read it from git
+  history, see `docs/history/A2ML-REMOVED.adoc`) — workstream state.

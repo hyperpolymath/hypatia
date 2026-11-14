@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # AI system declaration for Hypatia
-# See: 0-AI-MANIFEST.a2ml for full AI integration protocol
+# See: 0-AI-MANIFEST.deed (the machine front door) for where to read
 
 User-agent: *
 Allow: /
 
 # AI agents should read the AI manifest first:
-# - 0-AI-MANIFEST.a2ml (root)
-# - .machine_readable/STATE.scm (current project state)
-# - .machine_readable/AGENTIC.scm (agent constraints)
-# - .machine_readable/NEUROSYM.scm (neurosymbolic architecture)
+# - 0-AI-MANIFEST.deed (root; pointer-only front door)
+# - hypatia_chora.deed (repo facts: status, maturity, meta, ecosystem,
+#   agentic, neurosym, playbook)
+# - .claude/CLAUDE.md (agent conventions)
 #
 # This project uses neurosymbolic CI/CD (Hypatia) and
 # gitbot-fleet for automated remediation.
