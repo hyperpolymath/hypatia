@@ -4588,7 +4588,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @non_pr_events ["push", "schedule", "workflow_dispatch"]
   # A scanner invocation, not a mention: a `run` that calls the binary.
-  @scanner_run ~r/(?:^|[\s;&|(`])(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
+  # At a command boundary (line start, `;`, `&`, `|`, `(`, backtick), not as
+  # an argument of another command (`echo gitleaks git`).
+  @scanner_run ~r/(?:^|[;&|(`])\s*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
   @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/
 
   @doc """
@@ -4799,6 +4801,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 # A conjunct that only holds on a PR: a refs/pull/ ref, or a
                 # pull_request or head_ref context that must be set.
                 not String.contains?(conj, "!") and
+                  not Regex.match?(~r/==\s*(?:''|""|null|false)\s*$/, conj) and
                     Regex.match?(
                       ~r/refs\/pull\/|github\.event\.pull_request\b|github\.head_ref\b/,
                       conj
@@ -4847,14 +4850,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp full_history_command?(cmd, job, i, events, wf_doc) do
     cond do
-      Regex.match?(~r/\bgitleaks\s+(?:detect|git)\b/, cmd) ->
+      Regex.match?(~r/^\s*(?:\S*\/)?gitleaks\s+(?:detect|git)\b/, cmd) ->
         # `protect`, `dir`, `--staged` and `--pre-commit` read uncommitted
         # changes or the tree only; so does `--no-git`.
         not Regex.match?(~r/--(?:no-git|staged|pre-commit)\b/, cmd) and
           (all_history_log_opts?(cmd) or not Regex.match?(@log_opts, cmd)) and
           deep_checkout_before?(job, i, events, wf_doc)
 
-      Regex.match?(~r/\btrufflehog\s+git\b/, cmd) ->
+      Regex.match?(~r/^\s*(?:\S*\/)?trufflehog\s+git\b/, cmd) ->
         # A URL source is cloned by trufflehog itself, and counts only when
         # it is this repository; a local one needs the deep checkout. Every
         # ref is scanned unless a flag limits it.
@@ -4882,12 +4885,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
     # On each event, the last checkout that runs then and lands where the
     # scanner reads decides what history it sees; one deep event is enough.
     Enum.any?(non_pr, fn event ->
+      target = norm_path(scanner_target(scanner, job, wf_doc))
+
+      # A checkout into the scanner's place or an ancestor of it (a fresh
+      # root checkout clears the workspace) replaces what was there; the
+      # last such checkout must be into the place itself, deep, and ours.
       steps
       |> Enum.take(i)
       |> Enum.filter(fn step ->
         is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
           runs_on_any?(step.if, [event]) and
-          feeds?(Hypatia.Workflow.input(step, "path"), scanner, job, wf_doc)
+          covers?(norm_path(Hypatia.Workflow.input(step, "path")), target)
       end)
       |> List.last()
       |> case do
@@ -4895,7 +4903,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           false
 
         checkout ->
-          Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
+          norm_path(Hypatia.Workflow.input(checkout, "path")) == target and
+            Hypatia.Workflow.input(checkout, "fetch-depth") == "0" and
             self_repository?(Hypatia.Workflow.input(checkout, "repository"))
       end
     end)
@@ -4917,28 +4926,39 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # scanner's `--source`/`file://` path, else the action's `path` input,
   # else its working directory (the step's own, the job's or the workflow's
   # `defaults.run.working-directory`), else the workspace root.
-  defp feeds?(path, scanner, job, wf_doc),
-    do: norm_path(path) == norm_path(scanner_target(scanner, job, wf_doc))
+  defp covers?(path, target),
+    do: path == target or path == "" or String.starts_with?(target, path <> "/")
 
   defp scanner_target(scanner, job, wf_doc) do
     run = if scanner, do: run_code(scanner), else: ""
 
+    wd =
+      [
+        scanner && scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
+        scanner && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
+        default_wd(job && job.node),
+        default_wd(wf_doc)
+      ]
+      |> Enum.find(& &1)
+      |> case do
+        nil -> ""
+        node -> norm_path(Hypatia.Workflow.text(node))
+      end
+
     case Regex.run(~r/(?:--source[=\s]+|file:\/\/)(?:"([^"]*)"|'([^']*)'|(\S+))/, run) do
       [_ | groups] ->
-        Enum.find(groups, "", &(&1 != ""))
+        # A relative source is read from the scanner's working directory.
+        source = norm_path(Enum.find(groups, "", &(&1 != "")))
+
+        cond do
+          String.starts_with?(source, "/") -> source
+          wd == "" -> source
+          source == "" -> wd
+          true -> wd <> "/" <> source
+        end
 
       nil ->
-        [
-          scanner && scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
-          scanner && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
-          default_wd(job && job.node),
-          default_wd(wf_doc)
-        ]
-        |> Enum.find(& &1)
-        |> case do
-          nil -> nil
-          node -> Hypatia.Workflow.text(node)
-        end
+        wd
     end
   end
 

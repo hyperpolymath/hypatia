@@ -625,8 +625,8 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     assert wf != @scheduled_full
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
 
-    # A root checkout after a pathed deep checkout does not shadow a scanner
-    # that reads the path.
+    # A fresh root checkout after a pathed deep checkout clears the
+    # workspace, the pathed checkout with it.
     pathed =
       full_with(
         "          fetch-depth: 0\n",
@@ -637,7 +637,7 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
         "      - uses: actions/checkout@v7.0.1\n      - run: gitleaks git --source source --log-opts=\"--all\" --redact"
       )
 
-    assert check(%{"pr.yml" => @pr_range, "full.yml" => pathed}) == []
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => pathed})
   end
 
   test "an action's path input is where it reads" do
@@ -723,6 +723,58 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
       )
 
     assert wf =~ "if: github.event_name == 'push'"
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
+  test "a scanner name that is only an argument is not a scan" do
+    echo_pr =
+      String.replace(@pr_range, "      - run: gitleaks git", "      - run: echo gitleaks git")
+
+    assert check(%{"pr.yml" => echo_pr}) == []
+
+    echo_full = full_with("      - run: " <> @full_run, "      - run: echo " <> @full_run)
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => echo_full})
+  end
+
+  test "an echo cannot lend a scanner its options or its repository" do
+    opts =
+      full_with(
+        @full_run,
+        ~s(gitleaks git --log-opts=HEAD~5..HEAD --redact; echo --log-opts=--all)
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => opts})
+
+    remote =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - run: trufflehog git https://github.com/someone/else; echo '${{ github.repository }}'\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => remote})
+  end
+
+  test "an empty-value comparison on a PR context is not a PR-only guard" do
+    wf =
+      full_with(
+        "    runs-on: ubuntu-latest",
+        "    if: github.head_ref == ''\n    runs-on: ubuntu-latest"
+      )
+
+    assert wf != @scheduled_full
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
+  test "a relative --source is read from the working directory" do
+    wf =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+      |> String.replace(
+        "      - run: " <> @full_run,
+        ~s(      - working-directory: source\n        run: gitleaks git --source . --log-opts="--all" --redact)
+      )
+
+    assert wf =~ "working-directory: source"
     assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
   end
 
