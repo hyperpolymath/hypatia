@@ -62,6 +62,14 @@ Hypatia is a transcription, and its match to the Agda is assumed, not proved.
 * By the owner ruling of 2026-11-14 on
   `docs/design/2026-11-14-merge-honesty.adoc`, the receipt also names the
   pattern and the kind of match (`exact`, `category`, `fuzzy`). See `E0-18`.
+* From the second theory recon, read on 2026-11-14: an integrity code over
+  the receipt covers each field of the receipt. januskey (`b503488`,
+  `attestation.rs`) covers the id, the time, the type, the actor and the
+  previous hash, and not the payload. Do not repeat that gap.
+* A field that says why a run stopped is a channel: the outcome of a run
+  can show a secret (secret-types `6ded4df`, `OutcomeVisibility.agda`,
+  `termination-sensitive-fails`, line 47; proved in Agda, Rocq and Lean).
+  So a `reason` field is one of a closed set of values, never free text.
 
 == Steps
 
