@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-25: A batch rollback reverts in reverse order, once
+:wo-id: E0-25
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 100
+:wo-branch: fix/e0-25-rollback-order
+:wo-depends: none
+
+== Goal
+
+The rollback manifest of a batch lists its revert instructions from the
+newest outcome to the oldest. A second rollback of the same batch adds no
+outcome and no instruction.
+
+== Authority
+
+Owner ruling of 2026-11-14, through the selector, on the second theory recon:
+"New work order now". This work order corrects the module only. It does not
+put the module on the dispatch path: the E0 README places that in Waves 2
+and 3 of the ultraplan.
+
+== Facts measured
+
+Commit `85cc775`, read on 2026-11-14. Nothing was run.
+
+* `lib/safety/batch_rollback.ex`, `rollback/2` (line 49): the instructions
+  (lines 81 to 88) follow the order of `find_batch_outcomes/1` (line 111),
+  which is the order of `File.ls/1` and then the order of the lines. Each
+  instruction has `repo`, `file` and the text `git revert`. It names no commit.
+* `rollback/2` writes one `false_positive` outcome for each row that it
+  finds, with `"batch_id"` set to the batch (lines 56 to 72).
+* Inferred, no test: those new rows carry the batch id, so a second
+  rollback of the same batch finds them and writes them again.
+* No other code in `lib/` writes `"batch_id"` to an outcome row
+  (`grep -rn '"batch_id"' lib`: `outcome_tracker.ex` line 501 reads it).
+  `create_batch/2` has no caller in `lib/`.
+* `lib/kin/contingency.ex`, `attempt_rollback/1` (line 234) passes a
+  repository name as the batch id.
+* `test/safety_test.exs` has tests for `create_batch/2` and
+  `list_batches/1`. It has no test for `rollback/2`.
+
+== Theory inputs
+
+Read on 2026-11-14 at januskey `b503488`. No prover was run for this work
+order. Use the result as a design rule. Its match to the Elixir is assumed.
+
+* An undo of a list of steps in reverse order restores the start state, when
+  each single undo restores its own step (`TransactionAtomicity.agda`,
+  `rollback-restores`, line 123). The premise for each single undo is tested
+  only in januskey. Here it is the fleet that runs `git revert`, so the
+  premise is outside this work order.
+* januskey records "undo twice is safe" as open. So this work order makes
+  the second rollback a no-op. It does not rely on a second undo.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/safety_test.exs`, with outcome rows of
+  their own in the test store. Each test must fail today.
+. Sort the outcomes of the batch by `timestamp`, newest first, before the
+  instructions are made. Equal timestamps keep a fixed order (by `repo`,
+  then `file`).
+. Leave out each row that a rollback wrote (`"caused_by"` is
+  `"batch_rollback"`) when the outcomes of a batch are collected.
+. A batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing.
+
+== Acceptance
+
+* A test shows 3 outcomes of 1 batch, written oldest first, and a manifest
+  that lists them newest first.
+* A test shows that a second `rollback/2` of the same batch adds 0 rows to
+  the outcome log and 0 lines to `rollbacks.jsonl`.
+* The diff touches `lib/safety/batch_rollback.ex` and `test/safety_test.exs` only.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Out of scope
+
+* The commit of each fix. No outcome row records it today, so an
+  instruction cannot name it. That needs a producer first (`E0-12` gives
+  the event id of an attempt).
+* A caller that sets `"batch_id"` on an outcome row, and the call in
+  `lib/kin/contingency.ex`. Report what you find. Do not change them.
+
+== Stop and ask
+
+* A test of step 2 passes today. Then an inferred fact is false: report it.
+* The outcome rows of the test store have no `timestamp`.
+* The cost reaches the cap before the acceptance checks pass.

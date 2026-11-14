@@ -120,6 +120,7 @@ function name is the stable locator. Measure again before you edit.
 |E0-22 |A fix is checked against its own finding |M |sonnet |$8 |none
 |E0-23 |A placeholder network adds no confidence |S |sonnet |$4 |none
 |E0-24 |An untrained novelty network means novel |S |sonnet |$5 |none
+|E0-25 |A batch rollback reverts in reverse order, once |S |sonnet |$6 |none
 |===
 
 The caps of `E0-01` to `E0-17` add up to $151. The estimate for that
@@ -134,8 +135,9 @@ runs, or run those 2 work orders in a session with a person.
 
 `E0-18` to `E0-24` come from the owner rulings of 2026-11-14 on
 `docs/design/2026-11-14-merge-honesty.adoc`. They are not part of the 7
-acceptance statements of issue 984. Their caps add up to $46, so all 24
-caps add up to $197.
+acceptance statements of issue 984. `E0-25` comes from the owner ruling of
+2026-11-14 on the second theory recon. These 8 caps add up to $52, so all 25
+caps add up to $203. That is above the credit of 1 month (about $198).
 
 === Order
 
@@ -146,7 +148,7 @@ caps add up to $197.
 . Second lane, each starts with a design note for the owner: `E0-04`, `E0-07`, `E0-08`.
 . After the rulings: `E0-05` (after `E0-04`), `E0-02`, `E0-09`, `E0-10`, `E0-11`, `E0-12`.
 . Last: `E0-16`.
-. Beside the lanes, in any order: `E0-21`, `E0-22`, `E0-23`, `E0-24`,
+. Beside the lanes, in any order: `E0-21`, `E0-22`, `E0-23`, `E0-24`, `E0-25`,
   `E0-18`, then `E0-19`. `E0-20` gives the owner a design note. No one
   measures a success rate for each pattern before `E0-18` and `E0-22` merge.
 
