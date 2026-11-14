@@ -4820,7 +4820,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     steps
     |> Enum.take(i)
     |> Enum.any?(fn step ->
-      is_binary(step.uses) and String.starts_with?(step.uses, "actions/checkout") and
+      is_binary(step.uses) and String.starts_with?(String.trim(step.uses), "actions/checkout@") and
         Hypatia.Workflow.input(step, "fetch-depth") == "0" and
         Hypatia.Workflow.input(step, "repository") in [nil, "", "${{ github.repository }}"] and
         feeds?(Hypatia.Workflow.input(step, "path"), scanner)

@@ -471,6 +471,18 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
              })
   end
 
+  test "only actions/checkout itself is a checkout" do
+    wf =
+      String.replace(
+        @scheduled_full,
+        "      - uses: actions/checkout@v7.0.1",
+        "      - uses: actions/checkout-wrapper@v1"
+      )
+
+    assert wf != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+  end
+
   test "is skipped when audit/3 is told the workflow set is partial" do
     %{findings: fs} = WorkflowAudit.audit(["pr.yml"], %{"pr.yml" => @pr_range}, partial: true)
     refute Enum.any?(fs, &(&1[:rule] == "WF032"))
