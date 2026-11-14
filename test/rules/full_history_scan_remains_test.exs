@@ -370,6 +370,112 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     end
   end
 
+  test "a deep checkout into a path feeds only a scanner run there" do
+    pathed =
+      String.replace(
+        @scheduled_full,
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+
+    assert pathed != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => pathed})
+
+    there =
+      String.replace(
+        pathed,
+        ~s(gitleaks git --log-opts="--all" --redact),
+        ~s(gitleaks git --source source --log-opts="--all" --redact)
+      )
+
+    assert there != pathed
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => there}) == []
+
+    wd =
+      String.replace(
+        pathed,
+        ~s(      - run: gitleaks git),
+        ~s(      - working-directory: source\n        run: gitleaks git)
+      )
+
+    assert wd != pathed
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wd}) == []
+  end
+
+  test "only the estate's own rail counts as the rail" do
+    rail = fn uses ->
+      "on:\n  push:\n    branches: [main]\njobs:\n  secrets:\n    uses: #{uses}\n"
+    end
+
+    sha = "@0123456789abcdef0123456789abcdef01234567"
+
+    for good <- [
+          "hyperpolymath/standards/.github/workflows/secret-scanner-reusable.yml" <> sha,
+          "metadatastician/standards/.github/workflows/secret-scanner-reusable.yml" <> sha
+        ] do
+      assert check(%{"pr.yml" => @pr_range, "rail.yml" => rail.(good)}) == [], good
+    end
+
+    for bad <- [
+          "someone/else/.github/workflows/secret-scanner-reusable.yml" <> sha,
+          "./.github/workflows/secret-scanner-reusable.yml"
+        ] do
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "rail.yml" => rail.(bad)}), bad
+    end
+  end
+
+  test "a constant-false guard disables the scan" do
+    for guard <- ["false", "${{ false }}", "github.event_name == 'schedule' && false"] do
+      wf =
+        String.replace(
+          @scheduled_full,
+          "    runs-on: ubuntu-latest",
+          "    if: #{guard}\n    runs-on: ubuntu-latest"
+        )
+
+      assert wf != @scheduled_full
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), guard
+    end
+
+    disabled_pr =
+      String.replace(
+        @pr_range,
+        "    runs-on: ubuntu-latest",
+        "    if: false\n    runs-on: ubuntu-latest"
+      )
+
+    assert check(%{"pr.yml" => disabled_pr}) == []
+  end
+
+  test "more git history limits beside --all are a range" do
+    for opts <- ["--all --max-age=1700000000", "--all --first-parent", "--all -50"] do
+      wf = String.replace(@scheduled_full, ~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
+    end
+  end
+
+  test "the trufflehog action with base or head inputs is a range" do
+    action = fn extra ->
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        "      - uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d\n" <>
+        extra
+    end
+
+    assert check(%{"pr.yml" => @pr_range, "a.yml" => action.("")}) == []
+
+    assert [%{rule: "WF032"}] =
+             check(%{
+               "pr.yml" => @pr_range,
+               "a.yml" => action.("        with:\n          base: main\n          head: HEAD\n")
+             })
+  end
+
+  test "is skipped when audit/3 is told the workflow set is partial" do
+    %{findings: fs} = WorkflowAudit.audit(["pr.yml"], %{"pr.yml" => @pr_range}, partial: true)
+    refute Enum.any?(fs, &(&1[:rule] == "WF032"))
+  end
+
   test "no PR scan means nothing to check" do
     assert check(%{"full.yml" => @scheduled_full}) == []
     assert check(%{}) == []
