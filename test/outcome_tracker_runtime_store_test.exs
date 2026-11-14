@@ -132,10 +132,14 @@ defmodule Hypatia.OutcomeTrackerRuntimeStoreTest do
     assert File.read!(outcome_file) == before_missing
   end
 
-  test "runtime fleet ingestion does not credit unverified success or acknowledge a partial tail", ctx do
+  test "runtime fleet ingestion does not credit unverified success or acknowledge a partial tail",
+       ctx do
     fleet_root = Path.join(ctx.root, "fleet-partial")
     Application.put_env(:hypatia, :fleet_path, fleet_root)
-    unqualified = Jason.encode!(%{"recipe_id" => ctx.id, "repo" => "synthetic", "outcome" => "success"})
+
+    unqualified =
+      Jason.encode!(%{"recipe_id" => ctx.id, "repo" => "synthetic", "outcome" => "success"})
+
     partial = unqualified <> "\n" <> ~s({"recipe_id":)
     fleet_file = write_fleet(fleet_root, partial)
 

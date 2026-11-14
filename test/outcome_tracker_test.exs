@@ -62,7 +62,12 @@ defmodule Hypatia.OutcomeTrackerTest do
 
       assert {:ok, record} =
                OutcomeTracker.record_fleet_outcome(
-                 "recipe-fleet-replay-test", "replay-repo", ".", :failure, source_id, "failed"
+                 "recipe-fleet-replay-test",
+                 "replay-repo",
+                 ".",
+                 :failure,
+                 source_id,
+                 "failed"
                )
 
       assert record["fleet_import_id"] == source_id
@@ -151,24 +156,37 @@ defmodule Hypatia.OutcomeTrackerTest do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
       assert Hypatia.LearningScheduler.classify_fleet_record(row) == :skip
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 2, "after_hits" => 0})
              ) == {:ok, "recipe-a", "example", ".", :success, "verified"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 0, "after_hits" => 0})
              ) == :skip
-      assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.put(row, "verdict", "no_op")
-             ) == :skip
+
+      assert Hypatia.LearningScheduler.classify_fleet_record(Map.put(row, "verdict", "no_op")) ==
+               :skip
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "failed", "exit_code" => 1, "outcome" => "failure"})
              ) == {:ok, "recipe-a", "example", ".", :failure, "failed"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2, "outcome" => "failure"})
+               Map.merge(row, %{
+                 "verdict" => "incomplete",
+                 "after_hits" => 2,
+                 "outcome" => "failure"
+               })
              ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.merge(row, %{"verdict" => "verified", "before_hits" => 1, "after_hits" => 0,
-                                 "bot" => "hypatia"})
+               Map.merge(row, %{
+                 "verdict" => "verified",
+                 "before_hits" => 1,
+                 "after_hits" => 0,
+                 "bot" => "hypatia"
+               })
              ) == :skip
     end
   end

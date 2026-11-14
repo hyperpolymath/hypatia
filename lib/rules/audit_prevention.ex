@@ -365,7 +365,8 @@ defmodule Hypatia.Rules.AuditPrevention do
           String.starts_with?(path, ".github/workflows/"),
           do: content
 
-    audited? = Enum.any?(workflow_contents, fn content -> String.contains?(content, "cargo audit") end)
+    audited? =
+      Enum.any?(workflow_contents, fn content -> String.contains?(content, "cargo audit") end)
 
     if "Cargo.toml" in files and not audited? do
       [finding(rec("AP003"))]

@@ -46,6 +46,7 @@ defmodule Hypatia.Neural.DispatchGuardTest do
 
   test "neural novelty always demotes to control" do
     original = {:eliminate, %{"confidence" => 0.99}, @pattern}
+
     assert {:control, pattern} =
              DispatchGuard.enforce(original, %{strategy: :auto_execute, is_novel: true})
 
@@ -61,6 +62,7 @@ defmodule Hypatia.Neural.DispatchGuardTest do
 
   test "neural auto_execute never raises a symbolic recipe confidence" do
     original = {:eliminate, %{"confidence" => 0.80}, @pattern}
+
     assert {:eliminate, recipe, pattern} =
              DispatchGuard.enforce(original, %{strategy: :auto_execute})
 
@@ -119,6 +121,7 @@ defmodule Hypatia.Neural.DispatchGuardTest do
 
   test "even a complete recommendation cannot promote malformed recipe confidence" do
     action = {:eliminate, %{"confidence" => "very high"}, @pattern}
+
     assert {:eliminate, recipe, _} =
              DispatchGuard.enforce(action, @complete_auto_recommendation)
 
@@ -129,6 +132,7 @@ defmodule Hypatia.Neural.DispatchGuardTest do
 
   test "review verdict preserves the original recipe confidence for evidence" do
     action = {:eliminate, %{"confidence" => 0.99}, @pattern}
+
     assert {:eliminate, recipe, _} =
              DispatchGuard.enforce(action, %{strategy: :review, confidence: 0.89})
 

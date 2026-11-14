@@ -221,7 +221,12 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   @doc false
   def record_observations(state, components) do
-    %{state | components: components, failures: detect_failures(components), last_check: DateTime.utc_now()}
+    %{
+      state
+      | components: components,
+        failures: detect_failures(components),
+        last_check: DateTime.utc_now()
+    }
   end
 
   # Callbacks are explicit so regression tests can exercise notification
