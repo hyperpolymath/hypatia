@@ -567,16 +567,18 @@ files for a database that was ditched.
 
 === 9. Dependency / build debt
 
-==== B-1 · MEDIUM · `+mise.toml+` mandates a Python/JS toolchain in a Python-banned estate · UNTRACKED
+==== B-1 · MEDIUM · `+mise.toml+` mandated a Python/JS toolchain in a Python-banned estate · RESOLVED
 
-Declares `+python+`, `+pip+`, `+black+`, `+isort+`, `+ruff+`,
-`+pytest+`, `+jest+`, `+vitest+`, sets
-`+PYTHONDONTWRITEBYTECODE+`/`+PYTHONUNBUFFERED+`, and aliases
-`+lint = "ruff check . || prettier … || black …"+`. This is the *last
-surviving Python surface* after #687 deleted `+resolve.py+` — and unlike
-a stray file, it is the _policy_ layer. `+mise+` itself warns most of
-these are unresolvable. PR #686 (banned-language migration backlog) may
-be the right home.
+It declared `+python+`, `+pip+`, `+black+`, `+isort+`, `+ruff+`,
+`+pytest+`, `+jest+`, `+vitest+`, set
+`+PYTHONDONTWRITEBYTECODE+`/`+PYTHONUNBUFFERED+`, and aliased
+`+lint = "ruff check . || prettier … || black …"+`.
+*Status as of 2026-11-14:* `+grep -inE 'python|pip|black|isort|ruff|pytest' mise.toml+`
+has no match. `+jest+`, `+vitest+` and `+alias+` occur only in a comment that
+says they are not listed, so `+mise.toml+` declares none of them and has no
+alias block. Not measured: which change removed them. `+mise.toml+` still
+declares `+node+`, `+bun+`, `+pnpm+` and `+prettier+`; this entry did not judge
+those.
 
 ==== B-2 · positive · Dependencies current, lockfiles in sync
 
