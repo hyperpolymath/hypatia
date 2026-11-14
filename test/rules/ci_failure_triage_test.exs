@@ -44,6 +44,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"hypatia-critical-findings.txt", "security_findings_reported", :owner},
     {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
     {"lock-missing-pin.txt", "actions_lock_missing_ref", :fix},
+    # Tsunami-breaker, 2026-11-14: tag-keyed lock records refused by the
+    # standards pin-contract gate (ZeroInflatedCounts.jl, ResidualEvidenceTypes.jl).
+    {"lock-tag-keyed.txt", "actions_lock_tag_keyed", :owner},
     {"canon-lockstep-broken.txt", "canon_lockstep", :owner},
     {"canon-pin-needs-profile.txt", "canon_lockstep", :owner},
     {"repo-map-stale.txt", "repository_map_stale", :fix},
@@ -67,6 +70,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-43137798791-lock-unresolvable.txt", "actions_lock_unresolvable_pin", :fix},
     {"real-43158586027-gitleaks-range.txt", "scan_range_missing_commit", :rerun},
     {"real-43357534889-rollup.txt", "rollup_cascade", :upstream},
+    # hypatia#1091: the CI Status rollup on a superseded head, red only
+    # because a newer push cancelled the job it waits on.
+    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :none},
     {"real-43416333174-orchestrate-raise.txt", "runtime_exception", :report},
     {"real-43150955344-rustfmt.txt", "format_diff", :fix},
     {"real-43357534889-container-build.txt", "compile_error", :report}
@@ -401,6 +407,75 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
 
     test "conclusion cancelled is authoritative with an empty log" do
       assert T.classify("", %{conclusion: "cancelled"}).primary.rule == T.id("runner_cancelled")
+    end
+
+    test "a rollup naming a failed job is not read as a cancellation" do
+      failed = "##[error]kyaml-conformance did not succeed (result: failure)\n"
+      %{matches: ms} = T.classify(failed, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
+    test "a program printing the rollup phrase is not read as a cancellation" do
+      log =
+        "worker did not succeed (result: cancelled)\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
+    test "a quoted runner annotation mid-line does not outrank a test failure" do
+      log =
+        "  expected \"##[error]worker did not succeed (result: cancelled)\"\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n" <>
+          "5 tests, 1 failure\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("test_failure")
+      assert p.layer == :code
+    end
+
+    test "a timestamped runner annotation is still read as a cancellation" do
+      log = "2026-11-14T13:52:24.3285804Z ##[error]lint did not succeed (result: cancelled)\n"
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
+    test "a rollup with a cancelled and a failed job is not read as a cancellation" do
+      log =
+        "2026-11-14T13:52:24Z ##[error]lint did not succeed (result: cancelled)\n" <>
+          "2026-11-14T13:52:24Z ##[error]tests did not succeed (result: failure)\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+      assert p.action == :upstream
+    end
+
+    test "the security rollup's cancelled wording is a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n"
+
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
+    test "the security rollup with a cancelled and a failed scan is not a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n" <>
+          "2026-11-14T15:38:53Z ##[error]Rust dependency audit did not complete " <>
+          "successfully (result=failure) -- no verdict was produced\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+    end
+
+    test "the public rule inventory encodes as JSON (no matcher regexes leak)" do
+      for r <- T.rules(), do: assert(is_binary(Jason.encode!(r)))
     end
 
     test "startup_failure with no log is a referral, never a rerun" do

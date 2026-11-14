@@ -80,7 +80,26 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # A verdict job reporting that the job it reads was cancelled by a
         # newer push (rsr-template-repo#337: `Fork governance failed
         # (deed=cancelled)`). Superseded, not a defect.
-        ~r/\bgovernance failed \(deed=cancelled\)/i
+        ~r/\bgovernance failed \(deed=cancelled\)/i,
+        # A CI-status rollup reporting a needed job's `result: cancelled`
+        # (hypatia#1091, run 43601615541): a newer push cancelled the older
+        # run, so the superseded head's rollup goes red. Only `cancelled`;
+        # `result: failure` is a real failure and stays the rollup's.
+        # Anchored to a runner `##[error]` annotation at the start of the
+        # line (after the optional log timestamp), so a test or program that
+        # prints the phrase, or quotes the annotation mid-line, does not
+        # hide a failure.
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*did not succeed \(result: cancelled\)/,
+        # The security rollup's wording of the same thing (hypatia#1093,
+        # run 43611131531): `<check> did not complete successfully
+        # (result=cancelled)`.
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*did not complete successfully \(result=cancelled\)/
+      ],
+      # A rollup that also reports a needed job as failed is not "just
+      # cancelled": the failure must not be hidden behind the cancelled
+      # sibling, so the whole rule stands down.
+      unless: [
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*(?:did not succeed \(result: failure\)|did not complete successfully \(result=failure\))/m
       ],
       action: :none,
       retries: 0,
@@ -242,6 +261,21 @@ defmodule Hypatia.Rules.CiFailureTriage do
           "cause is a leaf whose `ref` repeats its own SHA (ActionsLock " <>
           "`self_sha_leaf_ref`). Regenerate the lock with the current gh-actions-lock; " <>
           "if the bad leaf comes from a standards commit, fix it there (solutions at source)."
+    },
+    %{
+      name: "actions_lock_tag_keyed",
+      layer: :config,
+      patterns: [~r/key ref is not a 40-hex commit/i],
+      action: :owner,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "The pin-contract gate (standards check-lock-pin-contract.sh, canon rule 10) " <>
+          "refused actions.lock records keyed by a tag instead of a commit SHA, the form " <>
+          "gh actions-lock writes by default. The cure is the standards repair order " <>
+          "(relock-sha-keys.sh and the scripts after it), which re-pins workflows: a " <>
+          "referral, with no fix row until that order is shown to turn the gate green."
     },
     %{
       name: "actions_lock_missing_ref",
@@ -701,7 +735,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "rollup_cascade",
       layer: :code,
-      patterns: [~r/\d+ of \d+ [\w -]+ (did not report success|did not complete)/],
+      patterns: [
+        ~r/\d+ of \d+ [\w -]+ (did not report success|did not complete)/,
+        # A rollup's own line for a needed job that failed (CI Status and
+        # the security rollup). Stops a mixed cancelled+failed rollup from
+        # reading as clean once runner_cancelled stands down.
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*(?:did not succeed \(result: failure\)|did not complete successfully \(result=failure\))/
+      ],
       action: :upstream,
       retries: 0,
       fix: nil,
@@ -773,7 +813,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
     |> Enum.sort_by(&rank/1)
     |> Enum.map(fn r ->
       r
-      |> Map.drop([:patterns, :context])
+      |> Map.drop([:patterns, :context, :unless])
       |> Map.put(:id, id(r.name))
       |> Map.put(:route, route(r.action))
     end)
@@ -962,8 +1002,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # ── internals ─────────────────────────────────────────────────────────
 
   defp first_hit(rule, lines, log) do
-    if in_context?(rule, log), do: scan_lines(rule, lines)
+    if in_context?(rule, log) and not excluded?(rule, log), do: scan_lines(rule, lines)
   end
+
+  # A rule with `:unless` stands down when any of those patterns appears
+  # anywhere in the log (evidence that the signature would hide a failure).
+  defp excluded?(%{unless: pats}, log), do: Enum.any?(pats, &Regex.match?(&1, log))
+  defp excluded?(_rule, _log), do: false
 
   # A rule with `:context` fires only when one of those patterns appears
   # somewhere in the whole log (the signature line alone is ambiguous).
