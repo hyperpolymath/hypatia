@@ -172,7 +172,8 @@ impl Scanner {
                     description: "Workflow file missing SPDX license header".to_string(),
                     fix_suggestion: "Add '# SPDX-License-Identifier: MPL-2.0' as first line"
                         .to_string(),
-                    auto_fixable: true,
+                    // R1 (hypatia#1080): licence/SPDX is flag-only, never auto-fixed.
+                    auto_fixable: false,
                     category: IssueCategory::MissingSpdx,
                 });
             }
@@ -243,7 +244,8 @@ impl Scanner {
                     line_number: line_num,
                     description,
                     fix_suggestion: format!("Replace @{} with {}", version, sha_suggestion),
-                    auto_fixable: true,
+                    // R1 (hypatia#1080): cicd-squabbler fixes pins first; report only.
+                    auto_fixable: false,
                     category: IssueCategory::UnpinnedAction,
                 });
             }
@@ -272,7 +274,9 @@ impl Scanner {
                                         .to_string(),
                                 fix_suggestion: "Add 'with: toolchain: stable' (or nightly/beta)"
                                     .to_string(),
-                                auto_fixable: true,
+                                // R1 (hypatia#1080): workflow content is
+                                // cicd-squabbler's first line; report only.
+                                auto_fixable: false,
                                 category: IssueCategory::MissingToolchainInput,
                             });
                         }

@@ -137,7 +137,9 @@ defmodule Hypatia.DispatchManifest do
 
   defp action_to_manifest_entry({:eliminate, recipe, pattern}) do
     confidence = Map.get(recipe, "confidence", 0.0)
-    strategy = TriangleRouter.dispatch_strategy(confidence)
+    # Capped recipes (owner ruling R1) are report_only whatever their confidence.
+    strategy = TriangleRouter.recipe_strategy(recipe)
+    cap = TriangleRouter.ownership_cap(recipe)
     repo = get_repo(pattern)
 
     %{
@@ -151,7 +153,8 @@ defmodule Hypatia.DispatchManifest do
       "program_path" => resolve_program_path(pattern, repo),
       "recipe_id" => Map.get(recipe, "id"),
       "confidence" => confidence,
-      "auto_fixable" => Map.get(recipe, "auto_fixable", false),
+      "auto_fixable" => cap == nil and Map.get(recipe, "auto_fixable", false),
+      "ownership_cap" => cap && Atom.to_string(cap),
       "fix_script" => resolve_fix_script(Map.get(recipe, "fix_script")),
       "action" => Map.get(recipe, "action", "unknown"),
       "match" => Map.get(recipe, "match"),
@@ -168,7 +171,8 @@ defmodule Hypatia.DispatchManifest do
 
     %{
       "tier" => "substitute",
-      "strategy" => "review",
+      "strategy" => if(TriangleRouter.ownership_cap(recipe), do: "report_only", else: "review"),
+      "ownership_cap" => cap_name(recipe),
       "pattern_id" => Map.get(pattern, "id", "unknown"),
       "category" => Map.get(pattern, "category", "unknown"),
       "description" => Map.get(pattern, "description", ""),
@@ -212,6 +216,13 @@ defmodule Hypatia.DispatchManifest do
   # pattern matched, `occurrences` times across the fleet: `observed` support
   # at level epi. Without a pattern id there is nothing to name, and the step
   # is factless (compile/1 refuses the manifest).
+  defp cap_name(recipe) do
+    case TriangleRouter.ownership_cap(recipe) do
+      nil -> nil
+      cap -> Atom.to_string(cap)
+    end
+  end
+
   defp facts_for(source) do
     case Map.get(source, "id") do
       id when is_binary(id) and id not in ["", "unknown"] ->
