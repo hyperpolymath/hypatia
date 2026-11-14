@@ -26,6 +26,7 @@ defmodule Hypatia.VCL.Query do
       {:ok, timeline} = Hypatia.VCL.Query.outcome_timeline("recipe-shell-quote-vars")
   """
 
+  alias Hypatia.OutcomeTracker
   alias Hypatia.VCL.Client
 
   require Logger
@@ -325,7 +326,12 @@ defmodule Hypatia.VCL.Query do
           |> Enum.map(fn {date, day_outcomes} ->
             %{
               date: date,
+              # `successes` counts the claimed value `"outcome" == "success"`.
+              # `qualified` counts only what is evidence (see
+              # `OutcomeTracker.qualified_outcome_counts/1`).
               successes: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "success")),
+              claimed_successes: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "success")),
+              qualified: OutcomeTracker.qualified_outcome_counts(day_outcomes),
               failures: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "failure")),
               false_positives:
                 Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "false_positive")),
@@ -375,7 +381,10 @@ defmodule Hypatia.VCL.Query do
          %{
            recipe_id: recipe_id,
            total_attempts: total,
+           # `successes` is the claimed count. `qualified` is the evidence.
            successes: successes,
+           claimed_successes: successes,
+           qualified: OutcomeTracker.qualified_outcome_counts(outcomes),
            failures: failures,
            false_positives: false_positives,
            success_rate: Float.round(overall_success_rate, 4),
@@ -516,6 +525,9 @@ defmodule Hypatia.VCL.Query do
          canonical_patterns: length(patterns),
          fix_recipes: length(recipes),
          outcomes_recorded: length(outcomes),
+         # `success_rate` is the claimed rate. `qualified` is the evidence.
+         claimed_successes: success_count,
+         qualified: OutcomeTracker.qualified_outcome_counts(outcomes),
          success_rate:
            if(outcomes != [],
              do: Float.round(success_count / length(outcomes) * 100, 1),
