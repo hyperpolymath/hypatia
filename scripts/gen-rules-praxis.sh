@@ -405,7 +405,9 @@ render() {
   echo '(praxis-deed'
   echo '  :schema-version "1.0.0"'
   echo '  :canonical-name "hypatia-rules"'
-  echo '  :beholding-chora #u5"estate/chora"'
+  # Owner ruling Q2 (2026-11-14): an identity field takes v8 only, never #u5.
+  # The same estate chora id as hypatia_chora.deed (hypatia#1095).
+  echo '  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"'
   echo '  (rule-domain :name "hypatia" :owner "hyperpolymath/hypatia")'
   echo '  (rules'
   sort -t$'\t' -k1,1 "$rows" | awk -F'\t' '
