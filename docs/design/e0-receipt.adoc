@@ -1,0 +1,488 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= The E0 receipt: design and ruling packet
+:toc:
+:toclevels: 2
+
+[cols="1,3"]
+|===
+|Status |PROPOSED. Nothing here is ruled. The owner rules on the 8 decisions in <<decisions>>. No code, schema or test changes with this document.
+|Date |2026-11-14
+|Work order |`E0-08` (`docs/operations/e0-closeout/work-orders/E0-08-receipt-design.adoc`). `E0-09`, `E0-10`, `E0-11`, `E0-12` build on the rulings.
+|Authority |https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 10 ("Receipt") and acceptance A7.
+|Limit |Issue 984: "Do not create a grand new data model before fixing the actual false-learning path." So the receipt is an index into logs that already exist. It is not a new store of evidence.
+|===
+
+== 1. What the receipt is, and what it is not
+
+A receipt says: _this qualified event changed what a learner holds, and here is
+the exact evidence that it rested on_. It names each row of evidence by a stable
+id. It never names a count, because a count cannot give back its evidence
+(echo-types `EchoFiniteResidue.agda`, lines 36 and 47: read in the second theory
+recon, not re-run here).
+
+* It is an index into the log that is kept. It cannot undo an update by itself.
+* It is append-only. A later fact is a new receipt that links to the old one. No
+  receipt is rewritten (<<d7>>).
+* Timestamps and parent ids are metadata. They are not a substitute for trust.
+* Every field that holds a reason is one of a closed set of values, never free
+  text. The outcome of a run can show a secret, and a free-text reason is a
+  channel for it (secret-types `OutcomeVisibility.agda`, `termination-sensitive-fails`).
+
+== 2. What exists today (measured at `main`, 2026-11-14)
+
+* The names `chain_version`, `parent_event_ids`, `subject_id` and
+  `missing_evidence` occur nowhere in `lib/`, `schema/` or `src/`. `head_sha`
+  occurs only in the merge orchestration (`lib/merge_orchestration/`) and in 3
+  rule modules (`baseline_health`, `pr_automerge`, `research_extensions`).
+* Row identity is provisional, and the code says so. A local row is named by a
+  hash of the log file name and the line number
+  (`LearningScheduler.local_source_id/2`, with no content in the hash). A fleet
+  row is named by a hash of the line number and the line
+  (`LearningScheduler.fleet_source_id/2`). Both comments say that a producer
+  `event_id` will supersede them. After log rotation or truncation, a different
+  local row can take the same `(file, line)`.
+* The 3 places where a qualified learning update starts:
+** `OutcomeTracker.update_confidence_file/5`: recomputes a recipe's confidence and
+   annealing state from every qualified row in the log;
+** `LearningScheduler.import_fleet_lines/2`: imports qualified fleet rows into the
+   outcome log. It calls `OutcomeTracker.record_fleet_outcome`, which reaches
+   `persist_outcome/6` and then the confidence update;
+** `FleetDispatcher.ingest_fix_outcome/1`: feeds the neural coordinator and writes a
+   row to the fleet log. It writes to a fixed path under `~/Documents/hyperpolymath-repos/gitbot-fleet/`
+   and its row has no `recipe_id` and no `verification` (work order `E0-05` fixes
+   the qualification; this document does not).
+* Conventions that the design reuses or names:
+** `schema/findings.ncl`: a Nickel contract with a derived level. A contract refuses
+   a record whose stored level disagrees with its support and evidence.
+** `src/Hypatia/ABI/Verdict.idr` and `Retraction.idr`, checked by
+   `scripts/check-verdicts.sh` with `tests/accept/` and `tests/reject/`. `Retraction.idr`
+   is the model of a thinning: a token survives exactly when its support survives.
+** `lib/hypatia/ci_changed.ex`: execution receipts of local CI runs. It says that a
+   local container run is not a receipt for a hosted runner, and that skipped jobs and
+   missing receipts cannot certify execution.
+** `verification/proof-ledger.jsonl`, checked by `scripts/proof-ledger.sh`: one
+   canonical JSON object on each line, I-JSON serialised as JCS (RFC 8785), in a
+   profile where `jq -cS` output _is_ the JCS form (ASCII strings, no numbers).
+* Estate rules: JSON is I-JSON in JCS form. A new identifier follows ADR-008
+  (`docs/decisions/ADR-008-uuid-v8-estate-standard.adoc` in `metadatastician/standards`):
+  version 8, variant `10`, lowercase `8-4-4-4-12`, under profile T (time-ordered) or
+  profile C (content-derived), and the field that holds it declares the profile.
+
+== 3. The 13 fields of issue 984, step 10
+
+Two rules apply to every row. First, a receipt has no JSON numbers: a count or a
+hit number is a decimal string. That keeps the profile of the proof ledger, in
+which `jq -cS` is canonical. Second, a field that E0 cannot fill is not omitted
+and is not guessed: its name goes into `missing_evidence`.
+
+[cols="2,3,3,3,3",options="header"]
+|===
+|Field |Type |Source |Can E0 fill it? |`missing_evidence` says, when it cannot
+
+|`head_sha`
+|string, 40 lowercase hex: the commit of the target repository at which the fix was judged
+|A fleet row does not carry it. The local rescan knows `repo_path` but takes no commit today.
+|No, for a fleet row. For a local row only if a later work order adds a `git rev-parse HEAD` in the rescan.
+|`head_sha`
+
+|`subject_id`
+|string, ADR-008 v8, profile C, over the JCS form of `{file, recipe_id, repo}`
+|Computed by Hypatia from the row. Needs a registered profile C domain (see <<d8>>).
+|Only as a locator of `(repo, file, recipe)`. That is not the identity of a finding: "a path and a line alone is not stable identity" (issue 984, step 1).
+|`subject_id` until the domain is registered, and `subject_identity` always, until a stable finding identity exists (issue 984, E1).
+
+|`event_id`
+|string, ADR-008 v8, *profile T*
+|Minted by the producer before the fix runs (`E0-12`). For a local row, minted by Hypatia when it writes the row (<<d3>>).
+|Yes for a row that has one. A legacy row has none.
+|`event_id`. The provisional locator of the row is then in `source`. A legacy row gets no receipt at all (<<d6>>).
+
+|`parent_event_ids`
+|array of `event_id` strings, sorted, no duplicates
+|Causality. For a first receipt: `[]`. For a revision: the `event_id` of the receipt that it revises (<<d7>>).
+|Yes. `[]` is a real value ("no parent"), and it is not the same as missing.
+|(never missing)
+
+|`source`
+|object `{kind, log, line}`. `kind` is one of `fleet_import`, `local_rescan`, `local_caller`, `neural_path`. `log` is a path relative to the data root. `line` is a decimal string.
+|The reader that credited the event.
+|Yes.
+|(never missing)
+
+|`provenance`
+|object `{producer, writer}`. `producer` is the bot named by the row, or `hypatia`. `writer` is `hypatia`.
+|The `bot` field of the row.
+|Partly: not the version of the scanner or of the fix tool.
+|`tool_version`
+
+|`assertion`
+|object `{claimed_outcome, file, recipe_id, repo}`
+|The row. `claimed_outcome` is what the producer said (`success` or `failure`). The legacy fleet outcome `success` means only that the fixer exited zero.
+|Yes.
+|(never missing)
+
+|`observations`
+|object. Any of `after_hits`, `before_hits`, `exit_code`, `rescan` (one of `verified`, `still_present`, `scan_failed`, `scan_skipped`), `verdict`. Numbers are decimal strings.
+|The fleet row's postcondition fields, or the local rescan result.
+|Yes when the producer wrote them.
+|`after_hits`, `before_hits`, `exit_code`, `rescan` or `verdict`, for each one that is absent
+
+|`proof_or_test_ref`
+|object. `row_sha256`: the SHA-256 of the exact bytes of the evidence row. `scan_digest` and `test_digest` when they exist.
+|Hypatia hashes the row that it read.
+|The row digest, yes. A digest of a scan output or of a test run, no: neither is stored today.
+|`scan_digest`, `test_digest`
+
+|`qualification`
+|string, one of `verified`, `failed`, `incomplete`, `still_present`, `rollback_requested`, `unqualified`
+|The `verification` value of the row, as `OutcomeTracker.qualified_outcome_counts/1` reads it.
+|Yes.
+|(never missing)
+
+|`verdict`
+|string, one of `credited_success`, `credited_failure`, `credited_false_positive`, `audit_only`, `withdrawn`
+|What the single gate did with the event. The receipt records the gate's answer and does not compute its own (see property P2).
+|Yes.
+|(never missing)
+
+|`missing_evidence`
+|array of names from the closed set below, sorted, no duplicates
+|The gaps named in the other rows.
+|Yes.
+|(this is the field)
+
+|`chain_version`
+|string, `e0-receipt/1`
+|A constant of the emitter.
+|Yes.
+|(never missing)
+|===
+
+Two fields are added by the owner ruling of 2026-11-14 on
+`docs/design/2026-11-14-merge-honesty.adoc` (work order `E0-18`):
+
+[cols="2,3,3,3",options="header"]
+|===
+|Field |Type |Source |Can E0 fill it?
+
+|`pattern_id`
+|string
+|`E0-18` writes it on each outcome row.
+|Not until `E0-18` is merged. Until then `missing_evidence` names `pattern_id`.
+
+|`match_kind`
+|string, one of `exact`, `category`, `fuzzy`
+|`E0-18`.
+|Not until `E0-18` is merged. Until then `missing_evidence` names `match_kind`.
+|===
+
+The closed set of names in `missing_evidence`: `after_hits`, `before_hits`,
+`event_id`, `exit_code`, `head_sha`, `match_kind`, `pattern_id`, `rescan`,
+`scan_digest`, `subject_id`, `subject_identity`, `test_digest`, `tool_version`,
+`verdict`. A name outside the set is refused by the contract of `E0-09`.
+
+An integrity field `receipt_sha256` is added to each stored line: the SHA-256, in
+lowercase hex, of the canonical form of all the other fields. It is not one of the
+13. It covers every field of the receipt, so a field cannot change without the
+digest changing. januskey's attestation (`attestation.rs`) covers the id, the time,
+the type, the actor and the previous hash and not the payload; this design does
+not repeat that gap. There is no previous-hash chain: writers can append at the
+same time, and the order of events is carried by `parent_event_ids`.
+
+== 4. The identity of an event
+
+`event_id` is an ADR-008 version 8 identifier under *profile T*. Profile T is the
+time-ordered layout (48 bits of Unix milliseconds, then random bits). The field
+declares the profile in its type, as ADR-008 requires. Profile T needs no domain
+registration. ADR-008 says that its timestamp is never used for authorisation or as
+an audited event time, so the receipt carries no time field that is read from the
+id.
+
+It is minted once, by the producer, before the fix runs. It is never derived from
+the content of the row: "Do not use a hash of the JSON contents as an attempt ID:
+separate attempts can have identical content" (issue 984, step 6). Two attempts
+with the same input get two ids, and the replay of one event keeps its id.
+
+The estate tool is `uuid-v8 t` (the Rust command in `tools/uuid-v8/` of
+`metadatastician/standards`, "Records and events"), or `scripts/uuid-v8.js` with Bun.
+Whether the gitbot-fleet runner has either of them is not known from this
+repository. That is a question for `E0-12`, not a gap in ADR-008: the format and
+the profile are given. Hypatia mints the id of a local row with the same tool, by
+`System.cmd` with an argument list and no shell, unless an Elixir generator exists
+in the estate.
+
+== 5. The 3 entry points, the start record and the failure rule
+
+=== 5.1 Entry points
+
+[cols="2,3,3",options="header"]
+|===
+|Entry point |What starts there |Where a receipt is written (decision <<d2>>, recommended option B)
+
+|`OutcomeTracker.update_confidence_file/5`
+|The recomputation of a recipe's confidence and annealing state from the log.
+|Not here. It is derived from the log and can be run again. The receipt is written when the row becomes durable, in `persist_outcome/6`, which every local and imported row passes through.
+
+|`LearningScheduler.import_fleet_lines/2`
+|A fleet row enters the outcome log, through `record_fleet_outcome`.
+|In `persist_outcome/6`, with the context that only the import has: the source line, the digest of the source row and the producer.
+
+|`FleetDispatcher.ingest_fix_outcome/1`
+|A fix outcome reaches the neural coordinator (`E0-05`).
+|At the call to the coordinator, and only when the outcome is qualified.
+|===
+
+=== 5.2 The start record
+
+The fleet writes the identity of an attempt before the fix runs, in a separate
+append-only file next to the outcome file:
+`shared-context/learning/fix-attempts.jsonl`. One line, canonical form:
+`{"chain_version":"e0-receipt/1","event_id":"...","kind":"start","producer":"...","recipe_id":"...","repo":"..."}`.
+
+* Hypatia's import reads `fix-outcomes.jsonl` and never reads `fix-attempts.jsonl`
+  as outcomes. A start record is therefore not stored as an outcome, and it
+  cannot make the later outcome row look like a replay.
+* The same `event_id` appears in the start record and in the outcome row of the
+  attempt. An attempt that never ends leaves the start record and no outcome row.
+  A repair run may report such attempts as unfinished. It never credits them.
+* `E0-11` still skips a record with `"kind":"start"` if it finds one in the outcome
+  file, so that a producer that writes the wrong file does no harm.
+
+=== 5.3 The failure rule
+
+The order of writes for one qualified event is: (1) the event row, appended to the
+log; (2) the receipt, appended to the receipt log; (3) the derived updates
+(confidence, annealing, neural). The log row is the commit of the event. A receipt
+is never written before its row: it would claim evidence that does not exist.
+
+* If (1) fails, nothing else runs. The source is not acknowledged. This is the rule
+  that `E0-06` pins for the import.
+* If (2) fails, the event is committed and the derived updates do not run. The
+  caller gets an error. For the import it is `{:error, {:receipt_failed, line, reason}}`,
+  and the source signature does not advance, as for `write_failed`. The next run
+  finds a qualified row with no receipt (see below) and writes it.
+* If (3) fails, the event and its receipt exist. The recomputation is a function of
+  the log, so the next learning cycle repeats it. The scheduler already retries a
+  recipe from the durable log.
+* *Repair.* At the start of a learning cycle, for each recipe that the cycle
+  recomputes, every qualified row that has an `event_id` and no receipt gets one
+  (a lookup by `event_id`, so it cannot write twice). A receipt whose `event_id`
+  has no row in the log is not repaired: it is reported as corrupt, loudly.
+* A row with no `event_id` (every row written before `E0-11` and `E0-12`) gets no
+  receipt. Nothing is back-filled: the historical log is marked `unverified`
+  elsewhere (see the README of this work-order folder).
+
+== 6. Storage and canonical form
+
+Receipts go to `receipts/YYYY-MM.jsonl` under the verisim-data root, beside
+`outcomes/`. In tests the root is the throwaway test store of `config/test.exs`.
+
+* One receipt on each line. Canonical form: keys sorted, no insignificant
+  whitespace, one final LF, ASCII only, no JSON numbers. This is the profile of
+  `scripts/proof-ledger.sh`, in which `jq -cS` output is JCS. An encoder that
+  meets it is a sort of the keys and a refusal of any non-ASCII byte or number.
+  The test of `E0-09` compares one encoded line with a committed fixture and with
+  `jq -cS` of the same object.
+* Append-only, with one `File.write(..., [:append])` for each line, as for the
+  outcome log. No receipt is rewritten or deleted.
+* The receipt log is not read as outcomes: `outcomes/` and `receipts/` are different
+  directories, so no outcome reader sees a receipt.
+
+[[decisions]]
+== 7. The 8 decisions for the owner
+
+Each decision lists its options. The option labelled "Recommended" is the one that I think is most correct in the long term, and I chose it. Every other option names the reason that I reject it.
+
+[[d1]]
+=== D1. The unit of a receipt
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. One receipt for each learning update: the credit of one qualified event to the learners
+|Each receipt names one event and the exact row that it rests on. A recomputation that reads 400 rows makes 0 receipts, because it is derived.
+|Recommended. Most correct in the long term.
+
+|B. One receipt for each event chain (producer, import, update)
+|A chain has 3 writers, and its end is not known when the first one writes. An append-only receipt for an unfinished chain would have to be completed later, which is a rewrite.
+|Rejected: it forces a rewrite.
+
+|C. One receipt for each recomputation of a recipe
+|It would name a count, not rows. A count cannot give back its evidence.
+|Rejected: it names a count.
+|===
+
+[[d2]]
+=== D2. Where a receipt is written
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. At each of the 3 entry points
+|3 call sites, each with its own data. Import and the confidence update both reach `persist_outcome/6`, so a row could get 2 receipts.
+|Rejected: a double receipt.
+
+|B. In `persist_outcome/6` (covers the local rows and the imported rows) and at the neural call. The caller passes the context that only it has.
+|2 call sites. One row, one receipt. `E0-09` says "one place for each of the 3 learning paths", so its text changes to 2 places.
+|Recommended. Most correct in the long term.
+
+|C. Only a repair sweep after the fact
+|No receipt at write time. A failure between the row and the sweep leaves a credited event with no receipt for a whole cycle.
+|Rejected: a window with no receipt.
+|===
+
+[[d3]]
+=== D3. The identity of an event, and who mints it
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. ADR-008 v8 profile T, minted by the producer before the fix runs (`uuid-v8 t`). Hypatia mints it for a local row. The field declares the profile.
+|Two attempts with the same input have two ids. Needs the tool on the fleet runner (a question for `E0-12`).
+|Recommended. Most correct in the long term.
+
+|B. Profile C, derived from the content of the row
+|Two attempts with identical content get one id, so they would credit once. Issue 984, step 6 forbids this.
+|Rejected: identical attempts collide.
+
+|C. Keep the provisional `(file, line)` identity
+|After rotation or truncation a different row can take the same identity. A receipt or a withdrawal could then name the wrong row.
+|Rejected: the identity is not stable.
+|===
+
+[[d4]]
+=== D4. The start record
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. A separate file, `fix-attempts.jsonl`, beside the outcome file. Hypatia never imports it as outcomes.
+|An unfinished attempt keeps its identity. No reader of the outcome file can mistake a start for an outcome.
+|Recommended. Most correct in the long term.
+
+|B. A line with `"kind":"start"` in `fix-outcomes.jsonl`
+|Every reader of that file must know to skip it. One reader that does not stores it as an outcome, or makes the later row look like a replay (the same `event_id` seen twice).
+|Rejected: one missed skip is a hole.
+
+|C. No start record
+|An attempt that never ends has no durable identity. Issue 984, step 6 asks for the id "before execution".
+|Rejected: no identity for an unfinished attempt.
+|===
+
+[[d5]]
+=== D5. Storage and canonical form
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. Flat files, `receipts/YYYY-MM.jsonl`, in the profile of the proof ledger (sorted keys, ASCII, no numbers), with `receipt_sha256` over all other fields
+|Same store and same checkers as the rest of E0. One flat-file append for each line.
+|Recommended. Most correct in the long term.
+
+|B. Receipts in the outcome log
+|Every outcome reader would have to skip them.
+|Rejected: the readers would see them.
+
+|C. VeriSimDB
+|It is not deployed, and issue 984 says not to force a new database. The work order says to stop if the design needs a store other than flat files; it does not.
+|Rejected: not deployed, and not needed.
+|===
+
+[[d6]]
+=== D6. The failure rule
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. Row, then receipt, then derived updates. A repair run writes a missing receipt by `event_id` and reports a receipt with no row as corrupt. No back-fill of rows with no `event_id`.
+|The log stays the source of truth. Every case of section 5.3 is repairable or loud.
+|Recommended. Most correct in the long term.
+
+|B. Receipt first, then row
+|A crash leaves a receipt for evidence that does not exist.
+|Rejected: a receipt for missing evidence.
+
+|C. One transaction over both files
+|Flat files have no multi-file atomic write.
+|Rejected: not available.
+
+|D. Derived update first
+|An update with no receipt cannot be told from a legacy update.
+|Rejected: indistinguishable from legacy.
+|===
+
+[[d7]]
+=== D7. Revision and withdrawal
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. A revision is a new receipt with its own `event_id` and `parent_event_ids` naming the receipt it revises. A gap fill carries only the fields that were gaps and never overwrites a present field. A withdrawal has `verdict` `withdrawn`.
+|No history is lost. The "current" view is a function of the chain. The fill rule is `fill-guarded` in echo-types `EchoPartialSection.agda`, line 162; a withdrawal removes information, so it is not a fill and needs its own record. A withdrawal of a local row needs a stable local id first (the stop of `E0-07`).
+|Recommended. Most correct in the long term.
+
+|B. Edit the receipt in place
+|History is lost.
+|Rejected: it loses history.
+
+|C. Only the withdrawal store of `E0-07`, no revision receipt
+|The receipt log would still show the credit, with no sign of the withdrawal.
+|Rejected: the receipt would be silent.
+|===
+
+[[d8]]
+=== D8. `head_sha` and `subject_id` before a stable finding identity exists
+
+[cols="3,4,2",options="header"]
+|===
+|Option |Consequence |Label
+
+|A. Leave them in `missing_evidence` until the fleet writes `head_sha` and the owner registers a profile C domain for `subject_id`
+|Honest, and no guessing. The receipt is less complete in E0. Registering a domain is an edit of `docs/decisions/ADR-008-profile-c-domains.json` in `metadatastician/standards`, which this repository cannot do.
+|Recommended. Most correct in the long term.
+
+|B. Fill `head_sha` from a `git rev-parse` in the local rescan only
+|Local rows and fleet rows would differ in the kind of evidence, and the shell call adds a new failure point.
+|Rejected for E0: inconsistent evidence.
+
+|C. Fill `subject_id` from the `(repo, file, recipe_id)` triple with no registered domain
+|An unregistered domain breaches ADR-008, and the triple is not a stable finding identity.
+|Rejected: it breaches ADR-008.
+|===
+
+== 8. The properties that the Idris2 model of `E0-10` must prove
+
+The model covers the Idris2 types. It does not cover the Elixir run time, and each
+row of `verification/proof-ledger.jsonl` will say so.
+
+[cols="1,4",options="header"]
+|===
+|Id |Property
+|P1 |*No two receipts share an `event_id`.* Appending to a ledger that already holds an `event_id` is refused.
+|P2 |*A receipt cannot claim more than its evidence.* A receipt with `qualification` `verified` cannot be built unless `proof_or_test_ref` and `observations` are present, and its `verdict` is a function of `qualification` and `claimed_outcome`, as `qualified_outcome_counts/1` computes it.
+|P3 |*A revision keeps the history.* Every receipt of the ledger before a revision is a member of the ledger after it.
+|P4 |*A fill never overwrites.* A gap-filling revision changes only fields that were in `missing_evidence`.
+|P5 |*`missing_evidence` is exact.* The set is empty exactly when all 13 fields (and, after `E0-18`, the 2 added fields) are present.
+|===
+
+Not proved anywhere, and not claimed: that retraction is idempotent or independent
+of order, and any statement about confidence. A withdrawal of a failure row raises
+confidence.
+
+== 9. What this document does not decide
+
+* The Nickel contract, the emitter, the Idris2 model and the id reader of the fleet
+  are the work of `E0-09` to `E0-12`.
+* Whether the fleet runner has `uuid-v8` (question for `E0-12`).
+* How a local row gets a stable id for a withdrawal (the open question of `E0-07`);
+  decision D3 gives the answer for new rows.
+* The cost of the repair scan on a large log: it is bounded by the recipes that a
+  cycle recomputes, and no figure was measured.
