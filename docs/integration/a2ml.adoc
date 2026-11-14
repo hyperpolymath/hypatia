@@ -4,6 +4,11 @@
 :toc:
 :icons: font
 
+*Status:* HISTORICAL — A2ML is retired estate-wide (standards rulings D99, D269c,
+D312, D313; hypatia migrated 2026-11-14). Do not create or extend `.a2ml` files.
+Repository metadata is `+hypatia_chora.deed+`; the grammar is standards
+`+1-formats/deed/spec/abnf/deed.abnf+`.
+
 == Overview
 
 Hypatia can use A2ML (Attested Markup Language) for template documentation, enabling progressive strictness and structural guarantees.

@@ -1,0 +1,230 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= The A2ML files removed from hypatia on 2026-11-14
+
+The owner ruled on 2026-11-14, "Full migration now": every `.a2ml` file in
+hypatia is translated into deed form where a mapping spec says it
+translates, every reader is moved off it, and the file is deleted. The
+mapping specs are in standards `1-formats/deed/mappings/`; a field a spec
+does not list does not translate and was dropped, not re-homed. Files with
+no mapping spec were deleted (A7 section 11, ruling Q7).
+
+This record lists each removed file, what it was, and where its content
+went. The contents are not copied here. Git history keeps them. To read one,
+use its blob id, or read its path at the last commit that held it:
+
+[source,bash]
+----
+git cat-file -p <blob id>
+git show b660d08833729f129b0de9445b0e5ebadcddef77:<path>
+----
+
+Size is in bytes. The sha256 is of the file as it was tracked.
+
+== Removed
+
+[cols="4,1,3,3,4,5",options="header"]
+|===
+| Path | Size | sha256 | Git blob id | What it was | Where it went
+
+| `.machine_readable/descriptiles/STATE.a2ml`
+| 23516
+| `0b5df64948615763cdaf47b43bf484a5b0eca9a2b462f70d51b582bcd52d31da`
+| `6f676089b1930c411335473c9def454e41c5fb07`
+| STATE descriptile v1: status, maturity, CRG grade, dogfooding status, milestones M1 to M21, gaps, next actions and the session journal.
+| Option B of `state-v1-decision.adoc`: maturity to `(maturity :level alpha)`; the lifecycle claim is the existing `(status)` clause; the journal is archived here by reference, not translated.
+
+| `.machine_readable/descriptiles/META.a2ml`
+| 4378
+| `c863ac3d3a6bced855e566f4bfd6e7554554f469fc78799a35c4ce62ccfb779c`
+| `a738d103cd270b18d5692110329f41e156de5ac9`
+| META descriptile: author, licence, development practices, ADR-001 to ADR-005, maintenance axes.
+| `(meta)` per `meta-ecosystem-to-repo-deed.adoc`: last-updated, scoping-first and each ADR's id, title, status and date. Dropped: everything else, including each ADR's context, decision and consequences.
+
+| `.machine_readable/descriptiles/ECOSYSTEM.a2ml`
+| 3357
+| `891fefefddd7fde77874e96ddbd87146ecb1811a9db5367b900d40d206d6e216`
+| `38589dc8263b3e4008644e8aa4254897591082b8`
+| ECOSYSTEM descriptile: position, consumers, producers, seven related projects, integration points.
+| `(ecosystem)` per `meta-ecosystem-to-repo-deed.adoc`: project, ecosystem, position-type, purpose. Dropped: the seven related-project entries (relationships outside the closed set), consumers, producers, integration points.
+
+| `.machine_readable/descriptiles/AGENTIC.a2ml`
+| 4809
+| `d09a631ade70caecd749efa247767a3c577a3822c0322fd390cdfbd6fa13c276`
+| `d69fd8df630d0cb81070083de089967033c3c288`
+| AGENTIC descriptile: permissions, forbidden actions, integrity axioms, workflow-pin detection, automation hooks, automation limits, sprint patterns.
+| `(agentic)` per `agentic-neurosym-playbook-to-repo-deed.adoc`: version, last-updated, permissions, the five integrity axioms. Dropped: the rest (no table rows).
+
+| `.machine_readable/descriptiles/NEUROSYM.a2ml`
+| 2343
+| `667939ee967e6bb42075cb4e5ea62ea41b391e9667c244725f982353942f334c`
+| `e43db348b8f89f0d82f59171b4121c74d8d6dc69`
+| NEUROSYM descriptile: Hypatia scan config, neural config, three symbolic rules, proof integration.
+| `(neurosym)` per `agentic-neurosym-playbook-to-repo-deed.adoc`: version, last-updated, scan-enabled, scan-depth, report-format. Dropped: the rest (fails closed pending table rows).
+
+| `.machine_readable/descriptiles/PLAYBOOK.a2ml`
+| 3516
+| `d360e4b5864558acbdff0d0d15301e2345092e053242a80d71236b6d0d4aa0a2`
+| `22b0af83cbf1c2c4940cdc75ace4bd1252702810`
+| PLAYBOOK descriptile: deployment, incident response, release process, maintenance operations, CRG promotion criteria.
+| `(playbook)` per `agentic-neurosym-playbook-to-repo-deed.adoc`: version, last-updated and the five operational positions. Dropped: the section contents and the CRG criteria (no table rows).
+
+| `.machine_readable/CLADE.a2ml`
+| 1589
+| `541349de1bb3a5ea48655db47eafdbbcdfc26fe6851414161fa2a64ade195f0d`
+| `7fc477c5d0f5b56e67e352a6f8fee32aad8070ec`
+| Clade declaration (gv-clade-index registry): identity, clade, forges, lineage, status.
+| Already translated into `(identity) (clade) (forges) (lineage) (status)` per `clade-to-repo-deed.adoc`; the legacy file is deleted.
+
+| `0-AI-MANIFEST.a2ml`
+| 5973
+| `139d23ca18ef5208a2885fec039be66580187c69f395f7b68997cbcc80c981cd`
+| `bdf5b2aba9b3a37ba720b76d7ef3e9587e658ee9`
+| AI manifest (S-expression shape): identity, purpose, context tiers, canonical locations, architecture, invariants, lifecycle.
+| Replaced by the pointer-only `0-AI-MANIFEST.deed` (A7 ruling Q15). Its sections do not match the table of `ai-manifest-decision.adoc`, so nothing was translated.
+
+| `.machine_readable/anchors/ANCHOR.a2ml`
+| 527
+| `52c07ad4291ea6fd6dd1ded149a9db1fcd311a684d6226920016f0308e814cd0`
+| `dc3db7f6890ffa4eaf145a5cbe02a86be6842ffe`
+| Anchor: reverse-DNS id, version, clade, status, SSG config, parent boj-server.
+| Deleted. No mapping spec in `1-formats/deed/mappings/`. Under A7 6.4 the id, clade and status are dropped; the source has no `authority`, which the `(anchor)` clause requires and a translator never invents; SSG config belongs to `META.deed` and the parent to `ECOSYSTEM.deed` (modules not yet adopted here).
+
+| `.machine_readable/bot_directives/coverage.a2ml`
+| 2271
+| `61c6798d4d3996b7ab0a5151bb82b28edea0a042d45415e05d63ffd2324fc92f`
+| `79e6748f5cdc76fdc1569b36329784f95a2de1b3`
+| Agent methodology template: session coverage tracking (all counts zero).
+| Deleted: template boilerplate, not a per-bot directive; no mapping spec.
+
+| `.machine_readable/bot_directives/debt.a2ml`
+| 1913
+| `1c213b80d93b93d428a9f43602be2557cb2d353e00d1d4bf98fca1a19bd4b3b7`
+| `5ae47318761d324c22fe006338655aaf161233f8`
+| Agent methodology template: meander debt (examples only).
+| Deleted: template boilerplate; no mapping spec.
+
+| `.machine_readable/bot_directives/methodology.a2ml`
+| 4691
+| `e5474aaa7076fff610bd27594e5e9dc738e21f8a6bff02d48ba3c5f9d8892f1e`
+| `3559a2a6f697803b7fdf1bc1bcf92bfc39c5af8f`
+| Agent methodology template: mode, priority weights, budgets, placeholders.
+| Deleted: template boilerplate with unfilled placeholders; no mapping spec.
+
+| `.machine_readable/contractiles/bust/Bustfile.a2ml`
+| 1658
+| `7b5017746e616b0446d3d05ecf414e95ec7793540763d405c70f7b8584bc6779`
+| `706cf0e528bc55b637b198056008bd7ed8a9bc45`
+| Bust contractile: meta-repo rollback scenarios (template residue).
+| Deleted: no mapping spec. `bust.ncl` now names `Bustfile.deed` (A7 8.1), not yet written.
+
+| `.machine_readable/contractiles/dust/Dustfile.a2ml`
+| 534
+| `5448a27dc90fb94350b628f836441aca6c276c9ae515ed2f3d4c83e96b5fedaf`
+| `72087207eb81a14860ab0a0b520713b1c8722f9f`
+| Dust contractile: cleanup and hygiene settings.
+| Deleted: no mapping spec. `contractile.just` keeps its generated recipes.
+
+| `.machine_readable/contractiles/intend/Intentfile.a2ml`
+| 591
+| `4cb4fb8c1ea937ee032f568c672731998b29df3f775d08487c99a7ca404c0253`
+| `901ac68e4addcd3279bdfe7d7e6a92d5d05bbe0c`
+| Intent contractile: purpose stub and anti-purpose.
+| Deleted: no mapping spec.
+
+| `.machine_readable/contractiles/must/Mustfile.a2ml`
+| 1165
+| `09b2929de80ecdb6e9628a5f927e50356a518adb49a6b9ea48ba6cf7c08c32e5`
+| `ed1e13ab9cf3384653983bed41f3c53c46fdda2c`
+| Must contractile: five shell checks (licence, README, hardcoded paths, Dockerfile, Makefile).
+| Deleted: no mapping spec. `contractile.just` keeps its generated must recipes.
+
+| `.machine_readable/contractiles/trust/Trustfile.a2ml`
+| 853
+| `b214584ca216ea380f70ca14aa0724fd24e1c189b4f07bbc66375dc7f7753368`
+| `fca00b2bcb231cb6845ce82b0076ee7746fb3473`
+| Trust contractile: trust level and two integrity checks.
+| Deleted: no mapping spec. `contractile.just` keeps its generated trust recipes.
+
+| `.machine_readable/integrations/feedback-o-tron.a2ml`
+| 381
+| `e0befb80a2138f359524d6db4e5fdc598c4a233079990afe6303e382821e1550`
+| `5381604eda94e014b309b62ffa43e41fdbed5e63`
+| Integration note: feedback-o-tron bug reporter config.
+| Deleted: no mapping spec, no reader.
+
+| `.machine_readable/integrations/proven.a2ml`
+| 612
+| `11fabb802ac4a0285caa64c4000436c3e1b386b7a6190d735e10be0fb910dbd9`
+| `9af33ffdc7e9faced46b474f2a07df389c9e1631`
+| Integration note: proven safety-library adoption guidance.
+| Deleted: no mapping spec, no reader.
+
+| `.machine_readable/integrations/verisim.a2ml`
+| 387
+| `48f716912dbe895d0f4f59a767c22cea517fcb9bc3637b1540558cd3f647cc51`
+| `164c5229a7e2a507cb9f123ccd681159a3376005`
+| Integration note: VeriSimDB data feed config.
+| Deleted: no mapping spec, no reader.
+
+| `.machine_readable/integrations/vexometer.a2ml`
+| 444
+| `3f85155335da36a216049bc4434f976d19580b6bcd49c020117a5c133e3b9145`
+| `238b3d2cdd3a9c59f5e21dcdadba8aaf81d24214`
+| Integration note: vexometer measurement config.
+| Deleted: no mapping spec, no reader.
+
+| `.machine_readable/dogfooding.a2ml`
+| 3511
+| `b7b1fcd8a5249d88b0df050c92200ab8526a444a9b031cb523d7d6e2a750e3c6`
+| `c5449cb34c237817b3a1f5ce6cd0239160e3bfac`
+| Dogfooding applicability manifest, DOG-01 to DOG-10 (audit 2026-04-22).
+| Deleted: no mapping spec, no reader.
+
+| `.machine_readable/merge-orchestration/LEDGER.a2ml`
+| 11839
+| `db76ce756f70af4001e0f5e5d12437377241825a8d692584e88590f3ef23ec65`
+| `f179796398a1ddccc17f4b27269774dd55971082`
+| Merge-orchestration workstream ledger (a STATE-profile journal, v0.11.0).
+| Deleted: a journal; archived here by reference (`state-v1-decision.adoc` option B).
+
+| `.machine_readable/testing/blitz.a2ml`
+| 10348
+| `465f2f2b97ba951edc64825b8235d3d1b95727c3678fadc5e9e5d57037161aca`
+| `25f3e6bad754cf4291f06fb3ef8ca672b88d6d42`
+| Testing-taxonomy blitz report (audit 2026-04-22), machine counterpart of `docs/testing/audit.adoc`.
+| Deleted: no mapping spec, no reader.
+
+| `rules.a2ml`
+| 7809
+| `9084f4452e4d7d851f751b0d8a114f28cf37f08015d8db388847235fa12626a0`
+| `651211690b75de6644be141f18ccba5610857d47`
+| Prose instructions for rule management: the rule lifecycle (5 observations to propose, 10 + 3 fixes to auto-approve) and rule quality standards.
+| Deleted: no mapping spec. Comments that cited it now state the thresholds without the file name.
+
+|===
+
+== Retained, with the reason
+
+Two `.a2ml` files stay, each because a live reader outside this repository's
+control still needs exactly that input. Neither has a deed form to move to.
+
+[cols="3,5",options="header"]
+|===
+| Path | Why it stays
+
+| `audits/assail-classifications.a2ml`
+| panic-attack (>= 2.5.5, `load_user_classifications` in its
+`src/assail/mod.rs`) reads only `audits/assail-classifications.a2ml` or
+`.panic-attack-classifications.a2ml`. No mapping spec covers it and
+panic-attack has no deed reader, so deleting it would unsuppress the audited
+findings it records. It goes when panic-attack reads a deed form first.
+
+| `test/fixtures/a2ml/rsr-criteria-v2.a2ml`
+| A dogfood copy of the RSR v2.0 criteria, whose canon
+(`0-canon/rsr/rsr-criteria-v2.a2ml` in standards) is still A2ML: A7 section
+10 gives it a criteria praxis deed written by kyX's front end (D313), not a
+hand conversion. `Hypatia.Rules.RsrCriteria` must read the canon's form, and
+the oracle's tests, the CI smoke run and the `rsr_score` default read this
+copy. It goes when the canon has a deed form.
+|===
