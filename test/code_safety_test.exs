@@ -1061,6 +1061,19 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       refute exec_sync?("spawn(c, a, ({env: {shell: true}}));\n")
     end
 
+    test "an inline spread object contributes its own keys" do
+      assert exec_sync?("spawn(c, a, {...{shell: true}});\n")
+      assert exec_sync?("spawn(c, a, {cwd, ...({shell: '/bin/sh'})});\n")
+      refute exec_sync?("spawn(c, a, {...{env: {shell: true}}});\n")
+    end
+
+    test "a comma expression's value is its last operand" do
+      refute exec_sync?("spawn(c, a, ({shell: true}, {shell: false}));\n")
+      refute exec_sync?("spawn(c, a, {shell: true} && opts);\n")
+      assert exec_sync?("spawn(c, a, (({shell: true})));\n")
+      assert exec_sync?("spawn(c, a, ({shell: true} /* why */));\n")
+    end
+
     test "a computed string key names the shell option too" do
       for key <- ["['shell']", ~s(["shell"]), "[`shell`]", "[ 'shell' ]"] do
         assert exec_sync?("spawn(c, a, {#{key}: true});\n"), key

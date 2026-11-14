@@ -17,7 +17,11 @@ defmodule Hypatia.Rules.JsCallScan do
   Limits, stated rather than guessed at: a regex literal containing a quote
   or bracket can desynchronise the walk; an options object passed through a
   variable is not followed; a call written inside a template literal's
-  `${...}` is treated as text, not code, for every form of the rule.
+  `${...}` is treated as text, not code, for every form of the rule; each
+  spawn-family call site re-reads its own argument list, so the cost is
+  quadratic in how deeply such calls nest inside one another's arguments
+  (real code does not nest them deeply, and only those four callees are
+  candidates).
   """
 
   @spawn_family ~w(spawn spawnSync execFile execFileSync)
@@ -76,21 +80,41 @@ defmodule Hypatia.Rules.JsCallScan do
     end
   end
 
-  # The `{` an argument starts with, stepping over wrapping parentheses
-  # (`({shell: true})`) and the whitespace and comments around them.
+  # The `{` of an argument that is an object literal, stepping over wrapping
+  # parentheses (`({shell: true})`) and the whitespace and comments around
+  # them. The object (or the parenthesised one) must be the whole argument:
+  # in a comma expression `({shell: true}, {shell: false})` the value is the
+  # last operand, so it is not read as this object.
   defp object_start(src, from, to) do
     case first_code_byte(src, from, to) do
       {:ok, i} when i < to ->
         case :binary.at(src, i) do
-          ?{ -> {:ok, i}
-          ?( -> object_start(src, i + 1, to)
-          _ -> :none
+          ?{ ->
+            case split_top_level(src, i + 1, ?}) do
+              {:ok, _props, close} -> if trivia?(src, close + 1, to), do: {:ok, i}, else: :none
+              :error -> :none
+            end
+
+          ?( ->
+            case split_top_level(src, i + 1, ?)) do
+              {:ok, [{a, b}], close} ->
+                if trivia?(src, close + 1, to), do: object_start(src, a, b), else: :none
+
+              _ ->
+                :none
+            end
+
+          _ ->
+            :none
         end
 
       _ ->
         :none
     end
   end
+
+  # Only whitespace and comments from `from` up to `to`.
+  defp trivia?(src, from, to), do: first_code_byte(src, from, to) == :none
 
   defp object_has_shell?(src, brace) do
     case split_top_level(src, brace + 1, ?}) do
@@ -99,10 +123,21 @@ defmodule Hypatia.Rules.JsCallScan do
           # A comment may sit before the key: start at the first code byte.
           case first_code_byte(src, from, to) do
             {:ok, key} ->
-              Regex.match?(
-                ~r/\A(?:shell|'shell'|"shell"|\[\s*(['"`])shell\1\s*\])\s*:\s*(?:true\b|['"`])/,
-                binary_part(src, key, to - key)
-              )
+              text = binary_part(src, key, to - key)
+
+              if String.starts_with?(text, "...") do
+                # An inline spread `...{shell: true}` contributes its own
+                # top-level keys.
+                case object_start(src, key + 3, to) do
+                  {:ok, inner} -> object_has_shell?(src, inner)
+                  :none -> false
+                end
+              else
+                Regex.match?(
+                  ~r/\A(?:shell|'shell'|"shell"|\[\s*(['"`])shell\1\s*\])\s*:\s*(?:true\b|['"`])/,
+                  text
+                )
+              end
 
             :none ->
               false
