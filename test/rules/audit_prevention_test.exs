@@ -11,9 +11,18 @@ defmodule Hypatia.Rules.AuditPreventionTest do
       rules = AuditPrevention.rules()
       ids = Enum.map(rules, & &1.id)
 
-      assert ids == Enum.map(1..15, fn n -> "AP" <> String.pad_leading(Integer.to_string(n), 3, "0") end)
-      assert Enum.all?(rules, fn r -> String.starts_with?(r.origin, ".audittraining/security-errors/") end)
-      assert Enum.all?(rules, fn r -> r.description != "" and r.conditions != [] and r.canonical != "" end)
+      assert ids ==
+               Enum.map(1..15, fn n ->
+                 "AP" <> String.pad_leading(Integer.to_string(n), 3, "0")
+               end)
+
+      assert Enum.all?(rules, fn r ->
+               String.starts_with?(r.origin, ".audittraining/security-errors/")
+             end)
+
+      assert Enum.all?(rules, fn r ->
+               r.description != "" and r.conditions != [] and r.canonical != ""
+             end)
     end
 
     test "rule/1 and canonical_equivalent/1 resolve by id and by name" do
@@ -121,8 +130,13 @@ defmodule Hypatia.Rules.AuditPreventionTest do
     end
 
     test "accepts .yml and .yaml test workflows" do
-      assert AuditPrevention.check_missing_ci_tests([".github/workflows/test.yml", "src/main.rs"]) == []
-      assert AuditPrevention.check_missing_ci_tests([".github/workflows/unit-tests.yaml", "lib/x.ex"]) == []
+      assert AuditPrevention.check_missing_ci_tests([".github/workflows/test.yml", "src/main.rs"]) ==
+               []
+
+      assert AuditPrevention.check_missing_ci_tests([
+               ".github/workflows/unit-tests.yaml",
+               "lib/x.ex"
+             ]) == []
     end
 
     test "does not flag a repo with no source code" do
@@ -172,7 +186,9 @@ defmodule Hypatia.Rules.AuditPreventionTest do
 
   describe "crypto checks (AP009, AP010)" do
     test "flags fewer than two required reviewers on a cryptography repo" do
-      assert [%{rule: "AP009"}] = AuditPrevention.check_crypto_enhanced_review(["cryptography"], 1)
+      assert [%{rule: "AP009"}] =
+               AuditPrevention.check_crypto_enhanced_review(["cryptography"], 1)
+
       assert AuditPrevention.check_crypto_enhanced_review(["cryptography"], 2) == []
       assert AuditPrevention.check_crypto_enhanced_review(["web"], 1) == []
       assert AuditPrevention.check_crypto_enhanced_review(["cryptography"], nil) == []

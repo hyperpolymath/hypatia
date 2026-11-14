@@ -644,14 +644,14 @@ defmodule Hypatia.Rules.SecurityErrors do
     end
   end
 
-  @token_assignment_re (Enum.find_value(@secret_patterns, fn
-                          {re, "Token assignment"} -> re
-                          _ -> nil
-                        end))
+  @token_assignment_re Enum.find_value(@secret_patterns, fn
+                         {re, "Token assignment"} -> re
+                         _ -> nil
+                       end)
 
-  @specific_patterns (for {re, label} <- @secret_patterns,
-                          label not in @form_only_labels,
-                          do: re)
+  @specific_patterns for {re, label} <- @secret_patterns,
+                         label not in @form_only_labels,
+                         do: re
 
   defp token_assignments_all_specific?(content) do
     @token_assignment_re
@@ -730,9 +730,11 @@ defmodule Hypatia.Rules.SecurityErrors do
     "getexn_on_external_data" => {"CWE-754", "Improper Check for Unusual Conditions"},
     "sql_injection" => {"CWE-89", "SQL Injection"},
     "remote-property-injection" =>
-      {"CWE-915", "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
+      {"CWE-915",
+       "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
     "remote_property_injection" =>
-      {"CWE-915", "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
+      {"CWE-915",
+       "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
     "stub_crypto" => {"CWE-327", "Use of Broken or Risky Cryptographic Algorithm"},
     "js_eval" => {"CWE-94", "Improper Control of Code Generation"},
     "elixir_code_eval" => {"CWE-94", "Improper Control of Code Generation"},

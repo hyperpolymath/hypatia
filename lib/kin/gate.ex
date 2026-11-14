@@ -462,7 +462,8 @@ defmodule Hypatia.Kin.Gate do
                 :pass
 
               true ->
-                {:hold, "neural network disagrees with dispatch confidence -- human review recommended"}
+                {:hold,
+                 "neural network disagrees with dispatch confidence -- human review recommended"}
             end
 
           _ ->
