@@ -145,6 +145,49 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert check(%{"f.yml" => wf}) == []
   end
 
+  # Codex on #1105, second round.
+  test "the word cancelled in an echo is not handling it" do
+    wf =
+      String.replace(
+        @verdict,
+        "      - run: |\n",
+        "      - run: |\n          echo \"upstream may be cancelled\"\n"
+      )
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
+  test "index syntax for a need's result is read" do
+    wf =
+      @verdict
+      |> String.replace("${{ needs.deed.result }}", "${{ needs['deed'].result }}")
+      |> String.replace("${{ needs.k9.result }}", "${{ needs['k9']['result'] }}")
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
+  test "a bare test line fails the step without an exit" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "[ \"$DEED_RESULT\" = success ]\n          test \"$K9_RESULT\" = success"
+      )
+
+    assert [%{rule: "WF033"}] = check(%{"f.yml" => wf})
+  end
+
+  test "a test used as an if condition is not a failure" do
+    wf =
+      String.replace(
+        @verdict,
+        "[ \"$DEED_RESULT\" = success ] && [ \"$K9_RESULT\" = success ] || exit 1",
+        "if [ \"$DEED_RESULT\" = success ]; then echo ok; fi"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
   test "a job that only prints its needs' results cannot turn red" do
     wf = String.replace(@verdict, "|| exit 1", "|| echo \"some lane did not pass\"")
     assert check(%{"f.yml" => wf}) == []

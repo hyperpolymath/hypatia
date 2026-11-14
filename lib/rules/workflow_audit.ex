@@ -5324,6 +5324,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # `needs.x.result`, `needs['x'].result` or `needs['x']['result']`: both
+  # property and index syntax (Codex on #1105).
+  @needs_result_read ~r/\bneeds(?:\.[A-Za-z0-9_-]+|\[\s*['"][A-Za-z0-9_-]+['"]\s*\])(?:\.result\b|\[\s*['"]result['"]\s*\])/
+
+  # A bare `[ … success … ]` / `test … success` line (see can_fail?/1).
+  @bare_success_test ~r/^\s*(?:\[\[?|test)\s[^\n]*\bsuccess\b[^\n]*$/m
+
   defp always_reads_cancelled_needs?(%Hypatia.Workflow.Job{} = job, jobs) do
     cond_text = job.if || ""
     text = job_scalars(job.node)
@@ -5335,21 +5342,42 @@ defmodule Hypatia.Rules.WorkflowAudit do
       not every_need_must_succeed?(cond_text, needs) and
       not tolerated_failure?(job) and
       needs != [] and
-      Regex.match?(~r/\bneeds\.[A-Za-z0-9_-]+\.result\b/, text) and
+      Regex.match?(@needs_result_read, text) and
       can_fail?(job) and
-      not String.contains?(text, "cancelled") and
+      not handles_cancelled?(text) and
       not always_after_cancel?(job, jobs)
   end
 
-  # Only a step that can turn the job red counts: a `run:` with a non-zero
-  # `exit`, on a step that is not `continue-on-error: true`. `::error` alone
-  # is an annotation and does not fail the step (CodeRabbit on #1105).
+  # Only a step that can turn the job red counts, on a step that is not
+  # `continue-on-error: true`: a non-zero `exit`, or a bare `[ … success … ]`
+  # / `test … success` line, which fails the step by its own status under
+  # `bash -e` (Codex on #1105). A test inside `if`, `&&` or `||` is a
+  # condition, not a failure. `::error` alone is an annotation and does not
+  # fail the step (CodeRabbit on #1105).
   defp can_fail?(job) do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
-        Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run)
+        (Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run) or bare_test_fails?(step.run))
     end)
   end
+
+  defp bare_test_fails?(run) do
+    @bare_success_test
+    |> Regex.scan(run)
+    |> Enum.any?(fn [line] ->
+      not Regex.match?(~r/&&|\|\||^\s*(?:if|while|until|elif)\b/, line)
+    end)
+  end
+
+  # Cancellation is handled only by a comparison against `cancelled`
+  # (`= cancelled`, `== 'cancelled'`, `"cancelled")` in a case arm), not by
+  # the word appearing in an echo or a step name (Codex on #1105).
+  defp handles_cancelled?(text),
+    do:
+      Regex.match?(
+        ~r/(?:[!=]=?\s*["']?cancelled\b|\bcancelled["']?\s*\)|["']cancelled["']\s*[!=]=)/,
+        text
+      )
 
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
   # but it only protects x: a sibling need can still be cancelled while x
