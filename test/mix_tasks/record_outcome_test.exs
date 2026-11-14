@@ -228,6 +228,32 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
     end
   end
 
+  describe "an unknown recipe (E0-04)" do
+    test "records a row that the qualified counts ignore, even with a clean scan", %{root: root} do
+      System.put_env("FAKE_PA_MODE", "clean")
+
+      # No --category and a recipe that is not in the registry: no category
+      # can be named, so no rescan can show that the weak point is gone.
+      run_ok(base_args(["--outcome", "success"]))
+
+      assert [row] = stored_rows(root)
+      assert row["verification"] == "scan_skipped"
+
+      assert OutcomeTracker.qualified_outcome_counts([row]) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 1}
+    end
+
+    test "with --verdict verified it is also ignored", %{root: root} do
+      System.put_env("FAKE_PA_MODE", "clean")
+      run_ok(base_args(["--outcome", "success", "--verdict", "verified"]))
+
+      assert [row] = stored_rows(root)
+      assert row["verdict"] == "verified"
+      assert row["verification"] == "scan_skipped"
+      assert OutcomeTracker.qualified_outcome_counts([row]).successes == 0
+    end
+  end
+
   describe "a call with no --verdict" do
     test "behaves as before and writes no verdict key", %{root: root} do
       run_ok(base_args(["--outcome", "success", "--no-verify"]))
