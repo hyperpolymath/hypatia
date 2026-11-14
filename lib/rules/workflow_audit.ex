@@ -4641,7 +4641,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   (`${{ 0 }}` is not `0`); a reusable workflow's `inputs.*` guards are not
   resolved against caller values or defaults; environment variables that
   switch trufflehog to pre-commit mode (`PRE_COMMIT`, `HUSKY`, ...) are
-  not read.
+  not read; a scanner run through `docker run` (the official images) is not
+  recognised.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
     parsed =
@@ -4831,7 +4832,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   defp full_history_scan?(%{kind: :rail}, _events), do: true
 
-  @trufflehog_limits ~r/--(?:since-commit|base|head|max-depth|branch)\b/
+  @trufflehog_limits ~r/--(?:since-commit|base|head|max-depth|branch|skip-additional-refs)\b/
 
   defp full_history_scan?(%{kind: kind, step: step, job: job, index: i} = sc, events) do
     wf_doc = Map.get(sc, :wf_doc)
@@ -4989,7 +4990,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     wd =
       [
-        scanner && scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
+        # Only trufflehog's action has a `path` input; gitleaks' has none.
+        scanner && is_binary(scanner.uses) &&
+          String.starts_with?(
+            String.downcase(String.trim(scanner.uses)),
+            "trufflesecurity/trufflehog@"
+          ) &&
+          scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
         run_step? && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
         run_step? && default_wd(job && job.node),
         run_step? && default_wd(wf_doc)

@@ -612,7 +612,7 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
         extra
     end
 
-    for args <- ["--max-depth 50", "--branch main"] do
+    for args <- ["--max-depth 50", "--branch main", "--skip-additional-refs"] do
       assert [%{rule: "WF032"}] =
                check(%{
                  "pr.yml" => @pr_range,
@@ -724,6 +724,26 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     wf = String.replace(@scheduled_full, "actions/checkout@", "Actions/Checkout@")
     assert wf =~ "Actions/Checkout@"
     assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
+  test "gitleaks' action has no path input; it reads the workspace root" do
+    wf =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n          path: source\n" <>
+        "      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7\n        with:\n          path: source\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "a.yml" => wf})
+  end
+
+  test "--skip-additional-refs is a limit on a trufflehog command" do
+    wf =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - run: trufflehog git file://. --skip-additional-refs"
+      )
+
+    assert wf =~ "skip-additional-refs"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
   end
 
   test "a remote trufflehog scan counts only for this repository" do
