@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-21: A fuzzy match ranks by its hits
+:wo-id: E0-21
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 4
+:wo-max-turns: 100
+:wo-branch: fix/e0-21-fuzzy-rank
+:wo-depends: none
+
+== Goal
+
+Among the recipes that match a description by keyword, the recipe with the
+most keyword hits wins. Confidence decides only between equal hit counts. A
+keyword matches a whole word, not a part of one.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 4.
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/recipe_matcher.ex`, `fuzzy_match_recipe/2` (line 156): a recipe
+  matches when `keyword_hit_count > 0` (line 191). The list is sorted by
+  confidence only (line 195).
+* A hit is `String.contains?(description, kw)` (line 186), so a keyword
+  matches inside a longer word.
+* Inferred, no test: a recipe with 1 hit wins over a recipe with 5 hits and
+  a lower confidence. The keyword `var` matches `invariant`.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, with no `:verisim_data` tag and with recipes of
+  their own. Each test must fail today.
+. Rank by hit count, then by confidence, then by recipe id, so that the
+  result does not depend on the order of the files.
+. Match a keyword as a whole word.
+
+== Acceptance
+
+* A test shows that 5 hits win over 1 hit with a higher confidence.
+* A test shows that `var` does not match `invariant`.
+* A test shows the same result for 2 orders of the recipe list.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* A test of step 2 passes today. Then the inferred result is false: report
+  it, and correct the table in the design note.
+* The cost reaches the cap before the acceptance checks pass.

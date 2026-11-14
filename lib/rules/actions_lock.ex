@@ -711,6 +711,73 @@ defmodule Hypatia.Rules.ActionsLock do
         do: key
   end
 
+  # Repositories known to have moved owner. A record that still names the old
+  # location, or names the new location with the old owner's id, cannot be
+  # verified by the runner: the workflow that calls it fails at startup with
+  # no job and no log (CASE-054, CoprocessorRuntime.jl). The moves come from
+  # the shared registry (Hypatia.Rules.MovedRepositories), which WF028 also
+  # reads, so a new transfer is recorded once (Codex on #1109).
+  defp moved_repositories do
+    Map.new(Hypatia.Rules.MovedRepositories.entries(), fn m ->
+      {String.downcase(m.former),
+       %{to: String.downcase(m.current), owner_id: m.current_owner_id, repo_id: m.repo_id}}
+    end)
+  end
+
+  @doc """
+  Records that point at a repository's old home after a transfer, read from
+  the lock alone. Returns `[%{key, from, to, reason}]`, sorted by key:
+
+    * `:old_name` - the key names a known moved repository's old location,
+      with that repository's `repo_id`;
+    * `:stale_owner_id` - the key names the new location, but its `owner_id`
+      is not the new owner's.
+
+  (One `repo_id` under two names is already refused by parse/2 as
+  `:repository_id_reused`, and reported as an invalid lock.) A referral for
+  the relock (cicd-squabbler); nothing is rewritten here.
+  """
+  @spec moved_repository_keys(t() | map()) :: [map()]
+  def moved_repository_keys(%__MODULE__{dependencies: dependencies}),
+    do: moved_repository_keys(dependencies)
+
+  def moved_repository_keys(dependencies) when is_map(dependencies) do
+    moves = moved_repositories()
+    renamed = Map.new(moves, fn {from, m} -> {m.to, Map.put(m, :from, from)} end)
+
+    dependencies
+    |> Enum.flat_map(fn {key, dep} ->
+      repo = key_repository(key)
+
+      cond do
+        is_nil(repo) ->
+          []
+
+        # Only the moved repository itself: a new repository created at the
+        # old name has another repo_id (Codex on #1109).
+        (moved = moves[repo]) && dep.repo_id == moved.repo_id ->
+          [%{key: key, from: repo, to: moved.to, reason: :old_name}]
+
+        (moved = renamed[repo]) && dep.owner_id != moved.owner_id ->
+          [%{key: key, from: moved.from, to: repo, reason: :stale_owner_id}]
+
+        true ->
+          []
+      end
+    end)
+    |> Enum.sort_by(& &1.key)
+  end
+
+  # `owner/repo` of a dependency key (`owner/repo@ref`), lower-cased.
+  defp key_repository(key) do
+    with [path, _ref] <- String.split(key, "@", parts: 2),
+         [owner, repo | _] <- String.split(path, "/") do
+      String.downcase(owner <> "/" <> repo)
+    else
+      _ -> nil
+    end
+  end
+
   defp validate_workflow_dependencies(state) do
     missing =
       for {path, refs} <- state.workflows,

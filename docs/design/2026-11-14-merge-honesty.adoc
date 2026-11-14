@@ -6,7 +6,7 @@
 
 [cols="1,3"]
 |===
-|Status |PROPOSED. Not ruled. No code changes with this note.
+|Status |RULED by the owner on 2026-11-14. See <<rulings>>. No code changes with this note.
 |Date |2026-11-14
 |Asks |5 decisions from the owner, in <<decisions>>.
 |Authority |The owner asked for this note on 2026-11-14, before any work order changes.
@@ -72,8 +72,9 @@ category.
 qualified failure.
 
 |`lib/neural/radial_neural_network.ex`, `detect_novelty/2` (line 145)
-|A network that is not trained returns `:untrained`. The gate reads that as
-"not novel".
+|A network that is not trained returns `:untrained`. The coordinator then
+sets `is_novel` to `false` (`lib/neural/coordinator.ex`, line 765), and the
+dispatch guard reads that field.
 |The one gate for unknown findings is open until training.
 
 |`lib/neural/variational_autoencoder.ex` (lines 80 to 84)
@@ -92,8 +93,9 @@ things become 1, and no record says so.
 The dispatch tier of a recipe follows from its confidence and its annealing
 stage. With a merged subject, a recipe can reach `auto_execute` (0.95 or more)
 on the successes of findings that only look like the finding in front of it.
-This is the reverse of acceptance A3 of issue 984, which asks that each
-learning update rest on evidence for that update.
+Acceptance A3 of issue 984 does not forbid this: it asks that no learning
+rests on unverified evidence, and a verified outcome under a wide subject
+meets it. The risk here is a separate one, about the subject of the evidence.
 
 echo-types gives 2 proved results that bound what a later repair can do:
 
@@ -113,9 +115,13 @@ Each outcome row, and each receipt of `E0-08`, records the pattern id and the
 kind of match (`exact`, `category`, `fuzzy`). The confidence stays one value
 for each recipe.
 
-* Result: each merge becomes `Fused(τ)`. An audit can split the outcomes of a
-  recipe by pattern. Nothing in the dispatch changes.
-* Cost: small. 2 fields, in the one place that writes the row.
+* Result: a merge by the recipe matcher becomes `Fused(τ)`. An audit can
+  split the outcomes of a recipe by pattern. Nothing in the dispatch changes.
+* Limit: 2 findings that share 1 pattern id stay merged. The label cannot
+  tell them apart until the pattern identity changes (decision 3).
+* Cost: medium. The matcher returns the recipe only, and the router carries
+  no kind of match. So the 2 fields must go from the matcher through the
+  router to the place that writes the row.
 * Limit: the risk stays. A recipe can still reach `auto_execute` on merged
   evidence. The record only makes it visible.
 
@@ -138,8 +144,11 @@ Do option A in the E0 work. Then measure, from the labelled rows, how often a
 recipe gets outcomes from more than 1 pattern and how far their success rates
 differ. Rule on option B with those numbers.
 
-* Result: no evidence is lost from now on, and the larger change rests on a
-  measurement, not on a guess.
+* Result: the pattern and the kind of match are kept from now on, and the
+  larger change rests on a measurement, not on a guess.
+* Needs: the fix check by finding (the second plain defect) before the
+  measurement. With the check of today, a rate for a pattern also measures
+  how often a category occurs twice in a repository.
 * Cost: the risk of option A stays until the ruling on B.
 
 === Option D: no change
@@ -168,6 +177,25 @@ the direct choice is on purpose, for that reason.
   the ruling?
 . The novelty gate. Does `:untrained` mean "novel" (fail closed) from now on?
 
+[[rulings]]
+== Rulings
+
+The owner ruled on 2026-11-14, through the selector.
+
+[cols="1,4,2",options="header"]
+|===
+|Decision |Ruling |Work order
+
+|1 |Option C: label the merge now, and rule on the split after a measurement. |`E0-18`
+|2 |A `category` match or a `fuzzy` match reaches `review` at most. |`E0-19`
+|3 |A new key that does not depend on wording, as its own design work order. |`E0-20`
+|4 |3 small work orders now for the 3 plain defects. |`E0-21`, `E0-22`, `E0-23`
+|5 |An untrained novelty network means novel (fail closed). |`E0-24`
+|===
+
+The measurement of option C has no work order yet. It needs `E0-18` and
+`E0-22` first.
+
 == What this note does not propose
 
 * No new way to decide whether 2 findings are alike. The trope repositories
@@ -191,6 +219,6 @@ the direct choice is on purpose, for that reason.
 
 == When to update this memo
 
-When the owner rules on <<decisions>>, set the status and record each ruling
-here. When a work order shows that an "inferred" result is false, correct the
-table.
+When the measurement of option C exists, record it here and ask the owner
+for the ruling on option B. When a work order shows that an "inferred"
+result is false, correct the table.

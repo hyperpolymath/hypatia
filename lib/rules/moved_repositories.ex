@@ -16,6 +16,8 @@ defmodule Hypatia.Rules.MovedRepositories do
       former: "hyperpolymath/standards",
       current: "metadatastician/standards",
       repo_id: 1_116_521_501,
+      # The new owner's account id, as a relocked actions.lock records it.
+      current_owner_id: 297_579_217,
       moved: "2026-10-25",
       evidence: "https://github.com/hyperpolymath/hypatia/actions/runs/40424594888",
       additional_evidence: "https://github.com/hyperpolymath/hypatia/actions/runs/40424740139"

@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-23: A placeholder network adds no confidence
+:wo-id: E0-23
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 4
+:wo-max-turns: 100
+:wo-branch: fix/e0-23-placeholder-cluster
+:wo-depends: none
+
+== Goal
+
+A network that returns a fixed placeholder adds nothing to the derived
+confidence, and its result says that it is a placeholder.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 4.
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/neural/variational_autoencoder.ex` (lines 80 to 84): the latent
+  vector is all zeros, and `cluster_id` is always 0.
+* `lib/neural/coordinator.ex`, `vae_confidence/1` (line 974) gives 0.6 when
+  `cluster_id` is not nil. Line 920 gives that value the weight 0.05.
+* So each finding gets the same 0.6 at weight 0.05, from no evidence.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first.
+. Mark the result of the placeholder (for example `placeholder: true`).
+. Give a placeholder result the weight 0.0 in the derived confidence.
+. Do not write a real autoencoder in this work order.
+
+== Acceptance
+
+* A test shows that the derived confidence of 1 finding is the same with and
+  without the placeholder network.
+* A test shows the placeholder mark in the result.
+* `.claude/CLAUDE.md` says, in the row of the autoencoder, that it is a
+  placeholder.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* Another network of the 8 also returns a fixed value. List it. Do not
+  change it here.
+* The cost reaches the cap before the acceptance checks pass.
