@@ -13,11 +13,11 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ## Architecture
 
 ```
-Hypatia                       # 158 Elixir source files under lib/ (recursive tree count, 2026-11-14)
+Hypatia                       # 165 Elixir source files under lib/ (recursive tree count, 2026-11-14)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
-├── Mix tasks                 # 17 `mix hypatia.*` tasks (rsr_score, watch, triage_issues, ci_triage, …)
+├── Mix tasks                 # 18 `mix hypatia.*` tasks (rsr_score, watch, triage_issues, ci_triage, …)
 ├── Web tier                  # 9 modules — dashboard, SSE, Prometheus /metrics, GraphQL, SARIF
 ├── Neural subsystem          # 8 networks on a blackboard + coordinator GenServer
 │   ├── Graph of Trust        # PageRank trust over repos/bots/recipes
