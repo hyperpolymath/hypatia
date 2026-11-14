@@ -95,6 +95,31 @@ defmodule Hypatia.Rules.GitleaksFullHistoryTest do
     assert check(wf) == []
   end
 
+  test "a job gated to a schedule or a manual run may scan all history" do
+    for event <- ["schedule", "workflow_dispatch"] do
+      wf =
+        String.replace(
+          @wf,
+          "    runs-on: ubuntu-latest",
+          "    if: github.event_name == '#{event}'\n    runs-on: ubuntu-latest"
+        )
+
+      assert wf != @wf
+      assert check(wf) == [], event
+    end
+  end
+
+  test "a job gated to pull_request events is still flagged" do
+    wf =
+      String.replace(
+        @wf,
+        "    runs-on: ubuntu-latest",
+        "    if: github.event_name == 'pull_request'\n    runs-on: ubuntu-latest"
+      )
+
+    assert [%{rule: "WF031"}] = check(wf)
+  end
+
   test "a comment mentioning --all is not a scan" do
     wf =
       String.replace(
