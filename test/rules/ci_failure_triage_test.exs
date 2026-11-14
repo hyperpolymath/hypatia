@@ -415,6 +415,69 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
     end
 
+    test "a program printing the rollup phrase is not read as a cancellation" do
+      log =
+        "worker did not succeed (result: cancelled)\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
+    test "a quoted runner annotation mid-line does not outrank a test failure" do
+      log =
+        "  expected \"##[error]worker did not succeed (result: cancelled)\"\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n" <>
+          "5 tests, 1 failure\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("test_failure")
+      assert p.layer == :code
+    end
+
+    test "a timestamped runner annotation is still read as a cancellation" do
+      log = "2026-11-14T13:52:24.3285804Z ##[error]lint did not succeed (result: cancelled)\n"
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
+    test "a rollup with a cancelled and a failed job is not read as a cancellation" do
+      log =
+        "2026-11-14T13:52:24Z ##[error]lint did not succeed (result: cancelled)\n" <>
+          "2026-11-14T13:52:24Z ##[error]tests did not succeed (result: failure)\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+      assert p.action == :upstream
+    end
+
+    test "the security rollup's cancelled wording is a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n"
+
+      %{primary: p} = T.classify(log, %{})
+      assert p.rule == T.id("runner_cancelled")
+    end
+
+    test "the security rollup with a cancelled and a failed scan is not a cancellation" do
+      log =
+        "2026-11-14T15:38:53Z ##[error]Container scan (Trivy) did not complete " <>
+          "successfully (result=cancelled) -- no verdict was produced\n" <>
+          "2026-11-14T15:38:53Z ##[error]Rust dependency audit did not complete " <>
+          "successfully (result=failure) -- no verdict was produced\n"
+
+      %{primary: p, matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+    end
+
+    test "the public rule inventory encodes as JSON (no matcher regexes leak)" do
+      for r <- T.rules(), do: assert(is_binary(Jason.encode!(r)))
+    end
+
     test "startup_failure with no log is a referral, never a rerun" do
       %{primary: p} = T.classify("", %{conclusion: "startup_failure"})
       assert p.rule == T.id("workflow_startup_failure")
