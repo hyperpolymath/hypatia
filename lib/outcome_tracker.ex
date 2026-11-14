@@ -606,7 +606,10 @@ defmodule Hypatia.OutcomeTracker do
   Returns :improving, :declining, or :stable.
   """
   def confidence_trend(recipe_id) do
-    outcomes = load_outcomes_for_recipe(recipe_id)
+    # A fleet audit row is stored but is not evidence (it can carry the legacy
+    # outcome "success"), so it is neither a success here nor a row that can
+    # push evidence out of the window below.
+    outcomes = recipe_id |> load_outcomes_for_recipe() |> Enum.reject(&fleet_audit_row?/1)
 
     if length(outcomes) < 3 do
       :insufficient_data
