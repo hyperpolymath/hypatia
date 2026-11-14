@@ -69,11 +69,19 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 . Leave out each row that a rollback wrote (`"caused_by"` is
   `"batch_rollback"`) when the outcomes of a batch are collected.
 . A batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing.
+. Read the result of each write in `rollback/2` (the outcome rows and
+  `rollbacks.jsonl`). Set the status `rolled_back` only after each write
+  succeeds. When a write fails, return `{:error, reason}` and leave the
+  status as it was, so that a later call can do the rollback again.
 
 == Acceptance
 
 * A test shows 3 outcomes of 1 batch, written oldest first, and a manifest
   that lists them newest first.
+* A test shows 2 outcomes with the same `timestamp`, written against the
+  tie order, and a manifest that lists them by `repo`, then `file`.
+* A test shows that a failed write of `rollbacks.jsonl` returns an error
+  and does not set the status `rolled_back`.
 * A test shows that a second `rollback/2` of the same batch adds 0 rows to
   the outcome log and 0 lines to `rollbacks.jsonl`.
 * The diff touches `lib/safety/batch_rollback.ex` and `test/safety_test.exs` only.
@@ -81,6 +89,9 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
 
 == Out of scope
 
+* 2 callers that roll back the same batch at the same time. The JSONL
+  store has no lock, so "once" here means once for calls in sequence. A
+  lock or an atomic claim for each batch is a design choice for the owner.
 * The commit of each fix. No outcome row records it today, so an
   instruction cannot name it. That needs a producer first (`E0-12` gives
   the event id of an attempt).
