@@ -59,6 +59,9 @@ attr() {
   name=$1
   awk -v k=":wo-$name:" 'index($0, k) == 1 { sub(/^[^ ]+ +/, ""); print; exit }' "$file"
 }
+# The id in the header must be the id that the caller asked for. A file under
+# the wrong name would run one work order and record another.
+[ "$(attr id)" = "$id" ] || die "$file declares the id $(attr id), not $id"
 agent=$(attr agent); model=$(attr model); effort=$(attr effort)
 cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo)
 for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo"; do

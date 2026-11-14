@@ -8,12 +8,12 @@
 # always exits 0: a missing tool must not stop a session, it must only be visible.
 
 missing=""
-for tool in mix erl cargo just; do
+for tool in mix erl zig cargo just; do
   command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
 done
 if [ -n "$missing" ]; then
   echo "hypatia toolchain: these tools are missing:$missing."
-  echo "mix, erl and just: on Ubuntu 24.04 x86_64, run scripts/dev/install-toolchain.sh when that file exists. On other systems, use mise (mise.toml pins erlang and elixir) and your package manager for just."
+  echo "mix, erl, zig and just: on Ubuntu 24.04 x86_64, run scripts/dev/install-toolchain.sh when that file exists. On other systems, use mise (mise.toml pins erlang, elixir and zig) and your package manager for just."
   echo "cargo: mise.toml lists rust. Install it with mise or with rustup."
   echo "Without mix, no test ran. Report that the tests did not run. Do not report a result."
 fi

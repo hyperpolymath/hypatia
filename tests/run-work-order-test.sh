@@ -36,6 +36,8 @@ order() { # order ID REPO [MODEL]
 order E0-98 hyperpolymath/hypatia
 order E0-99 hyperpolymath/gitbot-fleet
 order E0-97 hyperpolymath/hypatia opus # the agent definition says sonnet
+order E0-95 hyperpolymath/hypatia
+sed -i "s/^:wo-id: E0-95$/:wo-id: E0-94/" "$repo/wo/E0-95-fixture.adoc" # the header names another id
 url=https://example.invalid/hyperpolymath/hypatia
 git -C "$repo" init -q
 git -C "$repo" remote add origin "$url"
@@ -87,10 +89,10 @@ line=$(tail -n 1 "$HYPATIA_LEDGER")
   ok "a run with no result still gets a canonical ledger line" || fail "empty output: code $code, line $line"
 
 before=$(calls)
-for bad in E0-96 E0-99 E0-97 '../E0-98' 'E0-98;id'; do
+for bad in E0-96 E0-99 E0-97 E0-95 '../E0-98' 'E0-98;id'; do
   if run "$bad" >/dev/null 2>&1; then fail "accepted $bad"; fi
 done
-[[ "$(calls)" == "$before" ]] && ok "an unknown id, another repo, a model that the agent does not have and an unsafe id are refused" || fail "a refused id reached claude"
+[[ "$(calls)" == "$before" ]] && ok "an unknown id, another repo, a model that the agent does not have, a header with another id and an unsafe id are refused" || fail "a refused id reached claude"
 
 if run E0-98 --dryrun >/dev/null 2>&1; then fail "accepted a mistyped option"; fi
 if run E0-98 --dry-run extra >/dev/null 2>&1; then fail "accepted an extra argument"; fi
