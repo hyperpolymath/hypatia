@@ -655,6 +655,53 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     assert check(%{"pr.yml" => @pr_range, "a.yml" => wf}) == []
   end
 
+  test "a scanner after NAME=value assignments is still a scanner" do
+    pr =
+      String.replace(
+        @pr_range,
+        "      - run: gitleaks git",
+        "      - run: GITLEAKS_CONFIG=c.toml gitleaks git"
+      )
+
+    assert pr =~ "GITLEAKS_CONFIG=c.toml gitleaks"
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr})
+
+    full = full_with("      - run: " <> @full_run, ~s(      - run: A=1 B="x y" ) <> @full_run)
+    assert full =~ "A=1"
+    assert check(%{"pr.yml" => pr, "full.yml" => full}) == []
+  end
+
+  test "a non-empty PR-context guard keeps an action off non-PR events" do
+    wf =
+      "on:\n  pull_request:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        "      - if: github.head_ref != ''\n        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7\n"
+
+    assert [%{rule: "WF032"}] = check(%{"a.yml" => wf})
+
+    other = String.replace(wf, "github.head_ref != ''", "github.head_ref != 'main'")
+    assert other =~ "!= 'main'"
+    assert check(%{"pr.yml" => @pr_range, "a.yml" => other}) == []
+  end
+
+  test "defaults.run does not move an action's target" do
+    wf =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n" <>
+        "    defaults:\n      run:\n        working-directory: source\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n          path: source\n" <>
+        "      - uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "a.yml" => wf})
+  end
+
+  test "action slugs match whatever their case" do
+    pr =
+      "on:\n  pull_request:\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: Gitleaks/Gitleaks-Action@ff98106e4c7b2bc287b24eaf42907196329070c7\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => pr})
+  end
+
   test "a remote trufflehog scan counts only for this repository" do
     remote = fn url ->
       "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git #{url}\n"

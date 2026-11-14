@@ -4591,9 +4591,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
   @non_pr_events ["push", "schedule", "workflow_dispatch"]
   # A scanner invocation, not a mention: a `run` that calls the binary.
   # At a command boundary (line start, `;`, `&`, `|`, `(`, backtick), not as
-  # an argument of another command (`echo gitleaks git`).
-  @scanner_run ~r/(?:^|[;&|(`])\s*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
-  @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/
+  # an argument of another command (`echo gitleaks git`). Leading `NAME=value`
+  # assignments (`GITLEAKS_CONFIG=x gitleaks git`) are skipped.
+  @scanner_run ~r/(?:^|[;&|(`])\s*(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*(?:\S*\/)?(gitleaks|trufflehog)\s+(?:detect|git|protect|dir|github|filesystem)\b/m
+  @scanner_action ~r/^(?:gitleaks\/gitleaks-action|trufflesecurity\/trufflehog)@/i
 
   @doc """
   WF032: the repository runs a secret scan on pull requests, but no scan
@@ -4808,8 +4809,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
                 # A conjunct that only holds on a PR: a refs/pull/ ref, or a
                 # pull_request or head_ref context that must be set.
-                not String.contains?(conj, "!") and
+                # `!=` against an empty value is such a conjunct too; a
+                # logical `!`, or `!=` against anything else, is not.
+                not Regex.match?(~r/!(?!=)/, conj) and
                   not Regex.match?(~r/==\s*(?:''|""|null|false)\s*$/, conj) and
+                  not Regex.match?(~r/!=(?!\s*(?:''|""|null|false)\s*$)/, conj) and
                     Regex.match?(
                       ~r/refs\/pull\/|github\.event\.pull_request\b|github\.head_ref\b/,
                       conj
@@ -4852,7 +4856,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         run
         |> String.replace(~r/\\\r?\n[ \t]*/, " ")
         |> String.split(~r/\n|&&|;|\|\|?|&/)
-        |> Enum.map(&String.replace(&1, ~r/^[\s(`]+/, ""))
+        |> Enum.map(&String.replace(&1, ~r/^[\s(`]*(?:\w+=(?:"[^"]*"|'[^']*'|\S*)\s+)*/, ""))
         |> Enum.any?(&full_history_command?(&1, job, i, events, wf_doc))
     end
   end
@@ -4971,12 +4975,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp scanner_target(scanner, job, wf_doc, cmd) do
     run = cmd || if(scanner, do: run_code(scanner), else: "")
 
+    # `working-directory` and `defaults.run` apply to `run` steps only; an
+    # action reads its own `path` input or the workspace root.
+    run_step? = scanner != nil and is_binary(scanner.run)
+
     wd =
       [
         scanner && scanner.with && Hypatia.Kyaml.get(scanner.with, "path"),
-        scanner && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
-        default_wd(job && job.node),
-        default_wd(wf_doc)
+        run_step? && scanner.node && Hypatia.Kyaml.get(scanner.node, "working-directory"),
+        run_step? && default_wd(job && job.node),
+        run_step? && default_wd(wf_doc)
       ]
       |> Enum.find(& &1)
       |> case do
