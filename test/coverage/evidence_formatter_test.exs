@@ -122,6 +122,15 @@ defmodule Hypatia.Coverage.EvidenceFormatterTest do
       assert counted?(r) == :counted
     end
 
+    # Hypatia code_safety/elixir_atom_from_user on main after #1107.
+    test "an unknown string key in the tag does not create an atom" do
+      key = "zz_evidence_key_#{System.unique_integer([:positive])}"
+      tag = %{evidence: %{"kind" => "E", key => 1}}
+      r = EvidenceFormatter.record(test_struct(:"test atom", nil, tag), @cfg)
+      assert r["kind"] == "E"
+      assert_raise ArgumentError, fn -> String.to_existing_atom(key) end
+    end
+
     test "a nested property map and string keys work the same" do
       tag = %{
         "kind" => "R",

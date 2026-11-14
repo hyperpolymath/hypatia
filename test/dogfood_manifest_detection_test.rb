@@ -11,7 +11,8 @@ detect = workflow.fetch('jobs').fetch('a2ml-validate').fetch('steps').find { |st
   [['manifest.deed'], 1],
   [['manifest.a2ml'], 1],
   [["line\nbreak.deed", 'legacy.a2ml'], 2],
-  [['.git/ignored.deed', 'audits/assail-classifications.a2ml'], 0]
+  [['.git/ignored.deed'], 0],
+  [['audits/assail-classifications_praxis.deed'], 1]
 ].each do |files, expected|
   Dir.mktmpdir('dogfood-detect-') do |dir|
     files.each do |file|
@@ -25,4 +26,4 @@ detect = workflow.fetch('jobs').fetch('a2ml-validate').fetch('steps').find { |st
     abort "wrong candidate count for #{files.inspect}" unless File.read(output) == "count=#{expected}\n"
   end
 end
-puts 'PASS: empty, DEED-only, A2ML-only, mixed, newline filenames, and excluded manifests'
+puts 'PASS: empty, DEED-only, A2ML-only, mixed, newline filenames, .git excluded, classification deed counted'

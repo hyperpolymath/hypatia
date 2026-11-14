@@ -1,0 +1,53 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; Exercises every term of the (nostos ...) vocabulary:
+; 1-formats/deed/vocabulary/nostos.adoc
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "nostos-clause"
+  (nostos
+    (artefact
+      :name "just"
+      :kind tool
+      :version "1.56.0"
+      :version-scheme semver
+      :vendor "casey"
+      :license "CC0-1.0"
+      (fetch :manager mise :package "just" :backend "aqua:casey/just" :primary #t)
+      (fetch :manager asdf :package "just"
+        :plugin "https://github.com/olofvndrhr/asdf-just")
+      (feed :kind release :url "https://github.com/casey/just/releases.atom")
+      (feed :kind security :url "https://osv.dev/list?ecosystem=crates.io&q=just"
+        :ecosystem "crates.io" :package "just")
+      (contact :channel bugs :method issue-tracker
+        :url "https://github.com/casey/just/issues"
+        :found-at "https://github.com/casey/just"))
+    (artefact
+      :name "graalvm-community"
+      :kind runtime
+      :version "25.0.2"
+      :version-scheme semver
+      :vendor "graalvm"
+      :homepage "https://www.graalvm.org"
+      :license "GPL-2.0-with-classpath-exception"
+      (fetch :manager mise :package "java" :ref "graalvm-community-25.0.2"
+        :backend "core:java" :primary #t)
+      (fetch :manager vendor :url "https://www.graalvm.org/downloads/" :channel stable)
+      (digest :algo sha256
+        :value "28115cd283aa5cf52671b8070e29e7940c29ae5612ce7aae0f51b7a1046f1a63"
+        :covers "installed:bin/java" :checked "2026-07-15")
+      (part :class binary :url "https://www.graalvm.org/downloads/"
+        :platform "x86_64-linux")
+      (part :class docs :url "https://www.graalvm.org/jdk25/docs/" :on-demand #t)
+      (docs :help-info-url "https://www.graalvm.org/release-notes/JDK_25/"
+        :version "25.0.2" :format html :follows-artefact #f)
+      (kin :vendor "graalvm"
+        :discovery-url "https://github.com/orgs/graalvm/repositories"
+        :known ("native-image" "graaljs" "espresso" "truffle"))
+      (feed :kind release :url "https://github.com/oracle/graal/releases.atom")
+      (feed :kind eol :url "https://endoflife.date/api/graalvm.json")
+      (contact :channel security :method email :address "secalert_us@oracle.com"
+        :found-at "https://github.com/oracle/graal/security/policy"
+        :checked "2026-10-08")
+      (contact :channel bugs :method issue-tracker
+        :url "https://github.com/oracle/graal/issues"
+        :found-at "https://github.com/oracle/graal"))))

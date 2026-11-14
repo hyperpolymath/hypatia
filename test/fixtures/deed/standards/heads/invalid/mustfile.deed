@@ -1,0 +1,3 @@
+;; SPDX-License-Identifier: MPL-2.0
+; A7 J14 fixture: lower case: matches no dispatch pattern
+(contractile-deed :schema-version "1.0.0")

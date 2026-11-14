@@ -113,9 +113,17 @@ function name is the stable locator. Measure again before you edit.
 |E0-15 |Truth update of the documents |S |sonnet |$3 |none
 |E0-16 |E0 acceptance run and receipt |M |opus |$10 |all
 |E0-17 |The test suite does not write into the fleet checkout |S |sonnet |$3 |none
+|E0-18 |Each outcome names its pattern and its kind of match |M |sonnet |$10 |none
+|E0-19 |A merged match reaches review at most |S |sonnet |$5 |E0-18
+|E0-20 |The pattern identity: design and ruling packet |Design |opus |$10 |none
+|E0-21 |A fuzzy match ranks by its hits |S |sonnet |$4 |none
+|E0-22 |A fix is checked against its own finding |M |sonnet |$8 |none
+|E0-23 |A placeholder network adds no confidence |S |sonnet |$4 |none
+|E0-24 |An untrained novelty network means novel |S |sonnet |$5 |none
 |===
 
-The caps add up to $151. The estimate for the whole close-out, with rework, is
+The caps of `E0-01` to `E0-17` add up to $151. The estimate for that
+close-out, with rework, is
 $115 to $315. That figure is an estimate. The first 4 runs (`E0-17`, `E0-06`,
 `E0-01`, `E0-13`) are the test run that replaces it with measured numbers.
 
@@ -123,6 +131,11 @@ $115 to $315. That figure is an estimate. The first 4 runs (`E0-17`, `E0-06`,
 and the headless profile of this kit are in hypatia only, because the owner
 chose hypatia first on 2026-11-14. Put them in `gitbot-fleet` before those 2
 runs, or run those 2 work orders in a session with a person.
+
+`E0-18` to `E0-24` come from the owner rulings of 2026-11-14 on
+`docs/design/2026-11-14-merge-honesty.adoc`. They are not part of the 7
+acceptance statements of issue 984. Their caps add up to $46, so all 24
+caps add up to $197.
 
 === Order
 
@@ -133,6 +146,9 @@ runs, or run those 2 work orders in a session with a person.
 . Second lane, each starts with a design note for the owner: `E0-04`, `E0-07`, `E0-08`.
 . After the rulings: `E0-05` (after `E0-04`), `E0-02`, `E0-09`, `E0-10`, `E0-11`, `E0-12`.
 . Last: `E0-16`.
+. Beside the lanes, in any order: `E0-21`, `E0-22`, `E0-23`, `E0-24`,
+  `E0-18`, then `E0-19`. `E0-20` gives the owner a design note. No one
+  measures a success rate for each pattern before `E0-18` and `E0-22` merge.
 
 == Rules for every run
 
@@ -153,6 +169,12 @@ runs, or run those 2 work orders in a session with a person.
 * A model above the tier in the work order needs a reason in the pull request body.
 * The model and the effort of a work order equal those of its agent
   definition in `.claude/agents/`. The launch script stops when they differ.
+* Start each run from a checkout of `main`. The launch script stops when the
+  work order, `.claude/` or `scripts/api-agents/` differs from `origin/main`.
+  It also stops when the checkout holds a secret file that `.gitignore`
+  names (`.env`, `.env.*`, `.envrc`, `*.pem`, `*.key`, `secrets/`).
+* `E0-10` needs Idris 2. A person installs it before that run:
+  `scripts/dev/install-toolchain.sh --with-idris2` (about 10 minutes).
 
 == Not in this folder
 

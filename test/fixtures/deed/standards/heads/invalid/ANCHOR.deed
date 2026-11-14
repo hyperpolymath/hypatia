@@ -1,0 +1,3 @@
+;; SPDX-License-Identifier: MPL-2.0
+; A7 S1, J24 fixture: deed.abnf v2.0.0 removed ANCHOR.deed; it matches no dispatch pattern
+(repo-deed :schema-version "1.0.0")

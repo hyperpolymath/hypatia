@@ -48,7 +48,9 @@ Commit `4d7f059`, read on 2026-11-14.
   no longer `PROPOSED`. Stop if the owner has not ruled.
 . Measure the facts again.
 . Write `schema/receipt.ncl` from the field table of the design.
-. Write the tests first: one receipt for one verified update, a filled
+. Write the tests first: one receipt for one verified update, one receipt
+  for one qualified negative update (a failure that
+  `OutcomeTracker.qualified_outcome?/1` accepts), a filled
   `missing_evidence` for an update with a gap, and a refusal by the contract
   for a receipt with `qualification` "verified" and no evidence reference.
 . Write `lib/hypatia/receipt.ex`: build, encode in canonical form, append.
@@ -63,6 +65,9 @@ Commit `4d7f059`, read on 2026-11-14.
 
 * `mix test` has 0 failures. The new tests are in `test/receipt_test.exs`.
 * A verified update on each of the 3 learning paths writes 1 receipt (3 tests).
+* A qualified negative update on each of the 3 learning paths writes 1
+  receipt too (3 tests). A negative update changes confidence, so it needs
+  the same audit record.
 * A replay of the same event writes no second receipt (test).
 * The 2 failure tests of step 6 pass.
 * The fixture line is in canonical form: `jq -cS . fixture` prints the same

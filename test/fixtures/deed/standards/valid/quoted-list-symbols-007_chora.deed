@@ -1,0 +1,2 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed :schema-version "not-string-issue" :other 007 :sym github-actions :q '(a b))

@@ -111,6 +111,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
         do: [],
         else: check_actions_lock_tag_keys(opts[:actions_lock], workflow_contents)
 
+    lock_moved_repos =
+      if opts[:partial],
+        do: [],
+        else: check_actions_lock_moved_repositories(opts[:actions_lock], workflow_contents)
+
     %{
       # `flawed_regexes` was computed at the top of this function and
       # counted into `flawed_regex_count:` below, but was never added to
@@ -155,7 +160,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           mirror_visibility ++
           gitleaks_full_history ++
           full_history_remains ++
-          lock_tag_keys,
+          lock_tag_keys ++
+          lock_moved_repos,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -572,6 +578,50 @@ defmodule Hypatia.Rules.WorkflowAudit do
         ]
     end
   end
+
+  @doc """
+  Repository-wide: `actions.lock` records that still point at a moved
+  repository's old home (`ActionsLock.moved_repository_keys/1`). The runner
+  cannot verify such a record, so the calling workflow dies at startup with
+  no job and no log. One advisory info finding per audit, referred to the
+  relock (cicd-squabbler); never rewritten here.
+  """
+  def check_actions_lock_moved_repositories(lock_content, workflow_contents \\ nil)
+
+  def check_actions_lock_moved_repositories(lock_content, workflow_contents)
+      when is_binary(lock_content) do
+    opts =
+      if is_map(workflow_contents),
+        do: [reusable_callers: Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)],
+        else: []
+
+    with {:ok, lock} <- Hypatia.Rules.ActionsLock.parse(lock_content, opts),
+         [_ | _] = moved <- Hypatia.Rules.ActionsLock.moved_repository_keys(lock) do
+      [
+        %{
+          type: :actions_lock_moved_repository,
+          rule_id: "hypatia/workflow_audit/actions_lock_moved_repository",
+          file: "actions.lock",
+          severity: :info,
+          advisory: true,
+          action: :report,
+          keys: Enum.map(moved, & &1.key),
+          moved: moved,
+          detail:
+            "#{length(moved)} actions.lock record(s) point at a moved repository's old " <>
+              "home (e.g. #{describe_moved(hd(moved))}). The runner cannot verify them, so " <>
+              "the calling workflow fails at startup with no job and no log. Referral: " <>
+              "relock against the new owner (cicd-squabbler)."
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  def check_actions_lock_moved_repositories(_, _workflow_contents), do: []
+
+  defp describe_moved(%{key: key, to: to}), do: "#{key} -> #{to}"
 
   defp parse_actions_lock(nil, _workflow_contents, _complete?), do: {:usable, nil}
 
@@ -5356,23 +5406,63 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # Only a step that can turn the job red counts, on a step that is not
   # `continue-on-error: true`: a non-zero `exit`, or a bare `[ … success … ]`
   # / `test … success` line, which fails the step by its own status under
-  # `bash -e` (Codex on #1105). A test inside `if`, `&&` or `||` is a
-  # condition, not a failure. `::error` alone is an annotation and does not
-  # fail the step (CodeRabbit on #1105).
+  # `bash -e` (Codex on #1105). A test inside `if` or `||` is a condition,
+  # not a failure; so is one in an `&&` list, unless that list ends the
+  # script, whose status is then the step's (Codex on #1105). `::error` alone
+  # is an annotation and does not fail the step (CodeRabbit on #1105). An
+  # `exit` in quotes or a shell comment is text, not a command (Codex on
+  # #1105); `exit "$code"` still counts.
   defp can_fail?(job) do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
         not excludes_cancellation?(step.if || "", :step) and
-        (Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run) or bare_test_fails?(step.run))
+        (exits_nonzero?(step.run) or bare_test_fails?(step.run))
+    end)
+  end
+
+  # An `exit` command is found where quotes and comments are blanked; its
+  # argument is read at the same offset with only comments blanked, so
+  # `exit "0"` is a success and `exit "$code"` may not be (Codex on #1110).
+  defp exits_nonzero?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
+    # Blanks only: a masked comment must not join `exit` to the next line
+    # (Codex on #1110).
+    ~r/\bexit[ \t]+/
+    |> Regex.scan(bare, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      arg = binary_part(code, off + len, byte_size(code) - off - len)
+      Regex.match?(~r/\A(?:[1-9]|"?\$|"[1-9])/, arg)
     end)
   end
 
   defp bare_test_fails?(run) do
+    code = Hypatia.Workflow.shell_mask(run)
+    bare = Hypatia.Workflow.shell_mask(run, quotes: true)
+
     @bare_success_test
-    |> Regex.scan(run)
-    |> Enum.any?(fn [line] ->
-      not Regex.match?(~r/&&|\|\||^\s*(?:if|while|until|elif)\b/, line)
+    |> Regex.scan(code, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      line = binary_part(bare, off, len)
+      rest = binary_part(code, off + len, byte_size(code) - off - len)
+
+      cond do
+        Regex.match?(~r/\|\||^\s*(?:if|while|until|elif)\b/, line) -> false
+        # A later `;` or `&` command on the same line sets the status.
+        String.contains?(line, "&&") -> String.trim(rest) == "" and not later_command?(line)
+        true -> true
+      end
     end)
+  end
+
+  defp later_command?(line) do
+    line
+    |> String.replace("&&", "  ")
+    # `&>`, `>&2` and `<&` are redirections, not a new command (Codex on #1110).
+    |> String.split(~r/;|(?<![<>&])&(?![>&])/)
+    |> Enum.drop(1)
+    |> Enum.any?(&(String.trim(&1) != ""))
   end
 
   # Cancellation is handled only by a comparison against `cancelled`
@@ -5411,7 +5501,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
   # but it only protects x (CodeRabbit on #1105). It is a guard when every
   # need the job judges has its own success conjunct, in property or index
-  # form; a wildcard read judges every direct need (Codex on #1105). Same
+  # form, on either side of `==` (Codex on #1105); a wildcard read judges every direct need (Codex on #1105). Same
   # structural reading as excludes_cancellation?/1: `||` or grouping make it
   # uncertain.
   defp judged_needs_must_succeed?(cond_text, reads, needs) do
@@ -5426,7 +5516,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           m <-
             [
               Regex.run(
-                ~r/\Aneeds(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")\z/,
+                ~r/\A(?:needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")|(?:'success'|"success")==needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\]))\z/,
                 c,
                 capture: :all_but_first
               )

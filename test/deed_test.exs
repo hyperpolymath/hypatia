@@ -34,13 +34,13 @@ defmodule Hypatia.DeedTest do
       ;; SPDX-License-Identifier: CC-BY-SA-4.0
       ; a comment
       (repo-deed :schema-version "1.0.0" :canonical-name "x"
-        :repo-uuid #u5"github.com/o/x" :beholding-chora #u8"estate:chora"
+        :legacy-id #u5"github.com/o/x" :beholding-chora #u8"estate:chora"
         (status :present #t :ended #f :count -7 :tags ('a "b" (c)) :phase active
           :note "say \\"hi\\"\\n"))
       """
 
       assert {:ok, {"repo-deed", items}} = Deed.parse(text)
-      assert {:field, "repo-uuid", {:uuid5, "github.com/o/x"}} in items
+      assert {:field, "legacy-id", {:uuid5, "github.com/o/x"}} in items
       assert {:field, "beholding-chora", {:uuid8, "estate:chora"}} in items
       assert {:clause, "status", status} = List.last(items)
 

@@ -1,0 +1,7 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+; The bot's name must be a field. A bare symbol after (bot is not a clause member.
+(repo-deed
+  :schema-version "1.0.0"
+  (bot-directives
+    (bot panicbot
+      :deny (assault))))
