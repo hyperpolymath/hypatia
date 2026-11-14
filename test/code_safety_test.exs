@@ -891,7 +891,8 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     test "RegExp.exec and a function named exec are not findings" do
       refute exec_sync?("const m = /^v(\\d+)/.exec(tag);\nconst n = re.exec(line);\n")
       refute exec_sync?("const t = re.exec(`${prefix}-${name}`);\n")
-      refute exec_sync?("function exec(cmd) { return cmd; }\n")
+      refute exec_sync?("function exec(cmd) { return cmd; }\nexec('safe');\n")
+      refute exec_sync?("const exec = (c) => c;\nexec(cmd);\n")
     end
 
     test "a shell key outside a process call is not a finding" do
@@ -902,6 +903,9 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     test "execSync and exec run a shell" do
       assert exec_sync?("const out = execSync(`git log ${ref}`);\n")
       assert exec_sync?("import {exec} from 'node:child_process';\nexec(cmd, cb);\n")
+      assert exec_sync?("import {spawn, exec as run} from 'child_process';\nrun(cmd);\n")
+      assert exec_sync?("const { exec: sh } = require('node:child_process');\nsh(cmd);\n")
+      refute exec_sync?("import {spawnSync} from 'node:child_process';\nexec(cmd);\n")
       assert exec_sync?("require('child_process').exec(`ls ${dir}`, cb);\n")
     end
 

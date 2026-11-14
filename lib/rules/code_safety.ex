@@ -609,7 +609,9 @@ defmodule Hypatia.Rules.CodeSafety do
       id: :js_exec_sync,
       severity: :high,
       # Only calls a shell parses:
-      #   * execSync( and a bare exec( (always /bin/sh -c);
+      #   * execSync(, and exec( under a name the file imports from
+      #     node:child_process ({exec}, {exec as run}, {exec: run}) --
+      #     a local function named exec is not a shell;
       #   * <ns>.exec( / <ns>.execSync( where <ns> is the name the file binds
       #     node:child_process to (import * as ns / import ns / require), and
       #     require('child_process').exec( -- any argument shape;
@@ -622,7 +624,7 @@ defmodule Hypatia.Rules.CodeSafety do
       # Not covered: a shell option passed through a variable, and tainted
       # argv to a shell-free call -- a pattern cannot trace values (mathesis#90).
       pattern:
-        ~r/\bexecSync\s*\(|(?<![\w$.])(?<!function )exec\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
+        ~r/\bexecSync\s*\(|require\(\s*['"](?:node:)?child_process['"]\s*\)\s*\.exec(?:Sync)?\s*\(|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\((?:[^;()]|\([^()]*\))*?['"]?\bshell['"]?\s*:\s*(?:true\b|['"`])/,
       bound_calls: :child_process,
       cwe: "CWE-78",
       description: "Shell execution -- validate input before passing to shell"
@@ -1639,35 +1641,62 @@ defmodule Hypatia.Rules.CodeSafety do
   """
   def stub_crypto_patterns, do: @stub_crypto_patterns
 
-  # The names a file binds node:child_process to: `import * as cp from`,
-  # `import cp from`, `const cp = require(...)`. A regex cannot carry a
-  # binding to every later call (a match consumes it), so the rule's
-  # pattern is widened per file with `<name>.exec(` / `<name>.execSync(`.
-  @child_process_binding ~r/(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*['"](?:node:)?child_process['"]|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"](?:node:)?child_process['"]\s*\))/
+  # A file's bindings of node:child_process. A regex cannot carry a binding
+  # to every later call (a match consumes it), so the rule's pattern is
+  # widened per file:
+  #   * namespaces (`import * as cp from`, `import cp from`,
+  #     `const cp = require(...)`) add `cp.exec(` and `cp.execSync(`;
+  #   * destructured exec (`import {exec, exec as run} from`,
+  #     `const {exec: run} = require(...)`) adds `exec(` / `run(`.
+  # Regex sources, compiled at call time: a compiled regex in a module
+  # attribute does not survive OTP 28.
+  @cp_source ~S|['"](?:node:)?child_process['"]|
+  @cp_namespace ~S|(?:import\s+(?:\*\s+as\s+)?([A-Za-z_$][\w$]*)\s+from\s*| <>
+                  @cp_source <>
+                  ~S/|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*/ <>
+                  @cp_source <> ~S|\s*\))|
+  @cp_destructured ~S|(?:import\s*\{([^}]*)\}\s*from\s*| <>
+                     @cp_source <>
+                     ~S/|(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*/ <>
+                     @cp_source <> ~S|\s*\))|
 
   @doc false
   def pattern_for(%{bound_calls: :child_process} = rule, content) do
-    names =
-      @child_process_binding
-      |> Regex.scan(content, capture: :all_but_first)
-      |> List.flatten()
-      |> Enum.reject(&(&1 == ""))
+    namespaces = captures(Regex.compile!(@cp_namespace), content)
+
+    execs =
+      @cp_destructured
+      |> Regex.compile!()
+      |> captures(content)
+      |> Enum.flat_map(&String.split(&1, ","))
+      |> Enum.flat_map(fn entry ->
+        case Regex.run(~r/^\s*exec\s*(?:(?:as|:)\s*([A-Za-z_$][\w$]*))?\s*$/, entry) do
+          [_, local] -> [local]
+          [_] -> ["exec"]
+          nil -> []
+        end
+      end)
       |> Enum.uniq()
 
-    case names do
-      [] ->
-        rule.pattern
+    extra =
+      Enum.map(namespaces, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\.exec(?:Sync)?\\s*\\(")) ++
+        Enum.map(execs, &("(?<![\\w$.])" <> Regex.escape(&1) <> "\\s*\\("))
 
-      names ->
-        alt = Enum.map_join(names, "|", &Regex.escape/1)
-
-        Regex.compile!(
-          Regex.source(rule.pattern) <> "|(?<![\\w$.])(?:" <> alt <> ")\\.exec(?:Sync)?\\s*\\("
-        )
+    case extra do
+      [] -> rule.pattern
+      extra -> Regex.compile!(Enum.join([Regex.source(rule.pattern) | extra], "|"))
     end
   end
 
   def pattern_for(rule, _content), do: rule.pattern
+
+  defp captures(regex, content) do
+    regex
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
 
   @doc "Scan JavaScript/TypeScript content for web security issues"
   def scan_web_security(content) do
