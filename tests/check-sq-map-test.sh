@@ -4,7 +4,10 @@
 # hyperpolymath/proven-cicd-and-workflows (its test and map are copied, so the
 # controls do not depend on what main's map holds today):
 #   * a registry whose ids all have rows passes (0);
-#   * a new ci_failure_triage id fails (1) and the cure names its exact row;
+#   * a new ci_failure_triage id fails (1) and the cure names its exact row,
+#     pending (praxis absent), and the order; that row then passes;
+#   * the check passes HYPATIA_PRAXIS_SOURCE=1, so a pending row this change
+#     lands, and a mapped rule this change removes, pass (with a note or WARN);
 #   * a deleted ADR 0004 workflow_audit row fails (1);
 #   * a missing or partial checkout, a missing deed, and a test that cannot
 #     judge are NOT RUN (2), never a pass;
@@ -39,12 +42,23 @@ expect 'a registry whose ids all have rows passes' 0 "$work/p" "$work/own.deed"
 
 { cat "$work/own.deed"; echo hypatia/ci_failure_triage/brand_new_rule; } >"$work/new.deed"
 expect 'a new ci_failure_triage id with no row fails' 1 "$work/p" "$work/new.deed"
-row=$(printf 'hypatia/ci_failure_triage/brand_new_rule\tunassigned\tunmapped\tpresent\t')
-grep -qF -- "$row" "$work/out" && ok 'the cure names the exact unmapped row' || bad 'the cure does not name the row'
-grep -q 'proven-cicd-and-workflows first' "$work/out" && ok 'the cure says where to add it' || bad 'the cure does not say where'
+row=$(printf 'hypatia/ci_failure_triage/brand_new_rule\tunassigned\tunmapped\tabsent\t')
+grep -qF -- "$row" "$work/out" && ok 'the cure names the exact pending row (praxis absent)' || bad 'the cure does not name the pending row'
+grep -q 'hyperpolymath/proven-cicd-and-workflows, with praxis' "$work/out" && grep -q 're-run this job here' "$work/out" &&
+  ok 'the cure says where to add it and in what order' || bad 'the cure does not say where or in what order'
 # The printed row, appended to the map, makes the same registry pass.
 grep -F -- "$row" "$work/out" | head -n 1 >>"$work/p/proven/registry/sq-map.tsv"
 expect 'adding the printed row makes it pass' 0 "$work/p" "$work/new.deed"
+grep -q 'pending row hypatia/ci_failure_triage/brand_new_rule lands with this change' "$work/out" &&
+  ok 'the check runs the test with HYPATIA_PRAXIS_SOURCE=1' || bad 'no source-side note: the flag was not passed'
+
+fresh
+# A change that removes a mapped rule: the column describes proven-cicd's pin,
+# so the change passes with a WARN; the pin move there sets the column.
+grep -vxF hypatia/ci_failure_triage/pages_not_enabled "$work/own.deed" >"$work/removed.deed"
+expect 'a change that removes a mapped rule passes with a WARN' 0 "$work/p" "$work/removed.deed"
+grep -q '^WARN hypatia/ci_failure_triage/pages_not_enabled: praxis column says present' "$work/out" &&
+  ok 'the removal is named as a WARN' || bad 'the removal is not named'
 
 fresh
 grep -v '^hypatia/workflow_audit/actions_lock_stale	' "$src/proven/registry/sq-map.tsv" >"$work/p/proven/registry/sq-map.tsv"
