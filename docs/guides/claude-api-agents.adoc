@@ -244,8 +244,9 @@ once each week.
 * A permission rule is not a security boundary. A run can edit code and run
   the tests, so it can run any command as its user, and a program that it
   starts can read any file of that user. The limits that hold are the scope
-  of the GitHub token, the branch rules, and what is in the checkout. Start
-  an unattended run in a checkout that has no secret file.
+  of the GitHub token, the branch rules, and what is in the checkout. So the
+  launch script refuses a checkout that holds a secret file that
+  `.gitignore` names. Start an unattended run in a clone that has none.
 * Give an unattended run its own fine-grained GitHub token: this repository
   (and `gitbot-fleet` for its 2 work orders), contents and pull requests with
   write access, nothing else. No administration right, and no right to pass

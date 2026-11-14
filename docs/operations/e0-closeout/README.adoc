@@ -155,6 +155,8 @@ runs, or run those 2 work orders in a session with a person.
   definition in `.claude/agents/`. The launch script stops when they differ.
 * Start each run from a checkout of `main`. The launch script stops when the
   work order, `.claude/` or `scripts/api-agents/` differs from `origin/main`.
+  It also stops when the checkout holds a secret file that `.gitignore`
+  names (`.env`, `.env.*`, `.envrc`, `*.pem`, `*.key`, `secrets/`).
 * `E0-10` needs Idris 2. A person installs it before that run:
   `scripts/dev/install-toolchain.sh --with-idris2` (about 10 minutes).
 

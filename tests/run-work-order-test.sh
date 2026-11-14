@@ -28,6 +28,7 @@ mkdir -p "$repo/scripts/api-agents" "$repo/.claude/profiles" "$repo/.claude/agen
 cp "$here/scripts/api-agents/run-work-order.sh" "$repo/scripts/api-agents/"
 cp "$here/.claude/profiles/e0-headless.json" "$repo/.claude/profiles/"
 printf -- '---\nname: e0-executor\nmodel: sonnet\neffort: medium\n---\nfixture\n' > "$repo/.claude/agents/e0-executor.md"
+printf "%s\n" .env "*.pem" > "$repo/.gitignore" # the fixture ignores secret files, as hypatia does
 skill="$repo/.claude/skills/e0-work-order/SKILL.md"
 echo fixture > "$skill"
 order() { # order ID REPO [MODEL [BRANCH]]
@@ -127,6 +128,12 @@ rm "$repo/untracked.txt"
 
 if LC_ALL=C run E0-98 >/dev/null 2>&1; then fail "ran with a locale that is not UTF-8"; fi
 [[ "$(calls)" == "$before" ]] && ok "a locale that is not UTF-8 is refused" || fail "a non-UTF-8 locale reached claude"
+
+: > "$repo/.env" # ignored, so the tree is clean, and only the secret check can refuse
+err=$(run E0-98 2>&1 >/dev/null) && fail "ran with a secret file in the checkout"
+rm "$repo/.env"
+[[ "$err" == *"secret file (.env)"* ]] && [[ "$(calls)" == "$before" ]] &&
+  ok "a checkout that holds an ignored secret file is refused" || fail "secret file: $err"
 
 if CLAUDE_CODE_USE_BEDROCK=1 run E0-98 >/dev/null 2>&1; then fail "ran with a provider variable"; fi
 if ANTHROPIC_BASE_URL=https://example.invalid run E0-98 >/dev/null 2>&1; then fail "ran with another endpoint"; fi

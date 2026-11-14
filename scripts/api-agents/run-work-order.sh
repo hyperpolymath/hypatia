@@ -144,6 +144,13 @@ case "$charmap" in
   *) die "the locale is $charmap, not UTF-8: 1 test of the suite fails then. Set LANG to a UTF-8 locale, for example C.UTF-8" ;;
 esac
 [ -z "$(git -C "$repo" status --porcelain)" ] || die "the working tree has changes: commit or stash them first"
+# A program that the run starts can read any file, and a deny rule covers only
+# the file tools. So the checkout must hold none of the secret files that
+# .gitignore names (owner ruling, 2026-11-14).
+secret=$(git -C "$repo" ls-files --others --ignored --exclude-standard -- \
+  ":(glob)**/.env" ":(glob)**/.env.*" ":(glob)**/.envrc" ":(glob)**/*.pem" ":(glob)**/*.key" \
+  ":(glob)**/secrets/**" | head -n 1)
+[ -z "$secret" ] || die "the checkout holds a secret file ($secret): start the run in a checkout that has none"
 # The skill reads the work order on origin/main, and the run starts with the
 # agent, the skills and the rules of this checkout. The cap, the model and the
 # ledger line come from this checkout too, so all of them must equal main.
