@@ -842,6 +842,31 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     end
   end
 
+  describe "scan_content scales with file size" do
+    test "a large file with many findings scans in linear time" do
+      src = String.duplicate("fn f() {\n    let v = unsafe { op(p) };\n}\n", 5000)
+      {us, findings} = :timer.tc(fn -> CodeSafety.scan_content(src, "rust") end)
+
+      unsafe = Enum.find(findings, &(&1.rule == :unsafe_block))
+      assert unsafe.occurrences == 5000
+      assert Enum.take(unsafe.lines, 3) == [2, 5, 8]
+      assert List.last(unsafe.lines) == 14_999
+      assert us < 3_000_000, "took #{div(us, 1000)} ms"
+    end
+
+    test "an inline directive still suppresses its own line and the line below" do
+      code = """
+      let a = unsafe { op(p) };
+      // hypatia: allow code_safety/unsafe_block -- test fixture
+      let b = unsafe { op(q) };
+      let c = unsafe { op(r) };
+      """
+
+      unsafe = code |> CodeSafety.scan_content("rust") |> Enum.find(&(&1.rule == :unsafe_block))
+      assert unsafe.lines == [1, 4]
+    end
+  end
+
   describe "from_raw only flags raw-pointer constructors" do
     defp from_raw?(code) do
       code |> CodeSafety.scan_content("rust") |> Enum.any?(&(&1.rule == :from_raw))
