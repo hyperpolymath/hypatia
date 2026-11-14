@@ -554,4 +554,84 @@ defmodule Hypatia.LearningSchedulerTest do
       assert pos.incomplete_tail == ""
     end
   end
+
+  # ── Failed destination write (#984 acceptance A4) ───────────────────
+
+  describe "failed destination write" do
+    setup %{tmp: tmp} do
+      orig_fleet = Application.fetch_env(:hypatia, :fleet_path)
+      fleet = Path.join(tmp, "fleet")
+      Application.put_env(:hypatia, :fleet_path, fleet)
+
+      on_exit(fn ->
+        case orig_fleet do
+          {:ok, val} -> Application.put_env(:hypatia, :fleet_path, val)
+          :error -> Application.delete_env(:hypatia, :fleet_path)
+        end
+      end)
+
+      %{fleet: fleet}
+    end
+
+    defp stored_rows(tmp) do
+      case File.ls(outcomes_dir(tmp)) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+          |> Enum.flat_map(fn f ->
+            outcomes_dir(tmp) |> Path.join(f) |> File.read!() |> String.split("\n", trim: true)
+          end)
+
+        {:error, _} ->
+          []
+      end
+    end
+
+    test "a failed write leaves the fleet row unacknowledged and the next poll imports it once",
+         %{tmp: tmp, fleet: fleet} do
+      line =
+        Jason.encode!(%{
+          "recipe_id" => "recipe-write-fail",
+          "repo" => "synthetic",
+          "file" => ".",
+          "bot" => "fixture",
+          "outcome" => "failure",
+          "verdict" => "failed",
+          "exit_code" => 1
+        })
+
+      fleet_file = Path.join(fleet, "shared-context/learning/fix-outcomes.jsonl")
+      File.mkdir_p!(Path.dirname(fleet_file))
+      File.write!(fleet_file, line <> "\n")
+
+      # Only the write fails: a dangling link at the outcomes path reads as an
+      # empty directory (so the id lookup succeeds), but mkdir_p cannot make it.
+      File.rm_rf!(outcomes_dir(tmp))
+      :ok = File.ln_s(Path.join(tmp, "does-not-exist"), outcomes_dir(tmp))
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(self(), {:poll, LearningScheduler.ingest_fleet_outcomes(nil)})
+        end)
+
+      assert_received {:poll, {0, signature}}
+
+      # The warning proves that the poll reached the write.
+      assert log =~ "write_failed"
+      assert stored_rows(tmp) == []
+      # The signature did not advance, so the same bytes are retried.
+      assert signature == nil
+
+      # Remove the obstacle. The next poll imports the row exactly once.
+      :ok = File.rm(outcomes_dir(tmp))
+
+      assert {1, signature_2} = LearningScheduler.ingest_fleet_outcomes(signature)
+      assert signature_2 != nil
+      assert length(stored_rows(tmp)) == 1
+
+      # A further poll does not import it again.
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(signature_2)
+      assert length(stored_rows(tmp)) == 1
+    end
+  end
 end
