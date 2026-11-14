@@ -32,6 +32,20 @@ Commit `b660d08`, read on 2026-11-14.
   `report_only` below (`.claude/CLAUDE.md`, design constants).
 * `E0-18` gives each dispatch its kind of match.
 
+== Theory inputs
+
+Read on 2026-11-14 in the second theory recon. No prover was run for this
+work order. Use each result as a design rule. Its match to Hypatia is a
+reading, not a proof.
+
+* A cap is a minimum over ranks, so one more gate can lower the tier and
+  can never raise it (resource-algebra `f0818f2`, `Core.agda`, `⊕-least`,
+  line 104; tropical-types `f2e465c`, `TropicalAdapterPath.lean`,
+  `hub_ceiling`, line 415; both machine-checked there, on natural numbers).
+  Add 1 property test: for each tier and each kind of match, the result is
+  not above the result without the cap.
+* The proofs do not cover the step from a confidence value to a tier.
+
 == Steps
 
 . Confirm that `E0-18` is merged. Stop if it is not.
