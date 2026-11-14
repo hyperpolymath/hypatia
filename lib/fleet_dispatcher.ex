@@ -230,6 +230,7 @@ defmodule Hypatia.FleetDispatcher do
     note =
       case cap do
         :squabbler_owned -> "refer to cicd-squabbler (first-line fixer, R1)"
+        :report_to_owner -> "report to owner: a repository setting no commit can fix"
         :flag_only -> "flag only: licence/SPDX findings are never auto-fixed"
       end
 
