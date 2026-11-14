@@ -11,6 +11,7 @@
   "evidence": "lib/rules/actions_lock.ex; scripts/ci-health/detect.sh B-LOCKFILE",
   "url": "https://github.com/github/actions-lockfile",
   "seed": 1,
+  "sq_id": "SQ-LOCK-01",
   "route": "first-line"
  },
  {
@@ -25,6 +26,7 @@
   "evidence": "lib/rules/sha_bump_propagation.ex; pin_integrity.ex PI*",
   "url": "",
   "seed": 1,
+  "sq_id": "SQ-LOCK-01",
   "route": "first-line"
  },
  {
@@ -39,6 +41,7 @@
   "evidence": "workflow_audit.ex, ci_changed.ex, detect.sh B-STARTUPFAIL (cause unclassified)",
   "url": "https://docs.github.com/en/actions/sharing-automations/reusing-workflows",
   "seed": 1,
+  "sq_id": "SQ-LOCK-03 / SQ-PIN-05 / SQ-PIN-01",
   "route": "first-line"
  },
  {
@@ -53,7 +56,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_rate_limit [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
   "seed": 1,
-  "route": "unrouted"
+  "sq_id": "SQ-RUN-01 + SQ-PIN-03",
+  "route": "first-line"
  },
  {
   "source": "actions-annotation",
@@ -67,7 +71,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/merge_ref_race (action none when PR merged/closed) [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/rest/pulls/pulls",
   "seed": 1,
-  "route": "unrouted"
+  "sq_id": "SQ-NOI-02 (noise)",
+  "route": "noise"
  },
  {
   "source": "actions-annotation",
@@ -81,6 +86,7 @@
   "evidence": "branch_protection.ex BP008; hypatia#1064 (draft) hypatia/ci_failure_triage/required_check_never_reported via check_gate [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks",
   "seed": 1,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -95,7 +101,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/runner_cancelled + static WF029 always_after_cancel [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/actions/using-jobs/using-concurrency",
   "seed": 1,
-  "route": "unrouted"
+  "sq_id": "SQ-GEN-03 (static WF029; detection is Hypatia's) / SQ-NOI-01 (noise)",
+  "route": "noise"
  },
  {
   "source": "actions-annotation",
@@ -109,6 +116,7 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/secret_or_variable_missing, app_key_wrong_format [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions",
   "seed": 1,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -123,6 +131,7 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/toolchain_segfault; owner-only: estate case is deterministic OTP 28 miscompile (#1062), rerun/autofix cannot help [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 1,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -137,7 +146,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/external_host_unreachable [DRAFT: module not in this tree; unverified]",
   "url": "https://www.githubstatus.com/",
   "seed": 1,
-  "route": "unrouted"
+  "sq_id": "SQ-RUN-03",
+  "route": "first-line"
  },
  {
   "source": "coderabbit",
@@ -145,13 +155,15 @@
   "sev": "info",
   "problem": "CodeRabbit comment: rate limit hit / review paused / credits exhausted",
   "fix": "wait and `@coderabbitai review`; owner tops up plan",
-  "detect": "none",
+  "detect": "detected",
   "fixst": "none",
   "gap": "person",
-  "evidence": "no hits (only unrelated tooling)",
+  "evidence": "hypatia/ci_failure_triage/review_rate_limited (lib/rules/ci_failure_triage.ex; fixture test/rules/ci_failure_triage_test.exs coderabbit-review-limit.txt); advisory per R7",
   "url": "https://docs.coderabbit.ai",
   "seed": 1,
-  "route": "owner-only"
+  "sq_id": null,
+  "hypatia_id": "hypatia/ci_failure_triage/review_rate_limited",
+  "route": "noise"
  },
  {
   "source": "codex",
@@ -159,13 +171,15 @@
   "sev": "info",
   "problem": "Codex review comment says usage limit/credits reached",
   "fix": "owner action; re-request later",
-  "detect": "none",
+  "detect": "detected",
   "fixst": "none",
   "gap": "person",
-  "evidence": "no hits",
+  "evidence": "hypatia/ci_failure_triage/review_quota_exhausted (lib/rules/ci_failure_triage.ex; fixture codex-credits.txt); advisory per R7",
   "url": "https://developers.openai.com/codex",
   "seed": 1,
-  "route": "owner-only"
+  "sq_id": null,
+  "hypatia_id": "hypatia/ci_failure_triage/review_quota_exhausted",
+  "route": "noise"
  },
  {
   "source": "sonarcloud",
@@ -179,6 +193,7 @@
   "evidence": "reconciliation thread: false positive on the detector regex; not symbolic-fixable here",
   "url": "https://rules.sonarsource.com/yaml/RSPEC-2068/",
   "seed": 1,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -193,6 +208,7 @@
   "evidence": "reconciliation thread: not symbolic-fixable here (per-language AST)",
   "url": "https://rules.sonarsource.com/",
   "seed": 1,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -207,6 +223,7 @@
   "evidence": "pr_automerge.ex; pr-automerge-policy.json",
   "url": "https://docs.github.com/en/code-security/dependabot",
   "seed": 1,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -221,6 +238,7 @@
   "evidence": "detect.sh A-BILLING/B-ALLOWLIST/B-STARTUPFAIL; API hides reason",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -235,6 +253,7 @@
   "evidence": "workflow_audit.ex (subset); actionlint not run by hypatia",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -249,6 +268,7 @@
   "evidence": "workflow_hardening.ex",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -263,6 +283,7 @@
   "evidence": "no node-version rule found",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -277,6 +298,7 @@
   "evidence": "security_errors.ex/fix-unpinned-actions.sh mention artifact (verify)",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -291,6 +313,7 @@
   "evidence": "no hits",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -305,6 +328,7 @@
   "evidence": "detect.sh D-BURN matches only inline `on: [push, pull_request]`; wh007 stops once any concurrency: key exists (ineffective groups unflagged)",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -319,6 +343,7 @@
   "evidence": "workflow_hardening.ex, scorecard_compliance.ex",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": "SQ-PERM-01 (partial: actions: read for upload-sarif only)",
   "route": "first-line"
  },
  {
@@ -333,6 +358,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -342,12 +368,13 @@
   "problem": "pull_request_target checks out fork code",
   "fix": "use pull_request or split workflow",
   "detect": "detected",
-  "fixst": "recipe",
-  "gap": "-",
+  "fixst": "escalate",
+  "gap": "person",
   "evidence": "workflow_hardening.ex WH*",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
-  "route": "first-line"
+  "sq_id": "SQ-OWN-03 (OWNER)",
+  "route": "owner-only"
  },
  {
   "source": "github-actions",
@@ -361,6 +388,7 @@
   "evidence": "none (no ruleset changes allowed in scope)",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -375,6 +403,7 @@
   "evidence": "see seed",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": "SQ-RUN-01",
   "route": "first-line"
  },
  {
@@ -389,6 +418,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -403,6 +433,7 @@
   "evidence": "actionlint popular-action-inputs not run",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -417,6 +448,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -431,6 +463,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -445,6 +478,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/actions",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -459,6 +493,7 @@
   "evidence": "secret_scanning_alerts.ex SSA001-SSA004",
   "url": "https://docs.github.com/en/code-security/secret-scanning",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -473,6 +508,7 @@
   "evidence": "no rule reads push-protection bypass events",
   "url": "https://docs.github.com/en/code-security/secret-scanning/introduction/about-push-protection",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -487,6 +523,7 @@
   "evidence": "validity not used for tiering",
   "url": "https://docs.github.com/en/code-security/secret-scanning/managing-alerts-from-secret-scanning/evaluating-alerts",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -501,6 +538,7 @@
   "evidence": "code_scanning_alerts.ex (ingest only; no per-query fix map)",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "referral"
  },
  {
@@ -515,6 +553,7 @@
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -529,6 +568,7 @@
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -543,6 +583,7 @@
   "evidence": "only generic alert ingestion; per-query fix table absent",
   "url": "https://docs.github.com/en/code-security/code-scanning/managing-your-code-scanning-configuration/codeql-query-suites",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -557,6 +598,7 @@
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -571,6 +613,7 @@
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -585,6 +628,7 @@
   "evidence": "workflow_hardening.ex",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -599,6 +643,7 @@
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -613,6 +658,7 @@
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -627,6 +673,7 @@
   "evidence": "none",
   "url": "https://codeql.github.com/codeql-query-help/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -641,6 +688,7 @@
   "evidence": "dependabot_alerts.ex",
   "url": "https://docs.github.com/en/code-security/dependabot/dependabot-alerts",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -655,6 +703,7 @@
   "evidence": "no schema check",
   "url": "https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference",
   "seed": 0,
+  "sq_id": "SQ-TOOL-02 (partial: bun/npm mismatch only)",
   "route": "first-line"
  },
  {
@@ -669,6 +718,7 @@
   "evidence": "scorecard_compliance.ex dependency_update_tool (presence only)",
   "url": "https://docs.github.com/en/code-security/dependabot",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -683,6 +733,7 @@
   "evidence": "none",
   "url": "https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -697,6 +748,7 @@
   "evidence": "branch_protection.ex BP001-009",
   "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -711,6 +763,7 @@
   "evidence": "root_hygiene.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -725,6 +778,7 @@
   "evidence": "branch_protection.ex (BP rules are owner-side advisory, admin scope; not bot-fixable)",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -739,6 +793,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -753,6 +808,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -767,6 +823,7 @@
   "evidence": "scorecard CSA005/6",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -781,6 +838,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -790,12 +848,13 @@
   "problem": "OpenSSF Scorecard check Dangerous-Workflow",
   "fix": "remove pull_request_target/injection",
   "detect": "detected",
-  "fixst": "recipe",
-  "gap": "-",
+  "fixst": "escalate",
+  "gap": "person",
   "evidence": "workflow_hardening.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
-  "route": "first-line"
+  "sq_id": "SQ-OWN-03 (OWNER)",
+  "route": "owner-only"
  },
  {
   "source": "scorecard",
@@ -809,6 +868,7 @@
   "evidence": "scorecard_compliance.ex recognises dependabot.yml/.yaml only, not Renovate",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -823,6 +883,7 @@
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -837,6 +898,7 @@
   "evidence": "rsr_conformance.ex (no licence edits in scope)",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -851,6 +913,7 @@
   "evidence": "CSA005",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -865,6 +928,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -879,6 +943,7 @@
   "evidence": "pin_integrity.ex covers Actions uses: sites only; Dockerfile/shell pins not detected",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": "SQ-PIN-03/04, SQ-LOCK-02 (partial)",
   "route": "first-line"
  },
  {
@@ -893,6 +958,7 @@
   "evidence": "scorecard_compliance.ex check_vulnerability_scanning only looks for secret scanners, not CodeQL/Sonar",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -907,6 +973,7 @@
   "evidence": "rsr_conformance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -921,6 +988,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -935,6 +1003,7 @@
   "evidence": "scorecard_compliance.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": "SQ-PERM-01 (partial)",
   "route": "first-line"
  },
  {
@@ -949,6 +1018,7 @@
   "evidence": "dependabot_alerts.ex",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -963,6 +1033,7 @@
   "evidence": "",
   "url": "https://github.com/ossf/scorecard/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -977,6 +1048,7 @@
   "evidence": "none; sonar only via scorecard ingestion",
   "url": "https://docs.sonarsource.com/sonarqube-cloud/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -991,6 +1063,7 @@
   "evidence": "none; catalogue not yet ingested (licence: record id/title/severity/URL only)",
   "url": "https://rules.sonarsource.com/",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1005,6 +1078,7 @@
   "evidence": "none",
   "url": "https://docs.codecov.com",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -1019,6 +1093,7 @@
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1033,6 +1108,7 @@
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1047,6 +1123,7 @@
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1061,6 +1138,7 @@
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1075,6 +1153,7 @@
   "evidence": "no ingestion of bot comments",
   "url": "https://docs.coderabbit.ai",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1089,6 +1168,7 @@
   "evidence": "needs judgement of suggestion quality; record only",
   "url": "https://developers.openai.com/codex",
   "seed": 0,
+  "sq_id": null,
   "route": "referral"
  },
  {
@@ -1103,6 +1183,7 @@
   "evidence": "pr_automerge.ex keyed to dependabot",
   "url": "https://docs.renovatebot.com",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1117,6 +1198,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1131,6 +1213,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1145,6 +1228,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1159,6 +1243,7 @@
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1173,6 +1258,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1187,6 +1273,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1201,6 +1288,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1215,6 +1303,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1229,6 +1318,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1243,6 +1333,7 @@
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1257,6 +1348,7 @@
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1271,6 +1363,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1285,6 +1378,7 @@
   "evidence": "workflow_hardening.ex provenance map",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1299,6 +1393,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1313,6 +1408,7 @@
   "evidence": "tool not executed in hypatia",
   "url": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
   "seed": 0,
+  "sq_id": null,
   "route": "first-line"
  },
  {
@@ -1327,6 +1423,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.zizmor.sh/audits/",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1341,6 +1438,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://www.shellcheck.net/wiki/",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1355,6 +1453,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/gitleaks/gitleaks",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1369,6 +1468,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://semgrep.dev/r",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1383,6 +1483,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://osv.dev",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1397,6 +1498,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/hadolint/hadolint",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1411,6 +1513,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://yamllint.readthedocs.io",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1425,6 +1528,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://github.com/DavidAnson/markdownlint",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1439,6 +1543,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://hexdocs.pm/credo",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1453,6 +1558,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://rust-lang.github.io/rust-clippy/",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1467,6 +1573,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://embarkstudios.github.io/cargo-deny",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1481,6 +1588,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://rustsec.org",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1495,6 +1603,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://ziglang.org",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1509,6 +1618,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.julialang.org",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1523,6 +1633,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://idris2.readthedocs.io",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1537,6 +1648,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://agda.readthedocs.io",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1551,6 +1663,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://ocaml.org",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1565,6 +1678,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://docs.deno.com/lint/",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1579,6 +1693,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://bun.sh/docs",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1593,6 +1708,7 @@
   "evidence": "not assessed in this pass; needs per-tool ingestion",
   "url": "https://nickel-lang.org",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1607,7 +1723,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/token_invalid [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-OWN-09",
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1621,7 +1738,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/api_server_error [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-RUN-03",
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1635,7 +1753,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/actions_lock_unresolvable_pin [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-LOCK-02",
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1649,7 +1768,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scan_range_missing_commit [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-RUN-04",
+  "route": "first-line"
  },
  {
   "source": "ci-log",
@@ -1663,6 +1783,7 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/rollup_cascade [DRAFT: module not in this tree; unverified]; Integration Status rollup (\"3 of 3 integration jobs did not report success\") is classified upstream: never triage alone",
   "url": "",
   "seed": 0,
+  "sq_id": null,
   "route": "upstream"
  },
  {
@@ -1677,7 +1798,8 @@
   "evidence": "hypatia#1064 (draft) hypatia/ci_failure_triage/scanner_pin_drift [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-OWN-12",
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1691,7 +1813,8 @@
   "evidence": "hypatia#1064 hypatia/workflow_audit/actions_lock_stale (replaces :unpinned_action misfire) [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-LOCK-02",
+  "route": "first-line"
  },
  {
   "source": "github-actions",
@@ -1705,7 +1828,8 @@
   "evidence": "hypatia#1064 pages_not_enabled [DRAFT: module not in this tree; unverified]",
   "url": "https://docs.github.com/en/pages",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-OWN-01 (OWNER, Get Pages site failed)",
+  "route": "owner-only"
  },
  {
   "source": "ci-log",
@@ -1719,6 +1843,7 @@
   "evidence": "hypatia#1064 upstream_artifact_missing [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
+  "sq_id": null,
   "route": "upstream"
  },
  {
@@ -1733,7 +1858,8 @@
   "evidence": "hypatia#1064 bench_regression [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
-  "route": "unrouted"
+  "sq_id": "SQ-OWN-11",
+  "route": "owner-only"
  },
  {
   "source": "hypatia",
@@ -1747,6 +1873,7 @@
   "evidence": "hypatia#1064 triage rule set [DRAFT: module not in this tree; unverified]",
   "url": "",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
  },
  {
@@ -1761,6 +1888,7 @@
   "evidence": "reported by reconciliation thread; OWNER RULING NEEDED",
   "url": "",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -1775,6 +1903,8 @@
   "evidence": "seen on hypatia#1063 job 131883124996; reported red on main runs 43357534889 and 43264284438 (reconciliation thread); no rule yet",
   "url": "",
   "seed": 0,
+  "sq_id": null,
+  "hypatia_id": "hypatia/ci_failure_triage/compile_error (report; drift cause still a gap)",
   "route": "first-line"
  },
  {
@@ -1789,6 +1919,7 @@
   "evidence": "seen on hypatia#1063; reported red on main and on all four reconciliation PRs; not caused by them",
   "url": "https://rustsec.org/advisories/RUSTSEC-2026-0538",
   "seed": 0,
+  "sq_id": null,
   "route": "owner-only"
  },
  {
@@ -1803,6 +1934,291 @@
   "evidence": "split of sigsegv-in-ci per hypatia#1064 (draft): toolchain_segfault needs a known runtime or compiler in the line; Hypatia/mix/beam segfault is owner-only",
   "url": "",
   "seed": 0,
+  "sq_id": null,
   "route": "unrouted"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-PIN-02",
+  "sev": "error",
+  "problem": "DEED lane fails 'unrecognised #-form' on a #uuid literal the current deed ABNF admits: repo pins an old standards SHA",
+  "fix": "bump every standards pin site to one current SHA",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-PIN-02",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-PIN-03",
+  "sev": "error",
+  "problem": "setup-bun 'Failed to fetch ... oven-sh/bun/git/refs/tags (403)' / API rate limit, or static setup-bun with missing/latest/range bun-version",
+  "fix": "set bun-version to the estate pin",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-PIN-03",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-PIN-04",
+  "sev": "error",
+  "problem": "cargo install --git panic-attacker.git (old name, no pin) in a workflow",
+  "fix": "use panic-attack at the pin in the panicbot canon pin",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-PIN-04",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-TOOL-01",
+  "sev": "error",
+  "problem": "different nickel or yq versions across CI, Containerfile, mise and setup scripts",
+  "fix": "one sha256-pinned version everywhere",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-TOOL-01",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-GEN-01",
+  "sev": "error",
+  "problem": "estate-rules: committed REPOSITORY-MAP.adoc is stale",
+  "fix": "run gen-repo-map.sh and commit the map",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-GEN-01",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-GEN-02",
+  "sev": "error",
+  "problem": "deed line over 998 octets (K9-E006)",
+  "fix": "wrap the string or description, layout only",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-GEN-02",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-GEN-04",
+  "sev": "error",
+  "problem": "kyaml-format: <file> is not KYAML",
+  "fix": "run scripts/kyaml-format.sh (mikefarah yq) and commit",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-GEN-04",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-GEN-05",
+  "sev": "error",
+  "problem": "gitleaks on a pull_request run scans full history and fails on a finding not in the PR commits (Hypatia WF031 detects)",
+  "fix": "scan base..head on PRs; keep full-history scan on non-PR triggers",
+  "detect": "detected",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "Hypatia WF031: WorkflowAudit.check_gitleaks_full_history_on_pr/1 (lib/rules/workflow_audit.ex; test/rules/gitleaks_full_history_test.exs); fix is the squabbler's (ADR 0004 FIX)",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-GEN-05",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-CANON-01",
+  "sev": "error",
+  "problem": "instance canon-lockstep job is an old inline copy and goes red on a canon release",
+  "fix": "run adopt-canon-lockstep.sh from the template",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-CANON-01",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-PERM-01",
+  "sev": "error",
+  "problem": "'Resource not accessible by integration ... get-a-workflow-run' in a job using codeql-action/upload-sarif on a private repo",
+  "fix": "add actions: read to that job's permissions with a reason comment",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-PERM-01",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-RUN-02",
+  "sev": "error",
+  "problem": "PR blocked with required checks green under a strict ruleset and base behind default; or bot-PR check fails but passes on main with head behind",
+  "fix": "update-branch by merging the base; never rebase a branch the squabbler did not open",
+  "detect": "unassessed",
+  "fixst": "rerun",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (ACT); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-RUN-02",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-RUN-03",
+  "sev": "error",
+  "problem": "transient host/API error: gh HTTP 5xx, git remote 5xx, or Could not resolve host for a dotted name",
+  "fix": "re-run the failed job once, only if that commit is still the head",
+  "detect": "unassessed",
+  "fixst": "rerun",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (ACT); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-RUN-03",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-RUN-04",
+  "sev": "error",
+  "problem": "gitleaks 'ambiguous argument sha^..sha' on a shallow checkout; trufflehog commits: 0",
+  "fix": "re-run once; if it fails twice refer with fetch-depth: 0",
+  "detect": "unassessed",
+  "fixst": "rerun",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (ACT); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-RUN-04",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-RUN-06",
+  "sev": "error",
+  "problem": "gate fails closed because it could not read GitHub state (rulesets/workflow catalogue/callee unreadable) while the Actions token budget was spent",
+  "fix": "re-run once after the budget resets; never edit the gate, baseline or allowlist",
+  "detect": "unassessed",
+  "fixst": "rerun",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (ACT); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-RUN-06",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-CODE-01",
+  "sev": "error",
+  "problem": "Rust readiness/integration test cannot find its binary (target/debug/build/... No such file)",
+  "fix": "use env!(CARGO_BIN_EXE_<bin>)",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-CODE-01",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-CODE-02",
+  "sev": "error",
+  "problem": "'Validate Hypatia Baseline' fails on new code_safety findings",
+  "fix": "fix the code behind the finding; never touch .hypatia-baseline.json",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-CODE-02",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-CODE-03",
+  "sev": "error",
+  "problem": "Sonar S7688, S7679 or S131 in shell scripts",
+  "fix": "mechanical edit: [[ ]] only with a bash shebang; add no-op *) ; default case",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-CODE-03",
+  "route": "first-line"
+ },
+ {
+  "source": "cicd-squabbler",
+  "id": "SQ-CODE-04",
+  "sev": "error",
+  "problem": "adapter prints a valid findings array but exits other than 0 or 1 and is reported ran",
+  "fix": "accept arrays only for exit 0 or 1",
+  "detect": "unassessed",
+  "fixst": "recipe",
+  "gap": "-",
+  "evidence": "cicd-squabbler ADR 0004 (FIX); Hypatia detection not assessed",
+  "url": "https://github.com/hyperpolymath/cicd-squabbler",
+  "seed": 0,
+  "sq_id": "SQ-CODE-04",
+  "route": "first-line"
+ },
+ {
+  "source": "hypatia-referral",
+  "id": "tag-keyed actions.lock record refused by pin-contract gate",
+  "sev": "error",
+  "problem": "actions.lock record keyed by a tag is refused by the standards pin-contract gate (canon rule 10)",
+  "fix": "report-only; no squabbler FIX yet",
+  "detect": "unassessed",
+  "fixst": "none",
+  "gap": "symbolic",
+  "evidence": "hypatia#1090 (draft, per reconciliation thread; not verified by me)",
+  "url": "",
+  "seed": 0,
+  "route": "referral"
  }
 ]

@@ -667,7 +667,6 @@ defmodule Hypatia.Rules.ActionsLock do
   # set (nil) the caller has no workflows and the check is not run.
   defp validate_leaf_refs(_state, nil), do: :ok
 
-
   defp validate_leaf_refs(state, %MapSet{} = callers) do
     bad =
       state.dependencies
@@ -695,8 +694,24 @@ defmodule Hypatia.Rules.ActionsLock do
         do: key
   end
 
-  defp validate_workflow_dependencies(state) do
+  @doc """
+  The keys of records keyed by a tag or branch rather than a full commit SHA
+  (`actions/checkout@v7.0.1`). `gh actions-lock` writes this form and `parse/2`
+  accepts it; the estate pin contract (standards
+  `check-lock-pin-contract.sh`, canon rule 10) rejects it, so these are what
+  that gate reports as "key ref is not a 40-hex commit".
+  """
+  @spec tag_keyed_keys(t() | map()) :: [String.t()]
+  def tag_keyed_keys(%__MODULE__{dependencies: dependencies}), do: tag_keyed_keys(dependencies)
 
+  def tag_keyed_keys(dependencies) when is_map(dependencies) do
+    for {key, _dependency} <- dependencies,
+        [_path, key_ref] = String.split(key, "@", parts: 2),
+        not Regex.match?(@sha_ref, key_ref),
+        do: key
+  end
+
+  defp validate_workflow_dependencies(state) do
     missing =
       for {path, refs} <- state.workflows,
           ref <- refs,
