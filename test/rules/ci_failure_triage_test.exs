@@ -447,8 +447,10 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
         "2026-11-14T13:52:24Z ##[error]lint did not succeed (result: cancelled)\n" <>
           "2026-11-14T13:52:24Z ##[error]tests did not succeed (result: failure)\n"
 
-      %{matches: ms} = T.classify(log, %{})
+      %{primary: p, matches: ms} = T.classify(log, %{})
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+      assert p.action == :upstream
     end
 
     test "the security rollup's cancelled wording is a cancellation" do
@@ -467,8 +469,13 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
           "2026-11-14T15:38:53Z ##[error]Rust dependency audit did not complete " <>
           "successfully (result=failure) -- no verdict was produced\n"
 
-      %{matches: ms} = T.classify(log, %{})
+      %{primary: p, matches: ms} = T.classify(log, %{})
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+      assert p.rule == T.id("rollup_cascade")
+    end
+
+    test "the public rule inventory encodes as JSON (no matcher regexes leak)" do
+      for r <- T.rules(), do: assert(is_binary(Jason.encode!(r)))
     end
 
     test "startup_failure with no log is a referral, never a rerun" do

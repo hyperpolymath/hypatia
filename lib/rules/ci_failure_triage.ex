@@ -735,7 +735,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "rollup_cascade",
       layer: :code,
-      patterns: [~r/\d+ of \d+ [\w -]+ (did not report success|did not complete)/],
+      patterns: [
+        ~r/\d+ of \d+ [\w -]+ (did not report success|did not complete)/,
+        # A rollup's own line for a needed job that failed (CI Status and
+        # the security rollup). Stops a mixed cancelled+failed rollup from
+        # reading as clean once runner_cancelled stands down.
+        ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*(?:did not succeed \(result: failure\)|did not complete successfully \(result=failure\))/
+      ],
       action: :upstream,
       retries: 0,
       fix: nil,
@@ -807,7 +813,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
     |> Enum.sort_by(&rank/1)
     |> Enum.map(fn r ->
       r
-      |> Map.drop([:patterns, :context])
+      |> Map.drop([:patterns, :context, :unless])
       |> Map.put(:id, id(r.name))
       |> Map.put(:route, route(r.action))
     end)
