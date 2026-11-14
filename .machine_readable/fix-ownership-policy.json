@@ -1,5 +1,5 @@
 {
-  "$comment": "SPDX-License-Identifier: MPL-2.0. Owner ruling R1 (2026-11-13) and the owner answers on hypatia#1080 (2026-11-14). Read at compile time by Hypatia.TriangleRouter.ownership_cap/1. A recipe listed here is capped at report_only whatever its confidence, so Bayesian updating cannot raise it back to auto_execute. Recipes not listed (groups E and F) keep their confidence-based tier.",
+  "$comment": "SPDX-License-Identifier: MPL-2.0. Owner ruling R1 (2026-11-13) and the owner answers on hypatia#1080 (2026-11-14). Read at compile time by Hypatia.TriangleRouter.ownership_cap/1. A recipe listed here is capped at report_only whatever its confidence, so Bayesian updating cannot raise it back to auto_execute. Recipes not listed (group F) keep their confidence-based tier.",
   "version": "1.0.0",
   "updated": "2026-11-14",
   "squabbler_owned": {
@@ -20,6 +20,17 @@
         "recipe-fix-http-to-https",
         "recipe-shell-quote-vars",
         "recipe-remove-believe-me"
+      ]
+    }
+  },
+  "report_to_owner": {
+    "description": "Repository settings that no commit can fix (owner answer on hypatia#1080, 2026-11-14). Hypatia reports the finding to the owner; no bot attempts a fix.",
+    "groups": {
+      "E_repository_settings": [
+        "recipe-scorecard-branch-protection",
+        "recipe-scorecard-code-review",
+        "recipe-scorecard-webhooks",
+        "recipe-scorecard-signed-releases"
       ]
     }
   },

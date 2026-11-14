@@ -619,8 +619,16 @@
       :status active)
     ;; defaulted: class excusable-at scope-form
     (rule-def
+      :id "hypatia/ci_failure_triage/shellcheck_findings"
+      :text "ShellCheck found problems in a shell script."
+      :class gate
+      :excusable-at repo
+      :scope-form exact-paths
+      :status active)
+    ;; defaulted: class excusable-at scope-form
+    (rule-def
       :id "hypatia/ci_failure_triage/sonar_not_authorized"
-      :text "The Sonar scanner's token or project binding is not valid for this organization (lithoglyph)."
+      :text "The Sonar scanner's token or project binding is not valid for this organization (lithoglyph), or SONAR_TOKEN was refused (aerie)."
       :class gate
       :excusable-at repo
       :scope-form exact-paths

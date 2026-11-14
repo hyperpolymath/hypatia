@@ -83,13 +83,18 @@ defmodule Hypatia.TriangleRouter do
 
   def dispatch_strategy(_), do: :report_only
 
-  # Owner ruling R1 and hypatia#1080: recipes that cicd-squabbler owns, or
-  # that the licence cap makes flag-only, never auto-execute. Read at compile
+  # Owner ruling R1 and hypatia#1080: recipes that cicd-squabbler owns, that
+  # the licence cap makes flag-only, or that only the owner can act on
+  # (repository settings) never auto-execute. Read at compile
   # time, so a missing or malformed policy stops the build (fail closed).
   @ownership_policy_path Path.expand("../.machine_readable/fix-ownership-policy.json", __DIR__)
   @external_resource @ownership_policy_path
   @ownership_policy @ownership_policy_path |> File.read!() |> Jason.decode!()
-  @ownership_caps for {cap, key} <- [squabbler_owned: "squabbler_owned", flag_only: "flag_only"],
+  @ownership_caps for {cap, key} <- [
+                        squabbler_owned: "squabbler_owned",
+                        report_to_owner: "report_to_owner",
+                        flag_only: "flag_only"
+                      ],
                       ids <- Map.values(@ownership_policy[key]["groups"]),
                       id <- ids,
                       into: %{},
@@ -99,6 +104,7 @@ defmodule Hypatia.TriangleRouter do
   The ownership cap for a recipe, from `.machine_readable/fix-ownership-policy.json`:
 
   - `:squabbler_owned` -- cicd-squabbler fixes it first; Hypatia reports and refers
+  - `:report_to_owner` -- repository settings: no commit can fix it; report to the owner
   - `:flag_only` -- licence/SPDX: flag for a person, never auto-fix
   - `nil` -- no cap; the confidence tier applies
   """

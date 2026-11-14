@@ -2,7 +2,8 @@
 defmodule Hypatia.FixOwnershipCapTest do
   # Owner ruling R1 and the owner answers on hypatia#1080 (2026-11-14):
   # groups A-C belong to cicd-squabbler (report + referral only), group D is
-  # flag-only (licence/SPDX), and groups E and F keep their confidence tier.
+  # flag-only (licence/SPDX), group E (repository settings) is reported to the
+  # owner, and group F keeps its confidence tier.
   # The cap is by recipe id, so a confidence that Bayesian updating raises
   # back to 0.99 still cannot reach auto_execute.
   use ExUnit.Case, async: true
@@ -18,13 +19,13 @@ defmodule Hypatia.FixOwnershipCapTest do
      ~w(recipe-scorecard-dangerous-workflow recipe-scorecard-sast recipe-add-dependabot recipe-scorecard-dependency-update)},
     {"C safe code fixes", :squabbler_owned,
      ~w(recipe-fix-http-to-https recipe-shell-quote-vars recipe-remove-believe-me)},
+    {"E repository settings", :report_to_owner,
+     ~w(recipe-scorecard-branch-protection recipe-scorecard-code-review recipe-scorecard-webhooks recipe-scorecard-signed-releases)},
     {"D licence and SPDX", :flag_only,
      ~w(recipe-add-license-file recipe-fix-spdx-license recipe-fix-pmpl-drift recipe-fix-spdx-double-suffix recipe-scorecard-license)}
   ]
 
   @uncapped [
-    {"E repository settings",
-     ~w(recipe-scorecard-branch-protection recipe-scorecard-code-review recipe-scorecard-webhooks recipe-scorecard-signed-releases)},
     {"F seeds and Hypatia operations",
      ~w(recipe-add-security-policy recipe-scorecard-security-policy recipe-scorecard-binary-artifacts recipe-scorecard-vulnerabilities recipe-close-obsolete-pr recipe-budget-resume-sweep recipe-retired-descriptile-policy)}
   ]

@@ -76,6 +76,28 @@ defmodule Hypatia.ScorecardReconcilerTest do
     end
   end
 
+  describe "settings policy (owner answer on hypatia#1080, group E)" do
+    test "reconcile/3 escalates settings findings unless full_auto is asked for" do
+      assert R.policy([]) == :conservative
+      assert R.policy(policy: :full_auto) == :full_auto
+    end
+
+    test "a settings finding escalated by default counts as escalated" do
+      assert R.escalated?(%{action: :fix_settings, acted: :escalated_conservative})
+      assert R.escalated?(%{action: :open_escalate, acted: :escalated})
+      refute R.escalated?(%{action: :fix_settings, acted: :settings_remediated})
+      refute R.escalated?(%{action: :dismiss_info, acted: :dismissed})
+    end
+
+    test "the mix task changes settings only on --apply-settings" do
+      alias Mix.Tasks.Hypatia.Reconcile
+      assert Reconcile.policy([]) == :conservative
+      assert Reconcile.policy(conservative: true) == :conservative
+      assert Reconcile.policy(apply_settings: true) == :full_auto
+      assert Reconcile.policy(apply_settings: true, conservative: true) == :conservative
+    end
+  end
+
   describe "fingerprint/3 — stable across line drift" do
     test "identical except for line number => identical fingerprint" do
       a = alert("SASTID", line: 1)

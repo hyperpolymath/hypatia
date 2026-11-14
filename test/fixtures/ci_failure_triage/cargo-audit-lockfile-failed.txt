@@ -1,0 +1,5 @@
+Run bash scripts/ci/audit-dependencies.sh
+cargo-audit 0.22.2
+Cargo.lock: FAILED (vulnerabilities found)
+fuzz/Cargo.lock: FAILED (vulnerabilities found)
+##[error]Process completed with exit code 1.

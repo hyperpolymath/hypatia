@@ -1,0 +1,15 @@
+Run shellcheck scripts/*.sh
+
+In scripts/gate-canaries.sh line 14:
+echo “gate falsifiability canaries”
+     ^-- SC1112 (warning): This is a unicode quote. Delete and retype it (or ignore/singlequote for literal).
+
+In scripts/gate-canaries.sh line 22:
+  run_canary | while read -r c; do PASS=$((PASS+1)); done
+                                   ^--^ SC2030 (info): Modification of PASS is local (to subshell caused by pipeline).
+
+In scripts/gate-canaries.sh line 30:
+echo "passed: $PASS"
+              ^---^ SC2031 (info): PASS was modified in a subshell. That change might be lost.
+
+##[error]Process completed with exit code 123.

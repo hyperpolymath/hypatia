@@ -54,8 +54,9 @@ defmodule Hypatia.ScorecardReconciler do
   #                      remediation exists via the GitHub settings API
   #                      (enable branch protection, require reviews). NOT a
   #                      code change and NOT non-actionable — a third, narrow
-  #                      action class so config findings are auto-remediated
-  #                      under full-auto policy instead of escalated. (#265)
+  #                      action class. Escalated to the owner by default; auto-
+  #                      remediated only under the explicit full-auto policy.
+  #                      (#265; owner answer on hypatia#1080 group E)
   #   :open_escalate   — unknown / not safely automatable. Leave OPEN and
   #                      ensure a tracking issue (never silently drop —
   #                      "didn't look" is an escaped-defect KPI breach).
@@ -108,8 +109,9 @@ defmodule Hypatia.ScorecardReconciler do
          "Repository-configuration finding `#{rule}` — deterministically " <>
            "remediable via the GitHub settings API (enable branch " <>
            "protection / require pull-request reviews on the default " <>
-           "branch). Not a code change and not non-actionable; auto-applied " <>
-           "under full-auto policy, escalated under conservative. (#265)"}
+           "branch). Not a code change and not non-actionable; escalated " <>
+           "to the owner by default, auto-applied only under the explicit " <>
+           "full-auto policy. (#265)"}
 
       true ->
         {:open_escalate, nil,
@@ -131,6 +133,12 @@ defmodule Hypatia.ScorecardReconciler do
     :crypto.hash(:sha256, raw) |> Base.encode16(case: :lower) |> binary_part(0, 16)
   end
 
+  @doc false
+  # :conservative (default, owner answer on hypatia#1080 group E, 2026-11-14)
+  # escalates settings findings for the owner; :full_auto auto-applies
+  # :fix_settings via the settings API only when the caller asks for it. (#265)
+  def policy(opts), do: Keyword.get(opts, :policy, :conservative)
+
   @doc """
   Full reconcile pass for one repo. Returns a summary map with the
   meta-audit gates (looked/found/classified/acted/...). `opts`:
@@ -138,10 +146,7 @@ defmodule Hypatia.ScorecardReconciler do
   """
   def reconcile(owner, repo, opts \\ []) do
     dry = Keyword.get(opts, :dry_run, false)
-    # :full_auto (default) auto-applies :fix_settings via the settings API;
-    # :conservative escalates settings findings for human review instead of
-    # mutating repo configuration automatically. (#265)
-    policy = Keyword.get(opts, :policy, :full_auto)
+    policy = policy(opts)
 
     case fetch_open_alerts(owner, repo) do
       {:error, reason} ->
@@ -204,11 +209,18 @@ defmodule Hypatia.ScorecardReconciler do
           fix_requested: Enum.count(results, &(&1.action == :fix)),
           settings_remediated: Enum.count(results, &(&1.acted == :settings_remediated)),
           settings_actionable: Enum.count(results, &(&1.action == :fix_settings)),
-          escalated: Enum.count(results, &(&1.action == :open_escalate)),
+          escalated: Enum.count(results, &escalated?/1),
           results: results
         }
     end
   end
+
+  @doc false
+  # A result counts as escalated when it was left open for a person: an
+  # :open_escalate finding, or a settings finding the default policy escalated.
+  def escalated?(%{action: :open_escalate}), do: true
+  def escalated?(%{acted: :escalated_conservative}), do: true
+  def escalated?(_), do: false
 
   @doc """
   Verify pass: a finding the registry recorded as dismissed that is OPEN

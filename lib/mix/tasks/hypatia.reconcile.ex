@@ -8,13 +8,14 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
       mix hypatia.reconcile owner/repo                # reconcile + write registry
       mix hypatia.reconcile owner/repo --dry-run      # classify only, no mutation
       mix hypatia.reconcile owner/repo --verify       # recurrence-defect check
-      mix hypatia.reconcile owner/repo --conservative # escalate :fix_settings
-                                                      # instead of auto-applying
+      mix hypatia.reconcile owner/repo --apply-settings # also change repo
+                                                        # settings (:fix_settings)
 
-  Policy (#265): default `:full_auto` auto-applies repo-configuration
-  remediations (`:fix_settings` — branch protection / required reviews) via
-  the GitHub settings API. `--conservative` escalates those for human review
-  instead.
+  Policy (#265, owner answer on hypatia#1080 group E): by default the
+  repo-configuration findings (`:fix_settings`: branch protection, required
+  reviews) are escalated to the owner, never changed. `--apply-settings`
+  applies them through the GitHub settings API. `--conservative` is still
+  accepted and is the default.
 
   Requires `GITHUB_TOKEN` (security_events scope). Non-actionable and
   design-correct-exception findings are dismissed-with-rationale on GitHub
@@ -31,7 +32,12 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
   def run(argv) do
     {opts, rest, _} =
       OptionParser.parse(argv,
-        switches: [dry_run: :boolean, verify: :boolean, conservative: :boolean]
+        switches: [
+          dry_run: :boolean,
+          verify: :boolean,
+          conservative: :boolean,
+          apply_settings: :boolean
+        ]
       )
 
     case rest do
@@ -52,14 +58,21 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
           else
             ScorecardReconciler.reconcile(owner, repo,
               dry_run: !!opts[:dry_run],
-              policy: if(opts[:conservative], do: :conservative, else: :full_auto)
+              policy: policy(opts)
             )
           end
 
         IO.puts(Jason.encode!(result, pretty: true))
 
       _ ->
-        Mix.raise("Usage: mix hypatia.reconcile owner/repo [--dry-run|--verify]")
+        Mix.raise("Usage: mix hypatia.reconcile owner/repo [--dry-run|--verify|--apply-settings]")
     end
+  end
+
+  @doc false
+  # Settings are changed only on an explicit --apply-settings; --conservative
+  # wins if both are given.
+  def policy(opts) do
+    if opts[:apply_settings] && !opts[:conservative], do: :full_auto, else: :conservative
   end
 end

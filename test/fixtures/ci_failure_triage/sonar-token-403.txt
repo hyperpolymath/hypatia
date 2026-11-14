@@ -1,0 +1,3 @@
+INFO  Communicating with SonarQube Cloud
+ERROR Failed to query JRE metadata: GET https://api.sonarcloud.io/analysis/jres?os=linux&arch=x86_64 failed with HTTP 403 Forbidden. Please check the property sonar.token or the environment variable SONAR_TOKEN.
+INFO  EXECUTION FAILURE
