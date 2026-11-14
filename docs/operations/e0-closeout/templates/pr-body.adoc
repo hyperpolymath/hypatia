@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Pull request body for a work-order run
+
+Use this body for each pull request that a work-order run opens. GitHub reads
+the body as Markdown, so the block below is Markdown. Keep the five headings.
+An empty "Not done" part is not permitted: write "Nothing" and say why.
+
+[source,markdown]
+----
+## What
+
+<Two sentences. The work order id and the result.>
+
+## Why
+
+<The authority line of the work order, with its link.>
+
+## Evidence
+
+- Head commit: `<sha>`
+- Ran: `<command>` gave `<n> tests, 0 failures`. New tests: `<names>`.
+- CI: <link to the run, or "not run yet">.
+- Read, not run: <any claim that rests on reading the code>.
+
+## Not done
+
+- <Each acceptance line that is not met, with the reason.>
+- <Each thing that you saw and did not change.>
+
+## Cost
+
+- Work order `<id>`, model `<model>`, effort `<effort>`, <n> turns, $<amount> (client estimate).
+----
+
+== Rules
+
+* State a result only with its evidence. "Verified" needs a command and its output.
+* Do not write a model name in a commit message. The "Cost" line of the body
+  is the one place for it.
+* Do not close an issue from the body. The owner closes issues.

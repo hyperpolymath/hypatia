@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-07: Withdrawn evidence changes confidence and tier
+:wo-id: E0-07
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 12
+:wo-max-turns: 200
+:wo-branch: fix/e0-07-withdrawn-evidence
+:wo-depends: none
+
+== Goal
+
+When a person withdraws an outcome row, the confidence and the dispatch tier
+of its recipe are computed again without that row. The withdrawn row stays in
+the log.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 9 ("If
+evidence is withdrawn, recompute or revise dependent verdicts") and acceptance
+A7. Related: https://github.com/hyperpolymath/hypatia/issues/919[issue 919].
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 486) has no
+  notion of a withdrawn row.
+* Same file: `update_confidence_file/5` (line 420) computes confidence from the
+  outcome rows with `bayesian_update/3` (line 530).
+  `annealed_strategy_from_store/3` (line 1006) and `reconcile_annealing_state/2`
+  (line 1075) compute the stage from the qualified counts. So a new count
+  can give a new confidence and a new stage.
+* `lib/safety/quarantine.ex`, `retract_dependents/1` (line 110) retracts
+  findings that rest on a quarantined rule, bot or prover. Only
+  `test/retraction_test.exs` calls it.
+* `test/retraction_test.exs` has no case that withdraws an outcome row.
+* A fleet row has the identity `fleet_import_id` (`lib/outcome_tracker.ex`, line 55).
+  A local row has only a provisional identity (file and line).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write a design note of 1 page in the pull request body. It answers:
+.. How a withdrawal is recorded. The log is append-only, so the note must keep
+   the withdrawn row and add a record of the withdrawal.
+.. How the withdrawal names its row, for a fleet row and for a local row.
+.. Who can write a withdrawal, and by which command.
+.. Which stored values are computed again, and when.
++
+Name the option that is most correct in the long term. Say so if you choose another.
+. Stop for the owner if the note needs a stable id for local rows. That id is
+  the subject of `E0-11`.
+. Write the tests first: a verified success raises confidence, a withdrawal of
+  that row returns confidence and stage to the earlier values, and the log
+  still has both records.
+. Implement the smallest change that passes the tests.
+
+== Acceptance
+
+* New tests pass in `test/outcome_tracker_test.exs`. They show the 3 points of step 4.
+* A withdrawal of a row that does not exist returns an error and writes nothing.
+* `mix test test/outcome_tracker_test.exs test/retraction_test.exs test/cross_repo_learning_test.exs`
+  passes. `mix test` has 0 failures. `mix format --check-formatted` passes.
+* The pull request body has the design note and the rejected options.
+
+== Stop and ask
+
+* The design needs a change to the row identity (see step 3).
+* A withdrawal must also retract findings through `Quarantine.retract_dependents/1`.
+  That wires a safety module into a live path, which this folder excludes.
+* The cost reaches the cap before the acceptance checks pass.

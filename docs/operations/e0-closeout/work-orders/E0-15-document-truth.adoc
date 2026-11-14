@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-15: Truth update of the documents
+:wo-id: E0-15
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: haiku
+:wo-effort: medium
+:wo-cap-usd: 3
+:wo-max-turns: 80
+:wo-branch: docs/e0-15-document-truth
+:wo-depends: none
+
+== Goal
+
+Each claim in the list below matches a measurement, or it is removed. Each
+edit has its measuring command beside it in the pull request body.
+
+== Authority
+
+`.claude/CLAUDE.md`: "Counts in this file are load-bearing ... re-measure
+rather than editing a number by eye."
+
+== Facts measured
+
+Commit `4d7f059`, measured on 2026-11-14.
+
+[cols="3,3,2",options="header"]
+|===
+|Claim |Measuring command |Measured
+
+|`.claude/CLAUDE.md`: "33 rule modules" (2 places)
+|`find lib/rules -maxdepth 1 -name '*.ex' \| wc -l`
+|44
+
+|`.claude/CLAUDE.md`: "43 recipes"
+|`just --summary \| wc -w`
+|45
+
+|`.claude/CLAUDE.md`: "`mix test` excludes 242 `:verisim_data` tests"
+|`mix test` (last line)
+|246 excluded, over 5 tags
+
+|`.claude/CLAUDE.md`, Known Gaps 5: the ESN learns from a stale shape
+|`mix test test/neural_training_qualification_test.exs`
+|Passes. The fallback is in `lib/neural/training_pipeline.ex`.
+
+|`docs/architecture/NEURAL-ARCHITECTURE.adoc`, line 5: "5 neural networks"
+|`ls lib/neural`
+|8 networks
+
+|`ROADMAP.adoc`: "5 neural networks", "302 repos scanned"
+|none: the figures have no producer
+|not measurable
+
+|`docs/DEBT-REGISTER.adoc`, B-1: `mise.toml` declares Python tools
+|`grep -n python mise.toml`
+|no match
+|===
+
+== Steps
+
+. Run each measuring command. Use your own result, not the table.
+. Edit only the claims in the table. For a count, write the measured number.
+  For a claim with no producer, remove the figure and say that no producer exists.
+. Do not edit a workflow, a licence line or an SPDX header.
+. Put the command and its output for each edit in the pull request body.
+
+== Acceptance
+
+* `bash scripts/check-readme-claims.sh` passes.
+* `asciidoctor` builds each edited `.adoc` file with no warning.
+* The diff has only the lines that carry the claims in the table.
+
+== Stop and ask
+
+* A measured number differs from the table and from the document.
+* An edit needs a judgement about meaning, not a number.
+* The cost reaches the cap before the acceptance checks pass.

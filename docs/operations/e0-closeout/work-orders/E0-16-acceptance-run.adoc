@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-16: E0 acceptance run and receipt
+:wo-id: E0-16
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 10
+:wo-max-turns: 150
+:wo-branch: docs/e0-16-acceptance
+:wo-depends: E0-01 to E0-15
+
+== Goal
+
+One document states, for each of the 7 acceptance statements of issue 984,
+whether it is verified at one exact commit, with the tests that show it. The
+owner uses the document to decide on step E0.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984]: "Only claim
+E0 outcome chain verified when tests show" the 7 statements.
+
+== Facts measured
+
+To be measured by this run. The baseline of 2026-11-14 is in `../README.adoc`.
+
+== Steps
+
+. Check out `main`. Record the full commit, the toolchain versions and the date.
+. Confirm that each of `E0-01` to `E0-15` is merged or is listed as not done.
+. For each statement A1 to A7 of `../README.adoc`:
+.. name the tests that show it;
+.. run them and copy the result line;
+.. read each test and confirm that it checks the statement, not only a part;
+.. give the status: `verified`, `partly verified` or `not verified`.
+. Run `mix test` and `bash scripts/check-verdicts.sh`. Copy the result lines.
+. Find the CI run of the same commit. Record its link and its conclusion.
+. Write `docs/operations/e0-closeout/ACCEPTANCE.adoc` in the shape of
+  `templates/result-receipt.adoc`, with 1 block for each statement.
+. List what E0 does not cover. Use the "Not in this folder" part of the README.
+
+== Acceptance
+
+* The document names 1 commit, and each result line comes from that commit.
+* Each statement has a status and at least 1 test name, or the words "no test".
+* A statement with a part that no test shows is `partly verified`, not `verified`.
+* The pull request does not close issue 984 and does not comment on it.
+
+== Stop and ask
+
+* A test that the document needs fails or does not exist.
+* The CI run of the commit is red or absent.
+* The cost reaches the cap before the document is complete.

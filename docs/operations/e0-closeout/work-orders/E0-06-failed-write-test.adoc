@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-06: Test that a failed write leaves the source unacknowledged
+:wo-id: E0-06
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 4
+:wo-max-turns: 100
+:wo-branch: fix/e0-06-failed-write-test
+:wo-depends: none
+
+== Goal
+
+A test proves that the fleet import does not acknowledge a source row when
+the destination write fails, and that the next poll imports the row once.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A4:
+"a failed write does not commit or acknowledge an event".
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/learning_scheduler.ex`, `import_fleet_lines/2`: when
+  `OutcomeTracker.record_fleet_outcome/6` returns `{:error, reason}`, the
+  reduction halts with `{:error, {:write_failed, line_number, reason}}` (line 898).
+* Same file: the result of `ingest_fleet_outcomes/1` (line 108) becomes
+  `last_fleet_signature` in the state (line 193).
+* No test in `test/` forces this write to fail. The 2 matches for
+  `write_failed` in `test/` belong to other features.
+* Ran: `mix test test/learning_scheduler_test.exs` gave 0 failures.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Add the test to `test/learning_scheduler_test.exs`:
+.. Write a fleet file with 1 qualified row.
+.. Make the destination write fail by structure, for example put a directory
+   where the month log file must be. Do not use `chmod`: a root user ignores it.
+.. Poll. Assert the error, assert zero stored rows, and assert that the fleet
+   signature did not advance.
+.. Remove the obstacle. Poll again. Assert exactly 1 stored row.
+. Run a mutation check by hand: change the `{:halt, {:error, ...}}` branch to
+  continue, run the new test, and confirm that it fails. Then restore the code.
+. Change no file under `lib/` in the final diff.
+
+== Acceptance
+
+* The new test passes on the unchanged code.
+* The pull request body shows the failing output of the mutation check and the
+  passing output after the restore.
+* `mix test` has 0 failures. `mix format --check-formatted` passes.
+* The diff touches only `test/learning_scheduler_test.exs`.
+
+== Stop and ask
+
+* The new test fails on the unchanged code. That is a defect in the import.
+  Report it with the output. Do not fix it in this work order.
+* The cost reaches the cap before the acceptance checks pass.

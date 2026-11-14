@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-14: Cross-repo residuals
+:wo-id: E0-14
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 6
+:wo-max-turns: 140
+:wo-branch: fix/e0-14-cross-repo-residuals
+:wo-depends: none
+
+== Goal
+
+Tests pin what cross-repo learning does with a qualified false positive and
+with a small sample. Where the present behaviour is wrong, the code changes.
+Where it is intended, a test and a comment say so.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A6:
+"Cross-repo consumers cannot re-introduce unqualified confidence."
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/cross_repo_learning.ex` filters with `qualified_rows/1` (line 137) for
+  the local counts (line 152), for the transfer sources, for the anomalies
+  and for the index.
+* `compute_transferred_confidence/3`: the confidence of a source repo is
+  `successes / max(total, 1)` (line 382). The sources need a minimum count
+  (`@min_transfer_outcomes`), and the weight is the count times a drift discount.
+* `detect_recipe_anomalies/1` (line 522) and `detect_language_anomalies/1`
+  (line 557) count each row whose outcome is not `"success"` as a failure. A
+  qualified `false_positive` row is therefore a failure for the anomaly rate.
+* Ran: `mix test test/cross_repo_learning_test.exs` gave 0 failures.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write tests that state the present behaviour for:
+.. a source repo with 3 verified successes and 0 failures;
+.. a recipe with 2 verified successes and 2 qualified false positives;
+.. a mix of qualified and unqualified rows (the unqualified rows change nothing).
+. For the first 2 cases, write in the pull request body whether the present
+  result is the intended one, and why. Name the option that is most correct in
+  the long term.
+. Change the code only where the answer is "not intended" and the fix is
+  local. Add a comment at lines 382, 522 and 557 that states the rule.
+
+== Acceptance
+
+* The new tests pass and are in `test/cross_repo_learning_test.exs`.
+* The third case shows that an unqualified row changes no confidence and no anomaly.
+* `mix test` has 0 failures. `mix format --check-formatted` passes.
+* The diff touches only `lib/cross_repo_learning.ex` and its test file.
+
+== Stop and ask
+
+* The intended treatment of a false positive in the anomaly rate is not
+  clear from the code or the documents.
+* A fix needs a change to the annealing or to `OutcomeTracker`.
+* The cost reaches the cap before the acceptance checks pass.

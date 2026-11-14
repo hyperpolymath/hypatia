@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-03: Fleet rows with no_op and unverified stay as audit evidence
+:wo-id: E0-03
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 160
+:wo-branch: fix/e0-03-fleet-audit-rows
+:wo-depends: none
+
+== Goal
+
+The fleet import keeps each row that it cannot qualify as an audit row. Such
+a row is visible and countable as an attempt. It gives no positive learning
+and no negative learning.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984]: "Unsupported
+records may still count as auditable attempts, not successful fixes"
+(step 9), and acceptance A5.
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/learning_scheduler.ex`, `classify_fleet_record/1` (line 756): a row
+  that is not one of the 3 accepted pairs becomes `:unqualified`, and then
+  `:skip`. The row is not stored anywhere.
+* The string `no_op` does not occur in `lib/`.
+* Same file, `import_fleet_lines/2` (line 893): a write error halts the import
+  and the source is not acknowledged.
+* `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 486): a row
+  with an unknown `"verification"` value falls into `ignored`.
+* Ran: `mix test test/learning_scheduler_test.exs` gave 0 failures.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/learning_scheduler_test.exs`.
+. Make `classify_fleet_record/1` return an audit classification for a row
+  that has a valid recipe and repo and is not qualified. Keep `:skip` for a row
+  with no recipe or no repo, and for a row with `"bot" => "hypatia"`.
+. Store the audit row through the same path as a qualified row, with the same
+  `fleet_import_id`. Set `"verification"` to the fleet verdict when it is
+  `no_op` or `unverified`. Set it to `"unqualified"` for every other case.
+  Keep the original `"verdict"`, `"exit_code"`, `"before_hits"` and `"after_hits"`.
+. Do not count an audit row in the recipes that the scheduler recomputes.
+
+== Acceptance
+
+* New tests in `test/learning_scheduler_test.exs` show:
+** a `no_op` row and an `unverified` row are stored once, and a second poll
+   does not store them again;
+** `OutcomeTracker.qualified_outcome_counts/1` on the stored rows gives 0
+   successes, 0 failures and the rows under `ignored`;
+** a `success` row with no verdict is stored as `"unqualified"`.
+* `mix test test/learning_scheduler_test.exs test/outcome_tracker_test.exs`
+  passes. `mix test` has 0 failures. `mix format --check-formatted` passes.
+* The change touches only `lib/learning_scheduler.ex` and its test file.
+
+== Stop and ask
+
+* A stored audit row changes a confidence value, an annealing stage or a
+  dispatch tier in any test.
+* The identity of an audit row needs a new field.
+* The cost reaches the cap before the acceptance checks pass.

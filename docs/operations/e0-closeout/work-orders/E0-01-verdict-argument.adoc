@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-01: The outcome command accepts the predicate verdict
+:wo-id: E0-01
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 5
+:wo-max-turns: 120
+:wo-branch: fix/e0-01-verdict-argument
+:wo-depends: none
+
+== Goal
+
+`mix hypatia.record_outcome` accepts a `--verdict` option with the 5 values
+that the fleet computes. Hypatia stores the verdict in the outcome row. A
+verdict can lower trust. It can never raise trust by itself.
+
+== Authority
+
+* https://github.com/hyperpolymath/gitbot-fleet/issues/647[gitbot-fleet issue 647]:
+  only `verified` is positive evidence, `no_op` is neutral, `unverified` is no evidence.
+* https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], acceptance A3.
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* `lib/mix/tasks/hypatia.record_outcome.ex`, `run/1` (line 57): the switches
+  (line 45) have no verdict. `--outcome` accepts `success`, `failure` and
+  `false_positive` only (lines 68 to 82).
+* Same function: with `--no-verify` the row gets `"verification" => "unverified"`
+  (line 112). Without it, `OutcomeTracker.record_outcome_for_fix/5` rescans.
+* `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 486): a success
+  row counts only with `"verification" => "verified"`. A failure row counts
+  with `failed`, `incomplete` or `verified`. Every other row is `ignored`.
+* `lib/learning_scheduler.ex`, `classify_fleet_record/1` (line 756) accepts only
+  these pairs: `verified` with `success`, `failed` with `failure`, `incomplete`
+  with `failure`.
+* No test in `test/` runs this Mix task.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in a new file `test/mix_tasks/record_outcome_test.exs`.
+  Use a temporary data directory. Do not write to a real outcome log.
+. Add `verdict: :string` to the switches. Accept `verified`, `no_op`,
+  `incomplete`, `unverified` and `failed`. Reject any other value with exit code 1.
+. Reject a pair that `classify_fleet_record/1` does not accept, for example
+  `--outcome success --verdict failed`, with exit code 1 and a clear message.
+. Store the value in the row as `"verdict"`. Apply this table:
++
+[cols="1,3",options="header"]
+|===
+|Verdict |Behaviour
+|`verified` |No change from today. The rescan of Hypatia decides `"verification"`.
+|`no_op` |No rescan. Record with `"verification" => "no_op"`.
+|`unverified` |No rescan. Record with `"verification" => "unverified"`.
+|`incomplete` |Record the failure with `"verification" => "incomplete"`.
+|`failed` |Record the failure with `"verification" => "failed"`.
+|===
+. Add the verdict to the `--format json` output.
+. Add the option to `docs/operations/dispatch-runner-contract.adoc`.
+
+== Acceptance
+
+* `mix test test/mix_tasks/record_outcome_test.exs` passes. The tests show:
+** a `no_op` row and an `unverified` row leave `qualified_outcome_counts/1` at
+   zero successes and zero failures;
+** a `failed` row and an `incomplete` row count as 1 failure each;
+** an invalid verdict and a contradictory pair exit with code 1 and write no row;
+** a call with no `--verdict` behaves as before.
+* `mix format --check-formatted` passes. `mix test` has 0 failures.
+* The change touches only the Mix task, its new test file and the contract document.
+
+== Stop and ask
+
+* The owner wants the fleet verdict to replace the rescan of Hypatia. This work
+  order keeps the rescan.
+* `qualified_outcome_counts/1` no longer matches the facts above.
+* The cost reaches the cap before the acceptance checks pass.

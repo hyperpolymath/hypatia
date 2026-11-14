@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0 close-out: work orders for the true-outcome chain
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-14
+:toc:
+
+== What this folder is
+
+This folder holds the work orders that close step E0 of
+https://github.com/hyperpolymath/hypatia/issues/984[issue 984] ("Event chain
+E0-E5"). E0 is the Hypatia part of Wave 0, item 1 ("true outcomes"), of the
+Kautz-ladder ultraplan
+(`docs/ULTRAPLAN-KAUTZ-LADDER-2026-10-19.adoc` in `metadatastician/standards`).
+
+The owner chose "E0 close-out" as the first target on 2026-11-14. Each work
+order is one bounded task for one agent run. One work order makes one branch
+and one draft pull request.
+
+Nothing here is a claim that E0 is done. E0 is done only when work order
+`E0-16` writes its acceptance receipt and the owner accepts it.
+
+== Definition of done
+
+These are the acceptance statements of issue 984, in short form. The right
+column names the work orders that supply the missing evidence.
+
+[cols="1,6,2",options="header"]
+|===
+|# |Statement |Work orders
+
+|A1
+|One verified event credits one outcome and one learning update across poll, restart and replay.
+|Tests exist. `E0-16` re-runs them.
+
+|A2
+|Two distinct attempts with identical outcomes credit twice if both are verified. A replay of one event never credits twice.
+|Tests exist. `E0-11` and `E0-12` replace the provisional identity.
+
+|A3
+|An exit code of zero, an absent verifier, or contradictory evidence gives zero positive learning and zero increase in maturity.
+|`E0-01` to `E0-05`
+
+|A4
+|A true failed attempt lowers confidence. A failed write does not commit or acknowledge an event.
+|`E0-06`
+
+|A5
+|Missing, unreadable or corrupt evidence causes a visible failure or unknown, never a silent success.
+|`E0-03`, `E0-13`
+
+|A6
+|Cross-repo consumers cannot bring back unqualified confidence.
+|`E0-14`
+
+|A7
+|A receipt names its exact evidence and supports retraction without loss of audit history.
+|`E0-07` to `E0-10`
+|===
+
+== Baseline, measured 2026-11-14
+
+Measured at `main` commit `4d7f059` with Erlang/OTP 27.3.4.19 and Elixir 1.17.3.
+
+* `mix test`: 3,145 tests, 0 failures, 246 excluded, 54 seconds.
+* The 4 test files that the E0 step of `tests.yml` names (`outcome_tracker_test`,
+  `cross_repo_learning_test`, `outcome_tracker_runtime_store_test`,
+  `learning_runtime_store_test`): 61 tests, 0 failures.
+* `learning_scheduler_test`, `neural_training_qualification_test`,
+  `graph_of_trust_qualification_test`, `retraction_test`: 51 tests, 0 failures.
+  No targeted step names these 4 files. The `Integration Tests` job runs the
+  whole suite (`mix test --include integration`), so they do run in CI.
+* The comment in `.github/workflows/tests.yml` that says the repository has
+  "known-red test families" did not match this run.
+
+A line number in a work order is correct for commit `4d7f059` only. The
+function name is the stable locator. Measure again before you edit.
+
+== The work orders
+
+[cols="1,5,1,2,1,2",options="header"]
+|===
+|Id |Title |Size |Model |Cap |Depends on
+
+|E0-01 |The outcome command accepts the predicate verdict |S |sonnet |$5 |none
+|E0-02 |The fleet passes the verdict through (gitbot-fleet) |S |sonnet |$3 |E0-01
+|E0-03 |Fleet rows with `no_op` and `unverified` stay as audit evidence |M |sonnet |$8 |none
+|E0-04 |Verification comes from a rescan, not from the caller |M |opus, then sonnet |$12 |none
+|E0-05 |The live neural path learns from qualified evidence only |S |sonnet |$6 |none
+|E0-06 |Test: a failed write leaves the source unacknowledged |S |sonnet |$4 |none
+|E0-07 |Withdrawn evidence changes confidence and tier |M |opus, then sonnet |$12 |none
+|E0-08 |The receipt: design and ruling packet |Design |opus |$10 |none
+|E0-09 |The receipt: schema, emitter and tests |M |sonnet |$15 |E0-08
+|E0-10 |The receipt: Idris2 model and gate |M |opus |$25 |E0-09
+|E0-11 |Hypatia reads a producer event id |S |sonnet |$6 |E0-08
+|E0-12 |The fleet writes an event id for each attempt (gitbot-fleet) |S |sonnet |$6 |E0-08, E0-11
+|E0-13 |Reports count qualified evidence |S |sonnet |$6 |none
+|E0-14 |Cross-repo residuals |S |sonnet |$6 |none
+|E0-15 |Truth update of the documents |S |haiku |$3 |none
+|E0-16 |E0 acceptance run and receipt |M |opus |$10 |all
+|===
+
+The caps add up to $137. The estimate for the whole close-out, with rework, is
+$115 to $315. That figure is an estimate. The first 3 runs (`E0-06`, `E0-01`,
+`E0-13`) are the test run that replaces it with measured numbers.
+
+=== Order
+
+. First lane, no decisions needed: `E0-06`, `E0-01`, `E0-13`, `E0-05`, `E0-14`, `E0-03`, `E0-15`.
+. Second lane, each starts with a design note for the owner: `E0-04`, `E0-07`, `E0-08`.
+. After the rulings: `E0-02`, `E0-09`, `E0-10`, `E0-11`, `E0-12`.
+. Last: `E0-16`.
+
+== Rules for every run
+
+* One work order, one branch, one draft pull request. The agent never merges.
+* The agent reads the work order, then measures the facts again. A fact that
+  no longer holds stops the run.
+* The agent stops and asks at each condition under "Stop and ask". It does not
+  invent a design answer.
+* The pull request body follows `templates/pr-body.adoc`. It has an "Evidence"
+  part, a "Not done" part and a "Cost" line.
+* No run edits a licence file, an SPDX header, or `.github/workflows/actions.lock`.
+* A model above the tier in the work order needs a reason in the pull request body.
+
+== Not in this folder
+
+* Marking the historical outcome log `unverified`. The log is in the
+  `verisim-data` repository.
+* The safety modules (`RateLimiter`, `Safety.Quarantine`, `BatchRollback`) on
+  the dispatch path. The ultraplan places that in Waves 2 and 3.
+* VeriSimDB deployment, the `(ladder)` deed clause, and experiment E1b. These
+  need the owner.
+
+== When to update this memo
+
+Update the table when a work order merges, splits or is withdrawn. Update the
+baseline when the suite result changes. Delete this folder when issue 984
+closes step E0.

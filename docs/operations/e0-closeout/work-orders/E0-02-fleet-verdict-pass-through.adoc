@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-02: The fleet passes the verdict through
+:wo-id: E0-02
+:wo-repo: hyperpolymath/gitbot-fleet
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 3
+:wo-max-turns: 80
+:wo-branch: fix/e0-02-verdict-pass-through
+:wo-depends: E0-01
+
+== Goal
+
+`scripts/dispatch-runner.sh` gives its predicate verdict to
+`mix hypatia.record_outcome --verdict`. The call for `no_op` and `unverified`
+is no longer skipped. The automation quarantine does not change.
+
+== Authority
+
+* https://github.com/hyperpolymath/gitbot-fleet/issues/647[gitbot-fleet issue 647].
+* https://github.com/hyperpolymath/hypatia/issues/984[hypatia issue 984], acceptance A3 and A5.
+
+== Facts measured
+
+gitbot-fleet commit `7fc2778`, read on 2026-11-14.
+
+* `scripts/dispatch-runner.sh` exits with code 78 at line 152, before it reads
+  the manifest. Nothing in this work order runs in production while that holds.
+* `hypatia_record_outcome()` (line 222) calls `mix hypatia.record_outcome` with
+  `--recipe`, `--repo`, `--file` and `--outcome` (line 255).
+* The verdict is collapsed first (lines 336 to 357): `verified` gives `success`,
+  `failed` and `incomplete` give `failure`, a refusal gives `false_positive`.
+  `no_op` and `unverified` make no call.
+* `tests/outcome-verdict-test.sh` tests the verdict library. `e2e.yml` runs it.
+
+== Steps
+
+. Confirm that `E0-01` is merged in hypatia. Stop if it is not.
+. Measure the facts again.
+. Add the verdict as one more argument of `hypatia_record_outcome()` and pass
+  `--verdict "$verdict"`.
+. Call the function for `no_op` and `unverified` too. Use the outcome value
+  that the pair table of `E0-01` accepts.
+. Keep the collapsed `--outcome` value, so that an older Hypatia still works.
+  An older Hypatia rejects the unknown option: detect that exit code and call
+  again without `--verdict`. Log the fallback.
+. Extend `tests/outcome-verdict-test.sh` with a stub `mix` on `PATH` that
+  records its arguments.
+
+== Acceptance
+
+* `bash tests/outcome-verdict-test.sh` passes and shows the `--verdict` argument
+  for each of the 5 verdicts.
+* `bash tests/automation-quarantine-test.sh` passes with no change to that file.
+* `scripts/dispatch-runner.sh` still exits with code 78 before the manifest.
+* The licence refusal gate in `scripts/dispatch-runner.sh` has no change.
+
+== Stop and ask
+
+* Any step needs a change to the quarantine or to the licence refusal gate.
+* The interface of `E0-01` differs from this work order.
+* The cost reaches the cap before the acceptance checks pass.

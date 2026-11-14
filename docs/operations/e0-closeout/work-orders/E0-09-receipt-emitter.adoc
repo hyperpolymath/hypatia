@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-09: The receipt: schema, emitter and tests
+:wo-id: E0-09
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 15
+:wo-max-turns: 220
+:wo-branch: feat/e0-09-receipt-emitter
+:wo-depends: E0-08
+
+== Goal
+
+Hypatia writes one receipt for each learning update, in the form that the
+ruled design of `E0-08` defines. A Nickel contract refuses a receipt that
+claims more than its evidence.
+
+== Authority
+
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 10 and
+acceptance A7. The owner's rulings on the packet of `E0-08`.
+
+== Facts measured
+
+Commit `4d7f059`, read on 2026-11-14.
+
+* No receipt emitter exists for the learning path (see `E0-08`).
+* `schema/findings.ncl` is the model for a contract with a derived field. Its
+  `LevelDerived` contract refuses a stored level that disagrees.
+* `lib/hypatia/verdict.ex` annotates each finding in one place
+  (`lib/hypatia/cli.ex`, line 1175: "Same funnel, exactly once").
+* The qualified learning updates start in `lib/outcome_tracker.ex`
+  (`update_confidence_file/5`, line 420) and in the fleet import of
+  `lib/learning_scheduler.ex` (`import_fleet_lines/2`).
+
+== Steps
+
+. Confirm that `docs/design/e0-receipt.adoc` is merged and that its status is
+  no longer `PROPOSED`. Stop if the owner has not ruled.
+. Measure the facts again.
+. Write `schema/receipt.ncl` from the field table of the design.
+. Write the tests first: one receipt for one verified update, a filled
+  `missing_evidence` for an update with a gap, and a refusal by the contract
+  for a receipt with `qualification` "verified" and no evidence reference.
+. Write `lib/hypatia/receipt.ex`: build, encode in canonical form, append.
+  Call it from one place for each learning path. A write error of the receipt
+  must fail the update loudly.
+. Add a test that the encoded line is byte-identical to a committed fixture.
+
+== Acceptance
+
+* `mix test` has 0 failures. The new tests are in `test/receipt_test.exs`.
+* A replay of the same event writes no second receipt (test).
+* The fixture line is in canonical form: `jq -cS . fixture` prints the same
+  bytes. This is the profile of `scripts/proof-ledger.sh` (ASCII strings, no
+  numbers). If the design needs numbers, use the estate JCS tool and say so.
+* `mix format --check-formatted` passes.
+* The diff touches only `schema/`, `lib/hypatia/receipt.ex`, the 2 call sites and test files.
+
+== Stop and ask
+
+* The design is not ruled, or a field of the design cannot be filled as the
+  design says.
+* The canonical form needs a tool that the repository does not have.
+* The cost reaches the cap before the acceptance checks pass.
