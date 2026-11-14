@@ -526,6 +526,143 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     end
   end
 
+  defp full_with(from, to), do: String.replace(@scheduled_full, from, to)
+  @full_run ~s(gitleaks git --log-opts="--all" --redact)
+
+  test "a commented-out scanner line is not a scan" do
+    commented_pr =
+      String.replace(
+        @pr_range,
+        "      - run: gitleaks git",
+        "      - run: |\n          echo hi\n          # gitleaks git"
+      )
+
+    assert commented_pr != @pr_range
+    assert check(%{"pr.yml" => commented_pr}) == []
+
+    commented_full =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - run: |\n          echo hi\n          # " <> @full_run
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => commented_full})
+  end
+
+  test "gitleaks --staged and --pre-commit are diff-only" do
+    for flag <- ["--staged", "--pre-commit"] do
+      wf = full_with(@full_run, "gitleaks git #{flag} --redact")
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), flag
+    end
+  end
+
+  test "a PR-only context guard narrows a mixed workflow to PRs" do
+    mixed =
+      full_with(
+        "on:\n  schedule:\n    - cron: '0 3 * * 1'",
+        "on:\n  push:\n    branches: [main]\n  pull_request:"
+      )
+      |> String.replace(
+        "    runs-on: ubuntu-latest",
+        "    if: startsWith(github.ref, 'refs/pull/')\n    runs-on: ubuntu-latest"
+      )
+
+    assert [%{rule: "WF032"}] = check(%{"full.yml" => mixed})
+  end
+
+  test "--no-merges and other commit filters beside --all are a range" do
+    for opts <- ["--all --no-merges", "--all --author=bot", "--all -- src/"] do
+      wf = full_with(~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
+      assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
+    end
+  end
+
+  test "the self-repository expression is read with or without spaces" do
+    wf =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          repository: ${{github.repository}}\n"
+      )
+
+    assert wf != @scheduled_full
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => wf}) == []
+  end
+
+  test "an action's checkout must run on the schedule or manual event itself" do
+    wf =
+      "on:\n  push:\n    branches: [main]\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - if: github.event_name == 'push'\n        uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        "      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7\n"
+
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "a.yml" => wf})
+  end
+
+  test "trufflehog action extra_args limits are a range" do
+    action = fn extra ->
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n" <>
+        "      - uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d\n" <>
+        extra
+    end
+
+    for args <- ["--max-depth 50", "--branch main"] do
+      assert [%{rule: "WF032"}] =
+               check(%{
+                 "pr.yml" => @pr_range,
+                 "a.yml" => action.("        with:\n          extra_args: #{args}\n")
+               }),
+             args
+    end
+  end
+
+  test "a later shallow checkout into the same place wins" do
+    wf =
+      full_with(
+        "      - run: " <> @full_run,
+        "      - uses: actions/checkout@v7.0.1\n      - run: " <> @full_run
+      )
+
+    assert wf != @scheduled_full
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf})
+
+    # A root checkout after a pathed deep checkout does not shadow a scanner
+    # that reads the path.
+    pathed =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+      |> String.replace(
+        "      - run: " <> @full_run,
+        "      - uses: actions/checkout@v7.0.1\n      - run: gitleaks git --source source --log-opts=\"--all\" --redact"
+      )
+
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => pathed}) == []
+  end
+
+  test "an action's path input is where it reads" do
+    wf =
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+        "      - uses: actions/checkout@v7.0.1\n        with:\n          fetch-depth: 0\n          path: source\n" <>
+        "      - uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d\n        with:\n          path: source\n"
+
+    assert check(%{"pr.yml" => @pr_range, "a.yml" => wf}) == []
+  end
+
+  test "a remote trufflehog scan counts only for this repository" do
+    remote = fn url ->
+      "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git #{url}\n"
+    end
+
+    assert [%{rule: "WF032"}] =
+             check(%{"pr.yml" => @pr_range, "r.yml" => remote.("https://github.com/someone/else")})
+
+    assert check(%{
+             "pr.yml" => @pr_range,
+             "r.yml" => remote.("https://github.com/${{ github.repository }}")
+           }) == []
+  end
+
   test "is skipped when audit/3 is told the workflow set is partial" do
     %{findings: fs} = WorkflowAudit.audit(["pr.yml"], %{"pr.yml" => @pr_range}, partial: true)
     refute Enum.any?(fs, &(&1[:rule] == "WF032"))
