@@ -5290,7 +5290,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   WF033: a job with `if: always()` (no `cancelled()` guard) that reads
-  `needs.<job>.result` and does not mention `cancelled`. Advisory info;
+  `needs.<job>.result`, has a non-tolerated step that exits non-zero, and does
+  not mention `cancelled`. Advisory info;
   recipe: `if: ${{ !cancelled() }}`.
   """
   def check_always_reads_cancelled_needs(workflow_contents) do
@@ -5326,37 +5327,52 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp always_reads_cancelled_needs?(%Hypatia.Workflow.Job{} = job, jobs) do
     cond_text = job.if || ""
     text = job_scalars(job.node)
+    needs = direct_needs(job)
 
     # WF029 already reports the artifact form of the same job.
-    # Only a job that can turn red: a non-zero exit or an error annotation.
-    # A summary that just prints the results is harmless.
     Regex.match?(~r/\balways\(\)/, cond_text) and
       not excludes_cancellation?(cond_text) and
-      not requires_need_success?(cond_text) and
+      not every_need_must_succeed?(cond_text, needs) and
       not tolerated_failure?(job) and
-      direct_needs(job) != [] and
+      needs != [] and
       Regex.match?(~r/\bneeds\.[A-Za-z0-9_-]+\.result\b/, text) and
-      Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)|::error/, text) and
+      can_fail?(job) and
       not String.contains?(text, "cancelled") and
       not always_after_cancel?(job, jobs)
   end
 
+  # Only a step that can turn the job red counts: a `run:` with a non-zero
+  # `exit`, on a step that is not `continue-on-error: true`. `::error` alone
+  # is an annotation and does not fail the step (CodeRabbit on #1105).
+  defp can_fail?(job) do
+    Enum.any?(job.steps, fn step ->
+      is_binary(step.run) and not tolerated_failure?(step) and
+        Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run)
+    end)
+  end
+
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
-  # so the conjunct is a guard. Same structural reading as
+  # but it only protects x: a sibling need can still be cancelled while x
+  # succeeded (CodeRabbit on #1105). So it is a guard only when every direct
+  # need has its own success conjunct. Same structural reading as
   # excludes_cancellation?/1: `||` or grouping make it uncertain.
-  defp requires_need_success?(cond_text) do
+  defp every_need_must_succeed?(cond_text, needs) do
     expr =
       cond_text
       |> String.trim()
       |> String.replace(~r/^\$\{\{\s*(.*?)\s*\}\}$/s, "\\1")
       |> String.replace(~r/\s+/, "")
 
-    not String.contains?(expr, "||") and
-      expr
-      |> String.split("&&")
-      |> Enum.any?(
-        &Regex.match?(~r/\Aneeds\.[A-Za-z0-9_-]+\.result==(?:'success'|"success")\z/, &1)
-      )
+    guarded =
+      for c <- String.split(expr, "&&"),
+          [_, id] <- [
+            Regex.run(~r/\Aneeds\.([A-Za-z0-9_-]+)\.result==(?:'success'|"success")\z/, c)
+          ],
+          into: MapSet.new(),
+          do: id
+
+    not String.contains?(expr, "||") and needs != [] and
+      Enum.all?(needs, &MapSet.member?(guarded, &1))
   end
 
   # Every scalar under a job node, joined: env values, step `run:` and `if:`.

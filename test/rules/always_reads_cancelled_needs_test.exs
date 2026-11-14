@@ -102,12 +102,44 @@ defmodule Hypatia.Rules.AlwaysReadsCancelledNeedsTest do
     assert check(%{"f.yml" => wf}) == []
   end
 
-  test "an if: that requires a need's success is a guard" do
+  # CodeRabbit on #1105: a success conjunct protects only its own need.
+  test "a success guard on one need does not cover a cancelled sibling" do
     wf =
       String.replace(
         @verdict,
         "if: always()",
         "if: always() && needs.deed.result == 'success'"
+      )
+
+    assert [%{rule: "WF033", job: "verdict"}] = check(%{"f.yml" => wf})
+  end
+
+  test "success guards on every need are a guard" do
+    wf =
+      String.replace(
+        @verdict,
+        "if: always()",
+        "if: always() && needs.deed.result == 'success' && needs.k9.result == 'success'"
+      )
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  # CodeRabbit on #1105: `::error` is an annotation, not a failure.
+  test "an ::error annotation alone cannot turn the job red" do
+    wf =
+      String.replace(@verdict, "|| exit 1", "|| echo \"::error::lanes $DEED_RESULT $K9_RESULT\"")
+
+    assert check(%{"f.yml" => wf}) == []
+  end
+
+  # CodeRabbit on #1105: a tolerated step cannot fail the job.
+  test "continue-on-error on the only failing step cannot turn the job red" do
+    wf =
+      String.replace(
+        @verdict,
+        "      - run: |\n",
+        "      - continue-on-error: true\n        run: |\n"
       )
 
     assert check(%{"f.yml" => wf}) == []
