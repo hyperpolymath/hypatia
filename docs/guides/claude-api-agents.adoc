@@ -173,13 +173,22 @@ the agents and the headless profile are in hypatia only. Put them in
 `gitbot-fleet` before those 2 runs, or run those 2 with a person.
 
 The script reads the header of the work order (`:wo-model:`, `:wo-effort:`,
-`:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`). It refuses to run when the
-key is not set, because Claude Code would then bill the signed-in plan. It
-also refuses a working tree with changes, an argument that it does not know,
-an agent whose model or effort differs from the work order, and a locale that
-is not UTF-8. It reads the project settings and the headless profile only, so
-a personal permission rule does not widen the run. It writes one line to the
-ledger for each run (`docs/operations/e0-closeout/templates/ledger-line.adoc`).
+`:wo-cap-usd:`, `:wo-max-turns:`, `:wo-agent:`, `:wo-branch:`). It refuses to
+run when the key is not set, because Claude Code would then bill the
+signed-in plan. For the same reason it refuses when a variable sends the run
+to another provider or endpoint: `CLAUDE_CODE_USE_BEDROCK` and the 5 other
+provider selectors, `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL`. A Claude
+Code cloud session sets `ANTHROPIC_BASE_URL` (measured on 2026-11-14), so the
+script refuses to start there.
+
+It also refuses a working tree with changes, an argument that it does not
+know, an agent whose model or effort differs from the work order, a checkout
+without the `e0-work-order` skill, and a locale that is not UTF-8. It reads
+the project settings and the headless profile only, so a personal permission
+rule does not widen the run. The run can push with one command only:
+`git push -u origin` and the branch of its work order. The script writes one
+line to the ledger for each run
+(`docs/operations/e0-closeout/templates/ledger-line.adoc`).
 
 The script, the profile, the agents and the work orders are the other parts
 of the same kit: `scripts/api-agents/`, `.claude/profiles/`, `.claude/agents/`
@@ -223,10 +232,15 @@ once each week.
 
 * `.claude/settings.json` holds the rules for each session in this repository.
   `.claude/profiles/e0-headless.json` adds the rules of an unattended run: it
-  can commit, push a branch and open a draft pull request, and it cannot
-  merge, approve, comment or fetch from the web.
-* A permission rule is not a security boundary. The limits that hold are the
-  scope of the GitHub token and the branch rules.
+  can commit, push the branch of its work order and open a draft pull
+  request. It cannot merge, approve, comment or fetch from the web, and its
+  file tools cannot read the secret files that `.gitignore` names (`.env`,
+  `.envrc`, `*.pem`, `*.key`, `secrets/`).
+* A permission rule is not a security boundary. A run can edit code and run
+  the tests, so it can run any command as its user, and a program that it
+  starts can read any file of that user. The limits that hold are the scope
+  of the GitHub token, the branch rules, and what is in the checkout. Start
+  an unattended run in a checkout that has no secret file.
 * Give an unattended run its own fine-grained GitHub token: this repository
   (and `gitbot-fleet` for its 2 work orders), contents and pull requests with
   write access, nothing else. No administration right, and no right to pass
