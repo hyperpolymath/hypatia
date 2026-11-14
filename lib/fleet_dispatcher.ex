@@ -48,39 +48,18 @@ defmodule Hypatia.FleetDispatcher do
   - `:eliminate` + confidence in [0.85, 0.95) opens a rhodibot PR
   - `:substitute` opens a rhodibot PR for a major or breaking bump
   - `:control` creates a sustainabot advisory when no auto-fix path is available
+
+  An `:eliminate` or `:substitute` recipe with an ownership cap
+  (`TriangleRouter.ownership_cap/1`, owner ruling R1) is never fixed here, by
+  any path: it becomes a sustainabot advisory that refers the finding to
+  cicd-squabbler, or flags it for a person (licence/SPDX).
   """
-  def dispatch_routed_action({:eliminate, recipe, pattern}) do
-    # Direct PR path: when HYPATIA_DIRECT_PR=true and the finding is a
-    # scorecard check with a supported fix script, bypass the fleet pipeline
-    # and create a PR directly via `gh` CLI. This is the fast path for
-    # well-understood scorecard fixes (SC-013, SC-018).
-    if direct_pr_enabled?() and is_direct_pr_candidate?(pattern) do
-      Logger.info("Direct PR path: #{Map.get(pattern, "id", "unknown")}")
-      DirectGitHubPR.create_fix_pr(pattern)
-    else
-      dispatch_eliminate_via_fleet(recipe, pattern)
+  def dispatch_routed_action({tier, recipe, pattern} = action)
+      when tier in [:eliminate, :substitute] do
+    case TriangleRouter.ownership_cap(recipe) do
+      nil -> dispatch_uncapped(action)
+      cap -> dispatch_capped(cap, recipe, pattern)
     end
-  end
-
-  def dispatch_routed_action({:substitute, recipe, pattern}) do
-    proven_module = Map.get(recipe, "proven_module", "unknown")
-
-    # Create a fix suggestion PR via rhodibot
-    dispatch_to_rhodibot(%{
-      type: :fix_suggestion,
-      repo: get_pattern_repo(pattern),
-      file: Map.get(pattern, "file", ""),
-      issue: Map.get(pattern, "description", ""),
-      suggestion: "Replace with proven/#{proven_module}"
-    })
-
-    # Request proof obligation from echidnabot
-    dispatch_to_echidnabot(%{
-      type: :proof_obligation,
-      repo: get_pattern_repo(pattern),
-      claim: "Substitution with #{proven_module} preserves behavior",
-      context: Map.get(pattern, "description", "")
-    })
   end
 
   def dispatch_routed_action({:control, finding}) do
@@ -210,6 +189,59 @@ defmodule Hypatia.FleetDispatcher do
   defp maybe_cve(nil), do: ""
   defp maybe_cve(""), do: ""
   defp maybe_cve(cve), do: " (#{cve})"
+
+  defp dispatch_uncapped({:eliminate, recipe, pattern}) do
+    # Direct PR path: when HYPATIA_DIRECT_PR=true and the finding is a
+    # scorecard check with a supported fix script, bypass the fleet pipeline
+    # and create a PR directly via `gh` CLI. This is the fast path for
+    # well-understood scorecard fixes (SC-013, SC-018).
+    if direct_pr_enabled?() and is_direct_pr_candidate?(pattern) do
+      Logger.info("Direct PR path: #{Map.get(pattern, "id", "unknown")}")
+      DirectGitHubPR.create_fix_pr(pattern)
+    else
+      dispatch_eliminate_via_fleet(recipe, pattern)
+    end
+  end
+
+  defp dispatch_uncapped({:substitute, recipe, pattern}) do
+    proven_module = Map.get(recipe, "proven_module", "unknown")
+
+    # Create a fix suggestion PR via rhodibot
+    dispatch_to_rhodibot(%{
+      type: :fix_suggestion,
+      repo: get_pattern_repo(pattern),
+      file: Map.get(pattern, "file", ""),
+      issue: Map.get(pattern, "description", ""),
+      suggestion: "Replace with proven/#{proven_module}"
+    })
+
+    # Request proof obligation from echidnabot
+    dispatch_to_echidnabot(%{
+      type: :proof_obligation,
+      repo: get_pattern_repo(pattern),
+      claim: "Substitution with #{proven_module} preserves behavior",
+      context: Map.get(pattern, "description", "")
+    })
+  end
+
+  # Owner ruling R1: no fix by Hypatia for a capped recipe, by any path
+  # (fleet, direct PR or substitution PR). The finding is reported instead.
+  defp dispatch_capped(cap, recipe, pattern) do
+    note =
+      case cap do
+        :squabbler_owned -> "refer to cicd-squabbler (first-line fixer, R1)"
+        :flag_only -> "flag only: licence/SPDX findings are never auto-fixed"
+      end
+
+    Logger.info("Ownership cap #{cap}: #{Map.get(recipe, "id")} reported, not fixed")
+
+    dispatch_to_sustainabot(%{
+      type: :eco_score,
+      repo: get_pattern_repo(pattern),
+      score: 0.5,
+      details: "#{Map.get(pattern, "description", "")} (#{Map.get(recipe, "id")}: #{note})"
+    })
+  end
 
   # --- Eliminate dispatch helpers (called after Gate approval) ---
 
@@ -658,10 +690,13 @@ defmodule Hypatia.FleetDispatcher do
   @doc false
   def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
     case Hypatia.Neural.Coordinator.record_outcome(finding, outcome, server) do
-      :ok -> :queued
+      :ok ->
+        :queued
+
       {:error, reason} = error ->
         Logger.warning("Neural outcome not queued: #{inspect(reason)}")
         error
+
       other ->
         Logger.warning("Unexpected neural outcome queue reply: #{inspect(other)}")
         {:error, :unexpected_neural_reply}

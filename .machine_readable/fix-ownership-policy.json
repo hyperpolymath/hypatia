@@ -1,0 +1,38 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0. Owner ruling R1 (2026-11-13) and the owner answers on hypatia#1080 (2026-11-14). Read at compile time by Hypatia.TriangleRouter.ownership_cap/1. A recipe listed here is capped at report_only whatever its confidence, so Bayesian updating cannot raise it back to auto_execute. Recipes not listed (groups E and F) keep their confidence-based tier.",
+  "version": "1.0.0",
+  "updated": "2026-11-14",
+  "squabbler_owned": {
+    "description": "cicd-squabbler is the first-line fixer for these categories (ADR 0003). Hypatia reports the finding and refers it; it runs no parallel fix.",
+    "groups": {
+      "A_pins_and_locks": [
+        "recipe-pin-github-actions",
+        "recipe-pin-dependencies",
+        "recipe-scorecard-pinned-deps"
+      ],
+      "B_workflow_content": [
+        "recipe-scorecard-dangerous-workflow",
+        "recipe-scorecard-sast",
+        "recipe-add-dependabot",
+        "recipe-scorecard-dependency-update"
+      ],
+      "C_safe_code_fixes": [
+        "recipe-fix-http-to-https",
+        "recipe-shell-quote-vars",
+        "recipe-remove-believe-me"
+      ]
+    }
+  },
+  "flag_only": {
+    "description": "Estate cap: licence and SPDX findings are flagged for a person and never auto-fixed, by Hypatia or by a referral.",
+    "groups": {
+      "D_licence_and_spdx": [
+        "recipe-add-license-file",
+        "recipe-fix-spdx-license",
+        "recipe-fix-pmpl-drift",
+        "recipe-fix-spdx-double-suffix",
+        "recipe-scorecard-license"
+      ]
+    }
+  }
+}
