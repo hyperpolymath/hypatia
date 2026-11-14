@@ -223,23 +223,23 @@ Size is in bytes. The sha256 is of the file as it was tracked.
 | RuleLoader fixture (HYP-S007).
 | Inlined into `test/rules/rule_loader_test.exs`.
 
+| `audits/assail-classifications.a2ml`
+| 5623
+| `7d9c7b14419f6a597a9be87e5828ee7aff53648d5edc1175204494205d1bcb24`
+| `eba4c4e6c4ed29dbbc7e1c9ca733f91e54e114f7`
+| panic-attack's user-classification registry: 14 audited findings (file, category, audit, rationale) that panic-attack flips to suppressed. Removed later than the rest (it was retained until panic-attack had a deed reader); last held at `7d1059aa`.
+| `audits/assail-classifications_praxis.deed`, entry for entry, all 14 kept: `(file …)`, `(audit …)` and `(rationale …)` became the `:file`, `:audit` and `:rationale` fields and `(category "…")` the symbol `:category`. No mapping spec covers it; its reader is panic-attack's deed-first `load_user_classifications`, which reads this name before the legacy A2ML ones.
+
 |===
 
 == Retained, with the reason
 
-Two `.a2ml` files stay, each because a live reader outside this repository's
-control still needs exactly that input. Neither has a deed form to move to.
+One `.a2ml` file stays, because a live reader outside this repository's
+control still needs exactly that input, and it has no deed form to move to.
 
 [cols="3,5",options="header"]
 |===
 | Path | Why it stays
-
-| `audits/assail-classifications.a2ml`
-| panic-attack (>= 2.5.5, `load_user_classifications` in its
-`src/assail/mod.rs`) reads only `audits/assail-classifications.a2ml` or
-`.panic-attack-classifications.a2ml`. No mapping spec covers it and
-panic-attack has no deed reader, so deleting it would unsuppress the audited
-findings it records. It goes when panic-attack reads a deed form first.
 
 | `test/fixtures/a2ml/rsr-criteria-v2.a2ml`
 | A dogfood copy of the RSR v2.0 criteria, whose canon
