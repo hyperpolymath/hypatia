@@ -448,7 +448,12 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
   end
 
   test "more git history limits beside --all are a range" do
-    for opts <- ["--all --max-age=1700000000", "--all --first-parent", "--all -50"] do
+    for opts <- [
+          "--all --max-age=1700000000",
+          "--all --first-parent",
+          "--all -50",
+          "--all --not main"
+        ] do
       wf = String.replace(@scheduled_full, ~s(--log-opts="--all"), ~s(--log-opts="#{opts}"))
       assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => wf}), opts
     end
@@ -829,6 +834,31 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
       "on:\n  schedule:\n    - cron: '0 3 * * 1'\njobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: trufflehog git git@gitlab.com:${{ github.repository }}.git\n"
 
     assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "r.yml" => other})
+  end
+
+  test "gitleaks git reads its positional repository path" do
+    wf =
+      full_with(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          path: source\n"
+      )
+
+    here = String.replace(wf, "      - run: gitleaks git ", "      - run: gitleaks git source ")
+    assert here =~ "gitleaks git source "
+    assert check(%{"pr.yml" => @pr_range, "full.yml" => here}) == []
+
+    away = String.replace(wf, "      - run: gitleaks git ", "      - run: gitleaks git other ")
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => away})
+
+    root =
+      String.replace(
+        @scheduled_full,
+        "      - run: gitleaks git ",
+        "      - run: gitleaks git other "
+      )
+
+    assert root =~ "gitleaks git other "
+    assert [%{rule: "WF032"}] = check(%{"pr.yml" => @pr_range, "full.yml" => root})
   end
 
   test "an empty-value comparison on a PR context is not a PR-only guard" do

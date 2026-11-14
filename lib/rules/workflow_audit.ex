@@ -4538,7 +4538,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # `--all` in the --log-opts value, with no revision range or limit beside
-  # it: `--all A..B` (gitleaks' own range example), `^A`, `--since`, `-n`.
+  # it: `--all A..B` (gitleaks' own range example), `^A`, `--not B`,
+  # `--since`, `-n`.
   defp all_history_log_opts?(text) do
     @log_opts
     |> Regex.scan(text, capture: :all_but_first)
@@ -4548,7 +4549,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       String.match?(value, ~r/(^|\s)--all\b/) and
         not String.match?(
           value,
-          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n|-\d+)\b|(^|\s)--(\s|$)/
+          ~r/\.\.|(^|\s)\^|(^|\s)(?:--since|--after|--until|--before|--max-count|--skip|--max-age|--min-age|--since-as-filter|--first-parent|--not|--no-walk|--no-merges|--merges|--min-parents|--max-parents|--author|--committer|--grep|--ancestry-path|--simplify-by-decoration|--remove-empty|-n|-\d+)\b|(^|\s)--(\s|$)/
         )
     end)
   end
@@ -4635,7 +4636,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   name with a separator inside a quoted argument (`echo "x; gitleaks git"`)
   is read as a call; expressions in `fetch-depth` are not evaluated
   (`${{ 0 }}` is not `0`); a reusable workflow's `inputs.*` guards are not
-  resolved against caller values or defaults.
+  resolved against caller values or defaults; environment variables that
+  switch trufflehog to pre-commit mode (`PRE_COMMIT`, `HUSKY`, ...) are
+  not read.
   """
   def check_full_history_scan_remains(workflow_contents) when is_map(workflow_contents) do
     parsed =
@@ -4983,17 +4986,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
     case Regex.run(~r/(?:--source[=\s]+|file:\/\/)(?:"([^"]*)"|'([^']*)'|(\S+))/, run) do
       [_ | groups] ->
         # A relative source is read from the scanner's working directory.
-        source = norm_path(Enum.find(groups, "", &(&1 != "")))
-
-        cond do
-          String.starts_with?(source, "/") -> source
-          wd == "" -> source
-          source == "" -> wd
-          true -> wd <> "/" <> source
-        end
+        in_wd(wd, norm_path(Enum.find(groups, "", &(&1 != ""))))
 
       nil ->
-        wd
+        # `gitleaks git` takes the repository as a positional target right
+        # after the subcommand (`gitleaks git source`).
+        case Regex.run(~r/\bgitleaks\s+git\s+(?:"([^"]+)"|'([^']+)'|([^\s\-<>|&;]\S*))/, run) do
+          [_ | groups] ->
+            in_wd(wd, norm_path(Enum.find(groups, "", &(&1 != ""))))
+
+          nil ->
+            wd
+        end
     end
   end
 
@@ -5015,6 +5019,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.reverse()
     |> Enum.join("/")
     |> then(&(lead <> &1))
+  end
+
+  defp in_wd(wd, source) do
+    cond do
+      String.starts_with?(source, "/") -> source
+      wd == "" -> source
+      source == "" -> wd
+      true -> norm_path(wd <> "/" <> source)
+    end
   end
 
   defp default_wd(nil), do: nil
