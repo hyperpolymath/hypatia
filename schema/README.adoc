@@ -23,7 +23,7 @@ Every finding carries three fields whose meaning is fixed by
 
 |`support`
 |What the evidence supports. `pattern`: a rule matched. `observed`: a fleet
-observation count (the rules.a2ml thresholds, 5 to propose and 10 + 3 fixes to
+observation count (the rule-lifecycle thresholds, 5 to propose and 10 + 3 fixes to
 auto-approve, are belief-formation rules, not soundness proofs). `mechanical`:
 a prover re-checked the flagged file, with both digests recorded.
 

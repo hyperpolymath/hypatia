@@ -6,7 +6,7 @@
 -- other declaration must typecheck, so that the refusal is for the stated
 -- reason and not for a missing import or a typo.
 --
--- Must fail: an observation count is belief formation.  rules.a2ml
+-- Must fail: an observation count is belief formation.  The rule lifecycle
 -- proposes a rule at 5 observations; that threshold is a policy, and no count,
 -- however large, makes `Observed n` sound.
 --
