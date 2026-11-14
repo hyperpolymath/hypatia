@@ -59,8 +59,13 @@ Your repository is checked out into `repo/`, with the two helper checkouts
 oracle walks a repository recursively, so a canon and an oracle sitting inside
 it would be counted as your files — the oracle grading itself. The `path` of
 each is worth knowing if you reference the scorecard in a later step: it is
-written to `repo/<target-path>/.machine_readable/scorecards/rsr.scorecard.a2ml`
-and also printed to the job summary.
+written to `repo/<target-path>/.machine_readable/scorecards/rsr-scorecard_praxis.deed`
+and also printed to the job summary. It is the RSR scorecard deed (standards
+`1-formats/deed/spec/abnf/clauses/rsr-scorecard.abnf`, DRAFT; owner ruling
+2026-11-14), checked by `deed_lint.js --rsr-scorecard`, and it records the
+scored commit as `:source-commit`. It replaced `rsr.scorecard.a2ml`: A2ML is
+retired, so the oracle no longer writes that file, and one already in your
+repository is left for your own migration PR to remove.
 
 == Rule 2 — the SSOT is always explicit
 

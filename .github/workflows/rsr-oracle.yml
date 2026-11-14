@@ -85,7 +85,9 @@ on:
         required: false
         default: ''
       write:
-        description: Write .machine_readable/scorecards/rsr.scorecard.a2ml into the scored repo.
+        description: >-
+          Write .machine_readable/scorecards/rsr-scorecard_praxis.deed (the RSR
+          scorecard deed; it replaced rsr.scorecard.a2ml) into the scored repo.
         type: boolean
         required: false
         default: true
@@ -352,7 +354,16 @@ jobs:
           fi
 
           args=(hypatia.rsr_score "$target" --ssot "$ssot")
-          [ "$WRITE_SCORECARD" = "true" ] && args+=(--write)
+          if [ "$WRITE_SCORECARD" = "true" ]; then
+            args+=(--write)
+            # The scored commit, recorded in the scorecard as :source-commit.
+            # Read from the checkout, never from an expression spliced into
+            # this script.
+            commit=$(git -C "$GITHUB_WORKSPACE/repo" rev-parse HEAD 2>/dev/null || true)
+            if printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+              args+=(--source-commit "$commit")
+            fi
+          fi
           [ -n "$FAIL_UNDER" ] && args+=(--fail-under "$FAIL_UNDER")
 
           # Capture the status BEFORE reading the report. The task writes the
@@ -389,7 +400,7 @@ jobs:
         env:
           TARGET_PATH: ${{ inputs.target-path }}
         run: |
-          scorecard="$GITHUB_WORKSPACE/repo/${TARGET_PATH}/.machine_readable/scorecards/rsr.scorecard.a2ml"
+          scorecard="$GITHUB_WORKSPACE/repo/${TARGET_PATH}/.machine_readable/scorecards/rsr-scorecard_praxis.deed"
           if [ -f "$scorecard" ]; then
             {
               echo '## RSR scorecard'
