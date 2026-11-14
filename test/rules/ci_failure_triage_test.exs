@@ -914,6 +914,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs2.yml", wf)) == []
     end
 
+    test "esac with a redirection attached still closes the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in x) echo yes;; esac>/dev/null)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr2.yml", wf))
+      assert [%{file: "cr2.yml"}] = Enum.filter(found, &(&1.file == "cr2.yml"))
+    end
+
     test "the word case as an argument does not open a case" do
       wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
       found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))

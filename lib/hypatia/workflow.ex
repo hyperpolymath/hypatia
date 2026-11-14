@@ -276,7 +276,7 @@ defmodule Hypatia.Workflow do
   # `$(…)`, so it ends the word and pops nothing (Codex on #1129).
   @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?<, ?>]
   # What may follow the words `case` and `esac`.
-  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?)]
+  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?), ?<, ?>]
 
   defp mask(<<>>, _q, _ws?, _cmt?, _qs?, _parens, acc),
     do: acc |> Enum.reverse() |> IO.iodata_to_binary()
