@@ -66,7 +66,9 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   def state, do: GenServer.call(__MODULE__, :get_state)
 
   @doc "Restore state from a previously snapshotted map."
-  def restore(map) when is_map(map), do: GenServer.call(__MODULE__, {:restore, SourceStore.current(), map})
+  def restore(map) when is_map(map),
+    do: GenServer.call(__MODULE__, {:restore, SourceStore.current(), map})
+
   def restore(_), do: {:error, :unbound_snapshot}
 
   @impl true
@@ -89,8 +91,13 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
       }
 
       # Write to blackboard
-      SourceStore.accept!(Blackboard.write_source(source, :gnn, :graph_metrics, result, blackboard))
-      SourceStore.accept!(Blackboard.write_source(source, :gnn, :cluster, result.cluster, blackboard))
+      SourceStore.accept!(
+        Blackboard.write_source(source, :gnn, :graph_metrics, result, blackboard)
+      )
+
+      SourceStore.accept!(
+        Blackboard.write_source(source, :gnn, :cluster, result.cluster, blackboard)
+      )
 
       {result, state}
     end)

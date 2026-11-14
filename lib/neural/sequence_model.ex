@@ -107,7 +107,9 @@ defmodule Hypatia.Neural.SequenceModel do
         model_trained: state.weights != nil
       }
 
-      SourceStore.accept!(Blackboard.write_source(source, :sequence, :prediction, result, blackboard))
+      SourceStore.accept!(
+        Blackboard.write_source(source, :sequence, :prediction, result, blackboard)
+      )
 
       {result, state}
     end)
@@ -166,5 +168,4 @@ defmodule Hypatia.Neural.SequenceModel do
 
     SourceStore.tag(snap, state)
   end
-
 end

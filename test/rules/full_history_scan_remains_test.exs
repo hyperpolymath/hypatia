@@ -829,7 +829,10 @@ defmodule Hypatia.Rules.FullHistoryScanRemainsTest do
     end
 
     assert [%{rule: "WF032"}] =
-             check(%{"pr.yml" => @pr_range, "r.yml" => remote.("https://github.com/someone/else")})
+             check(%{
+               "pr.yml" => @pr_range,
+               "r.yml" => remote.("https://github.com/someone/else")
+             })
 
     assert check(%{
              "pr.yml" => @pr_range,

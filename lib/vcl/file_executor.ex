@@ -137,11 +137,20 @@ defmodule Hypatia.VCL.FileExecutor do
             base_path = Path.join(expand_path(opts), store)
 
             case store do
-              "scans" -> load_json_directory(base_path, ".json")
-              "patterns" -> load_single_json(Path.join(expand_path(opts), "patterns/registry.json"))
-              "recipes" -> load_json_directory(base_path, ".json", "recipe-")
-              "outcomes" -> load_jsonl_directory(base_path)
-              _ -> []
+              "scans" ->
+                load_json_directory(base_path, ".json")
+
+              "patterns" ->
+                load_single_json(Path.join(expand_path(opts), "patterns/registry.json"))
+
+              "recipes" ->
+                load_json_directory(base_path, ".json", "recipe-")
+
+              "outcomes" ->
+                load_jsonl_directory(base_path)
+
+              _ ->
+                []
             end
           end)
 

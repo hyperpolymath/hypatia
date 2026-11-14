@@ -324,7 +324,8 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
   @doc false
   def source_esn_signal(report) do
-    if Hypatia.Neural.SourceStore.ready_report?(report) and get_in(report, [:esn, :trained]) == true do
+    if Hypatia.Neural.SourceStore.ready_report?(report) and
+         get_in(report, [:esn, :trained]) == true do
       drift = get_in(report, [:esn, :drift]) || :unavailable
       {drift, drift in [:rising_drift, :falling_drift]}
     else

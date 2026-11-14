@@ -122,7 +122,9 @@ defmodule Hypatia.Neural.TrustRestartTest do
   defp isolated_cohort do
     networks =
       Map.new(Persistence.default_networks(), fn {name, module} ->
-        pid = start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+        pid =
+          start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+
         {name, pid}
       end)
 

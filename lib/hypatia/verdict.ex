@@ -109,7 +109,14 @@ defmodule Hypatia.Verdict do
          :ok <- check_target_digest(digest, recheck.target_sha256) do
       support =
         recheck
-        |> Map.take([:prover, :prover_version, :target, :target_sha256, :artefact_sha256, :result])
+        |> Map.take([
+          :prover,
+          :prover_version,
+          :target,
+          :target_sha256,
+          :artefact_sha256,
+          :result
+        ])
         |> Map.put(:kind, "mechanical")
 
       {:ok, finding |> Map.put(:support, support) |> annotate()}
