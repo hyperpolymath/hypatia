@@ -10,6 +10,11 @@
 
 set -euo pipefail
 
+# The launch script refuses a locale that is not UTF-8, so run under one.
+for loc in C.UTF-8 en_US.UTF-8; do
+  if [[ "$(LC_ALL=$loc locale charmap 2>/dev/null)" == UTF-8 ]]; then export LC_ALL=$loc; break; fi
+done
+
 here=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -77,5 +82,9 @@ done
 echo change > "$repo/untracked.txt"
 if run E0-98 >/dev/null 2>&1; then fail "ran with a dirty working tree"; fi
 [[ "$(wc -l < "$STUB_LOG")" == "$before" ]] && ok "a dirty working tree is refused" || fail "dirty tree reached claude"
+
+rm "$repo/untracked.txt"
+if LC_ALL=C run E0-98 >/dev/null 2>&1; then fail "ran with a locale that is not UTF-8"; fi
+[[ "$(wc -l < "$STUB_LOG")" == "$before" ]] && ok "a locale that is not UTF-8 is refused" || fail "a non-UTF-8 locale reached claude"
 
 echo "run-work-order: $pass checks passed"

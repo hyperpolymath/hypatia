@@ -76,6 +76,13 @@ if [ "$dry" = "--dry-run" ]; then
 fi
 
 [ -n "${ANTHROPIC_API_KEY:-}" ] || die "ANTHROPIC_API_KEY is not set: the run would bill the signed-in plan, not the API credit"
+# Measured on 2026-11-14: 1 test of the suite fails when the locale is not
+# UTF-8, so a run would stop on a red baseline after it spent credit.
+charmap=$(locale charmap 2>/dev/null) || charmap=""
+case "$charmap" in
+  UTF-8 | "") ;;
+  *) die "the locale is $charmap, not UTF-8: 1 test of the suite fails then. Set LANG to a UTF-8 locale, for example C.UTF-8" ;;
+esac
 [ -z "$(git -C "$repo" status --porcelain)" ] || die "the working tree has changes: commit or stash them first"
 command -v claude >/dev/null 2>&1 || die "the claude command is not on PATH"
 command -v jq >/dev/null 2>&1 || die "jq is not on PATH"
