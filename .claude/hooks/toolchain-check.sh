@@ -13,7 +13,8 @@ for tool in mix erl cargo just; do
 done
 if [ -n "$missing" ]; then
   echo "hypatia toolchain: these tools are missing:$missing."
-  echo "On Ubuntu 24.04 x86_64, run scripts/dev/install-toolchain.sh. On other systems, run: mise install erlang elixir zig"
+  echo "mix, erl and just: on Ubuntu 24.04 x86_64, run scripts/dev/install-toolchain.sh when that file exists. On other systems, use mise (mise.toml pins erlang and elixir) and your package manager for just."
+  echo "cargo: mise.toml lists rust. Install it with mise or with rustup."
   echo "Without mix, no test ran. Report that the tests did not run. Do not report a result."
 fi
 
