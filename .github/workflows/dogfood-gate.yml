@@ -35,11 +35,7 @@ jobs:
       - name: Check for A2ML and DEED files
         id: detect
         run: |
-          # audits/assail-classifications.a2ml is panic-attack's user-classification
-          # registry — an S-expression dialect by that tool's spec (see panic-attack
-          # CLAUDE.md), not the TOML-like manifest A2ML this gate validates. Exclude
-          # it rather than feeding it to a validator for a different dialect.
-          COUNT=$(find . -type f \( -name '*.a2ml' -o -name '*.deed' \) -not -path './.git/*' -not -name 'assail-classifications.a2ml' -printf '.' | wc -c)
+          COUNT=$(find . -type f \( -name '*.a2ml' -o -name '*.deed' \) -not -path './.git/*' -printf '.' | wc -c)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -eq 0 ]; then
             echo "::warning::No .a2ml/.deed manifest files found. Every RSR repo should have a repo deed (<reponame>_chora.deed); legacy 0-AI-MANIFEST.a2ml accepted mid-migration — standards #837"
@@ -52,9 +48,7 @@ jobs:
           path: '.'
           strict: 'false'
           # Re-state the action's default carve-outs (a custom value REPLACES
-          # the default list), plus panic-attack's user-classification
-          # registry: that file is an S-expression dialect by panic-attack's
-          # spec, not the TOML-like manifest A2ML this action validates.
+          # the default list).
           paths-ignore: |
             vendor/
             vendored/
@@ -63,7 +57,6 @@ jobs:
             integration/fixtures/
             test/fixtures/
             tests/fixtures/
-            assail-classifications.a2ml
 
       - name: Write summary
         run: |

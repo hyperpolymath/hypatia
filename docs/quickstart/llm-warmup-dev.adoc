@@ -246,11 +246,9 @@ Pattern recipes live in `+patterns/+`. To add a new pattern:
 
 === Machine-Readable Metadata
 
-All in `+.machine_readable/6a2/+`: - `+STATE.a2ml+`, `+META.a2ml+`,
-`+ECOSYSTEM.a2ml+` - `+AGENTIC.a2ml+`, `+NEUROSYM.a2ml+`,
-`+PLAYBOOK.a2ml+`
-
-*NEVER* create these in the root directory.
+Repository facts (state, meta, ecosystem, agentic, neurosym, playbook) are
+clauses of `+hypatia_chora.deed+` at the root; `+0-AI-MANIFEST.deed+` is the
+pointer-only front door. A2ML is retired: *NEVER* create a `+.a2ml+` file.
 
 === License
 

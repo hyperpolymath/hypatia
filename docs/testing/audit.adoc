@@ -319,4 +319,5 @@ hybrid; wait for upstream primitives.
 
 === 8. Appendix — file inventory by category
 
-Full mapping in `+.machine_readable/testing/blitz.a2ml+`.
+Full mapping in `+.machine_readable/testing/blitz.a2ml+`, retired 2026-11-14 and
+kept in git history (`+docs/history/A2ML-REMOVED.adoc+`).

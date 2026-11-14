@@ -10,7 +10,7 @@
 -- the only such map hypatia has today is a mechanical falsifier: a prover
 -- re-checking the file a proof-bypass detector flagged.  A pattern match is
 -- evidence that the pattern matched; an observation count is belief
--- formation (rules.a2ml proposes a rule at 5 observations); neither is a
+-- formation (the rule lifecycle proposes a rule at 5 observations); neither is a
 -- proof that the property holds.
 --
 -- What is proved here (Idris2, %default total, no proof-bypass primitives):
@@ -148,7 +148,7 @@ data Support : Type where
   ||| A pattern matched.  Evidence that the pattern matched, and nothing more.
   Pattern    : Support
   ||| The finding has been observed `n` times across the fleet.  A count is
-  ||| belief formation; rules.a2ml's proposal threshold of 5 is a policy, not
+  ||| belief formation; the rule lifecycle's proposal threshold of 5 is a policy, not
   ||| a soundness proof.
   Observed   : (n : Nat) -> Support
   ||| A prover re-checked the flagged file.

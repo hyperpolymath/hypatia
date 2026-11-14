@@ -2,6 +2,11 @@
 # Source directory: contractiles
 # Re-generate with: contractile gen-just --dir contractiles
 #
+# The `# Source:` files named below were legacy .a2ml contractiles, retired
+# 2026-11-14 with no mapping spec to translate them (docs/history/A2ML-REMOVED.adoc).
+# The recipes stand as generated until the edicts (<Verb>file.deed, A7 8.1) exist;
+# do not regenerate from the retired files.
+#
 # SPDX-License-Identifier: MPL-2.0
 
 # === DUST (Recovery & Rollback) ===

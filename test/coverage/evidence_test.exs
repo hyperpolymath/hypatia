@@ -2,7 +2,7 @@
 defmodule Hypatia.Coverage.EvidenceTest do
   use ExUnit.Case, async: true
 
-  alias Hypatia.Coverage.Evidence
+  alias Hypatia.Coverage.{Evidence, ProofBinding}
 
   @fixture Path.expand("../fixtures/coverage/evidence.json", __DIR__)
 
@@ -15,6 +15,15 @@ defmodule Hypatia.Coverage.EvidenceTest do
     "checker_version" => "0.7.0",
     "statement_sha256" => @sha,
     "check" => "passed"
+  }
+
+  @root Path.expand("../fixtures/coverage/demo_repo", __DIR__)
+  @src File.read!(Path.join(@root, "src/lib.rs"))
+  @cover %{
+    "decl" => "classify",
+    "file" => "src/lib.rs",
+    "lines" => [1, 11],
+    "source_sha256" => ProofBinding.range_sha256(@src, 1, 11)
   }
 
   defp rec(kind, run \\ %{}, extra \\ %{}) do
@@ -65,8 +74,20 @@ defmodule Hypatia.Coverage.EvidenceTest do
     rec("B", %{"benchmark" => Map.merge(base, overrides)})
   end
 
-  defp proof(ladder, decls \\ ["Proven.SafeJson.parseTotal"]),
+  defp proof(ladder, covers \\ [@cover]),
+    do:
+      rec("P", %{
+        "proof" => %{
+          "ladder" => ladder,
+          "covers" => covers,
+          "covers_decls" => ["Proven.SafeJson.parseTotal"]
+        }
+      })
+
+  defp decls_only(ladder, decls),
     do: rec("P", %{"proof" => %{"ladder" => ladder, "covers_decls" => decls}})
+
+  defp counted(r), do: Evidence.counted?(r, root: @root)
 
   @mut %{"tool" => "cargo-mutants", "killed" => 4, "survived" => 0}
   @sha1 "0123456789abcdef0123456789abcdef01234567"
@@ -88,16 +109,44 @@ defmodule Hypatia.Coverage.EvidenceTest do
       assert Evidence.counted?(bench(true)) == :counted
     end
 
-    test "P never counts in this increment, even when complete (three spellings of 'passed')" do
-      nc = {:not_counted, :proof_binding_not_implemented}
-      assert Evidence.counted?(proof([@rung])) == nc
-      assert Evidence.counted?(proof([Map.put(@rung, "check", %{"outcome" => "passed"})])) == nc
+    test "a bound P counts (three spellings of 'passed')" do
+      assert counted(proof([@rung])) == :counted
+      assert counted(proof([Map.put(@rung, "check", %{"outcome" => "passed"})])) == :counted
 
-      assert Evidence.counted?(proof([@rung |> Map.delete("check") |> Map.put("passed", true)])) ==
-               nc
+      assert counted(proof([@rung |> Map.delete("check") |> Map.put("passed", true)])) ==
+               :counted
+    end
 
-      refute Evidence.overclaim?(nc)
-      assert Evidence.reason_text(:proof_binding_not_implemented) =~ "COV-E006"
+    test "P is exempt from in_proven_run; R is not" do
+      p = proof([@rung]) |> Map.put("in_proven_run", false)
+      assert counted(p) == :counted
+      assert counted(Map.delete(p, "in_proven_run")) == :counted
+
+      assert counted(Map.put(prop(), "in_proven_run", false)) ==
+               {:not_counted, :not_in_proven_run}
+    end
+
+    test "P is unbound without a root, stale on a changed range" do
+      assert Evidence.counted?(proof([@rung])) == {:not_counted, :proof_unbound}
+      stale = %{@cover | "source_sha256" => String.duplicate("0", 64)}
+      assert counted(proof([@rung], [stale])) == {:not_counted, :proof_stale}
+      refute Evidence.overclaim?({:not_counted, :proof_stale})
+      refute Evidence.overclaim?({:not_counted, :proof_unbound})
+      assert Evidence.reason_text(:proof_stale) =~ "COV-E006"
+    end
+
+    test "covers_decls alone, or a malformed covers entry, is :no_covers (overclaim)" do
+      assert counted(decls_only([@rung], ["A.b"])) == {:not_counted, :no_covers}
+
+      for bad <- [
+            %{@cover | "lines" => [5, 2]},
+            Map.delete(@cover, "decl"),
+            %{@cover | "source_sha256" => "x"}
+          ] do
+        assert counted(proof([@rung], [bad])) == {:not_counted, :no_covers}
+      end
+
+      assert Evidence.overclaim?({:not_counted, :no_covers})
     end
 
     test "a cannot_fail_by_design fixture is admissible" do
@@ -353,8 +402,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
       for l <- ["zig", "idris2", "IDRIS2"],
           do: assert(Evidence.counted?(lang(prop(), l)) == :counted)
 
-      assert Evidence.counted?(lang(proof([@rung]), "rust")) ==
-               {:not_counted, :proof_binding_not_implemented}
+      assert counted(lang(proof([@rung]), "rust")) == :counted
     end
   end
 
@@ -392,8 +440,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
       end
 
       for c <- ~w(idris2 creusot verus prusti spark agda lean coq rocq Lean COQ) do
-        assert Evidence.counted?(proof([%{@rung | "checker" => c}])) ==
-                 {:not_counted, :proof_binding_not_implemented}
+        assert counted(proof([%{@rung | "checker" => c}])) == :counted
       end
 
       assert Evidence.overclaim?({:not_counted, :unapproved_checker})
@@ -420,7 +467,7 @@ defmodule Hypatia.Coverage.EvidenceTest do
 
     test "covers_decls must be a non-empty list of non-empty strings" do
       for d <- [[], nil, "x", [""], [1], ["a", " "]] do
-        assert Evidence.counted?(proof([@rung], d)) == {:not_counted, :no_covers_decls},
+        assert Evidence.counted?(decls_only([@rung], d)) == {:not_counted, :no_covers_decls},
                inspect(d)
       end
 
@@ -534,9 +581,10 @@ defmodule Hypatia.Coverage.EvidenceTest do
           proof([]),
           proof([%{}]),
           proof([Map.delete(@rung, "check")]),
-          proof([@rung], []),
+          decls_only([@rung], []),
           proof([%{@rung | "checker" => "kani"}]),
-          proof([@rung]),
+          proof([@rung], [%{@cover | "source_sha256" => String.duplicate("0", 64)}]),
+          decls_only([@rung], ["A.b"]),
           prop(%{"generator" => nil}),
           lang(prop(), "cobol"),
           lang(prop(), "rust"),
@@ -550,9 +598,11 @@ defmodule Hypatia.Coverage.EvidenceTest do
           rec("R", %{"outcome" => "failed"})
         ]
         |> Enum.map(fn r ->
-          {:not_counted, why} = Evidence.counted?(r)
+          {:not_counted, why} = counted(r)
           why
         end)
+
+      reasons = reasons ++ [elem(Evidence.counted?(proof([@rung])), 1)]
 
       assert Enum.sort(Enum.uniq(reasons)) ==
                Enum.sort(
@@ -566,7 +616,8 @@ defmodule Hypatia.Coverage.EvidenceTest do
                    :not_passed,
                    :no_mutation_result,
                    :unknown_language,
-                   :proof_binding_not_implemented,
+                   :proof_stale,
+                   :proof_unbound,
                    :mutants_survived
                  ] ++
                    Evidence.overclaim_reasons()

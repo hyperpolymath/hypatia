@@ -1,0 +1,15 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+;;
+;; The machine front door of hypatia: pointer-only (A7 ruling Q15). It names
+;; where to read and carries no facts of its own. Repository facts are in
+;; hypatia_chora.deed; agent conventions are in .claude/CLAUDE.md. It
+;; replaces 0-AI-MANIFEST.a2ml, retired 2026-11-14 (docs/history/A2ML-REMOVED.adoc).
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "hypatia"
+  :repo-uuid #u8"gv-clade-index:github.com/hyperpolymath/hypatia"
+  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
+  (front-doors
+    :machine "hypatia_chora.deed"
+    :human "README.adoc"))

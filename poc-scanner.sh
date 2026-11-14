@@ -172,9 +172,9 @@ for required in "SECURITY.md" ".editorconfig" "LICENSE"; do
         ((missing_files++)) || true
     fi
 done
-# AI manifest check
-if [ ! -f "$TARGET_REPO/0-AI-MANIFEST.a2ml" ] && [ ! -f "$TARGET_REPO/AI.a2ml" ]; then
-    echo -e "${RED}  ✗ MISSING: AI manifest (0-AI-MANIFEST.a2ml or AI.a2ml)${NC}"
+# AI manifest check: the deed is the front door; the legacy A2ML names still count
+if [ ! -f "$TARGET_REPO/0-AI-MANIFEST.deed" ] && [ ! -f "$TARGET_REPO/0-AI-MANIFEST.a2ml" ] && [ ! -f "$TARGET_REPO/AI.a2ml" ]; then
+    echo -e "${RED}  ✗ MISSING: AI manifest (0-AI-MANIFEST.deed)${NC}"
     ((missing_files++)) || true
 fi
 if [ "$missing_files" -eq 0 ]; then

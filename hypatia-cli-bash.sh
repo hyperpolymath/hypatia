@@ -583,11 +583,11 @@ scan_repo_structure() {
             "Migrate to .machine_readable/bot_directives/"
     fi
 
-    # AI manifest
-    if [[ ! -f "$dir/0-AI-MANIFEST.a2ml" && ! -f "$dir/AI.a2ml" ]]; then
+    # AI manifest: the deed is the front door; the legacy A2ML names still count
+    if [[ ! -f "$dir/0-AI-MANIFEST.deed" && ! -f "$dir/0-AI-MANIFEST.a2ml" && ! -f "$dir/AI.a2ml" ]]; then
         emit_finding "high" "repo_structure" "missing_ai_manifest" \
             "$dir" 0 "No AI gateway manifest found" "CWE-1021" \
-            "Add 0-AI-MANIFEST.a2ml or AI.a2ml"
+            "Add 0-AI-MANIFEST.deed (A2ML is retired)"
     fi
 
     # Canonical SCM files

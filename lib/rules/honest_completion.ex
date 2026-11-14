@@ -94,17 +94,35 @@ defmodule Hypatia.Rules.HonestCompletion do
       end)
   end
 
+  # A2ML is retired. The deed-era carriers of state come first: a STATE.deed
+  # descriptile (A7 J15), or the top-level (status) clause of the repo's chora
+  # deed (state-v1-decision option B: the lifecycle claim is that clause). The
+  # legacy STATE.a2ml / STATE.scm still count for repos not yet migrated.
   defp state_file_exists?(repo_path) do
+    chora_status_clause?(repo_path) or state_named_file_exists?(repo_path)
+  end
+
+  @state_names ~w(STATE.deed STATE.a2ml STATE.scm)
+
+  defp chora_status_clause?(repo_path) do
+    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo_path),
+         {:ok, text} <- File.read(path),
+         {:ok, {"repo-deed", items}} <- Hypatia.Deed.parse(text) do
+      Enum.any?(items, &match?({:clause, "status", _}, &1))
+    else
+      _ -> false
+    end
+  end
+
+  defp state_named_file_exists?(repo_path) do
     mr = Path.join(repo_path, ".machine_readable")
 
-    direct =
-      File.exists?(Path.join(mr, "STATE.a2ml")) or
-        File.exists?(Path.join(mr, "STATE.scm"))
+    direct = Enum.any?(@state_names, &File.exists?(Path.join(mr, &1)))
 
     if direct do
       true
     else
-      # Look for STATE.{a2ml,scm} in any direct subdirectory of
+      # Look for STATE.{deed,a2ml,scm} in any direct subdirectory of
       # .machine_readable/. Bounded search (one level deep) so a
       # malicious repo can't tarpit us via deep nesting.
       case File.ls(mr) do
@@ -112,9 +130,7 @@ defmodule Hypatia.Rules.HonestCompletion do
           Enum.any?(entries, fn entry ->
             sub = Path.join(mr, entry)
 
-            File.dir?(sub) and
-              (File.exists?(Path.join(sub, "STATE.a2ml")) or
-                 File.exists?(Path.join(sub, "STATE.scm")))
+            File.dir?(sub) and Enum.any?(@state_names, &File.exists?(Path.join(sub, &1)))
           end)
 
         _ ->
@@ -365,7 +381,8 @@ defmodule Hypatia.Rules.HonestCompletion do
         [
           %{
             type: :no_state_file,
-            detail: "No STATE.a2ml or STATE.scm found",
+            detail:
+              "No state: no (status) clause in the repo deed, and no STATE.deed (or legacy STATE.a2ml or STATE.scm)",
             severity: :low,
             deduction: 5
           }

@@ -76,7 +76,7 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 
 [cols="1,3"]
 |===
-| `lib/` | 169 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
+| `lib/` | 170 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
 | `lib/rules/` | 44 source files: rule modules and their helpers; see link:docs/rules/catalogue.adoc[the catalogue]
 | `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
 | `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation
@@ -190,10 +190,10 @@ auto-quarantine.
 
 == Project status
 
-Development state, milestones and known gaps live in machine-readable form:
+Development state, milestones and known gaps:
 
-* `.machine_readable/descriptiles/STATE.a2ml` — current state and milestone status
-* `.machine_readable/descriptiles/PLAYBOOK.a2ml` — operational runbook
+* link:hypatia_chora.deed[hypatia_chora.deed] — the repo deed: lifecycle `(status)`, `(maturity)`,
+  ADRs in `(meta)`, `(ecosystem)`, `(agentic)`, `(neurosym)` and `(playbook)`
 * link:ROADMAP.adoc[ROADMAP.adoc] — milestone history
 
 **Before trusting any metric or green board, read link:docs/DEBT-REGISTER.adoc[docs/DEBT-REGISTER.adoc].**

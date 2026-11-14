@@ -194,8 +194,9 @@ defmodule Hypatia.Coverage.EvidenceFormatter do
   defp evidence_tag(_), do: %{}
 
   defp to_key(k) when is_atom(k), do: k
-  # Only keys the formatter reads exist as atoms; any other string key stays a string,
-  # so a tag cannot grow the atom table.
+  # Only keys that already exist as atoms are converted. Every key this formatter reads is an
+  # atom literal in this module, so lookups still find them, and a test tag cannot mint new
+  # atoms. An unknown string key stays a string and is ignored.
   defp to_key(k) when is_binary(k) do
     String.to_existing_atom(k)
   rescue

@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: MPL-2.0
 # Bust — error-handling / failure-recovery runner
 #
-# Pairs with: Bustfile.a2ml (same directory)
+# Pairs with: Bustfile.deed (same directory; A7 8.1). Not yet written: the
+#             legacy Bustfile.a2ml was retired 2026-11-14 with no mapping
+#             spec to translate it (docs/history/A2ML-REMOVED.adoc).
 # Verb:       bust
 # Semantics:  every declared failure mode must have a recovery path that has
 #             been exercised. Runner injects failures (via declared probes)
@@ -33,7 +35,7 @@ let base = import "../_base.ncl" in
       name = "bust-runner",
       version = "1.0.0",
       description = "Exercises declared failure modes and verifies recovery paths. Hard-gates on any failure mode without working recovery.",
-      paired_xfile = "Bustfile.a2ml",
+      paired_xfile = "Bustfile.deed",
       author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
     },
   },

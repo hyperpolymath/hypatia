@@ -53,7 +53,7 @@ in
 #   pattern    — a pattern matched: evidence that the pattern matched, and
 #                nothing more.
 #   observed   — the finding has been observed `observations` times across
-#                the fleet.  rules.a2ml proposes a rule at 5 observations and
+#                the fleet.  The rule lifecycle proposes a rule at 5 observations and
 #                auto-approves at 10 + 3 successful fixes; those thresholds
 #                are BELIEF-FORMATION rules, not soundness proofs, and no
 #                count makes a finding sound.
