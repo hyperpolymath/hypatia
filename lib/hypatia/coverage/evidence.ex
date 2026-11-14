@@ -47,13 +47,18 @@ defmodule Hypatia.Coverage.Evidence do
        and `statement_sha256` (64 hex chars) (`:incomplete_rung`) and a passed
        check (`:proof_check_not_passed`): `"check": "passed"`,
        `"check": {"outcome": "passed"}` or `"passed": true`; and
-       `run.proof.covers_decls` a non-empty list of non-empty strings
-       (`:no_covers_decls`); every rung `checker` must be an approved deductive
-       verifier (idris2, creusot, verus, prusti, spark, agda, lean, coq, rocq;
-       `:unapproved_checker`). Even a complete P record is then not counted in
-       this increment: `:proof_binding_not_implemented` (not an overclaim),
-       because proof hashes are not bound to the checkout (COV-E006) and
-       `covers_decls` are not resolved into line/branch facts yet.
+       `run.proof.covers` (or, for compatibility, `run.proof.covers_decls`) must
+       be present (`:no_covers_decls` when neither is); every rung `checker` must be
+       an approved deductive verifier (idris2, creusot, verus, prusti, spark, agda,
+       lean, coq, rocq; `:unapproved_checker`). The binding uses `covers`: a list of
+       `{"decl", "file", "lines": [start, end], "source_sha256"}`; a record with only
+       `covers_decls`, or with a malformed `covers` entry, is `:no_covers` (overclaim).
+       The covers are then bound to the checkout given by the `:root` option
+       (`Hypatia.Coverage.ProofBinding`): a source hash that no longer matches, a
+       missing file, a range outside the file or a path outside the root is
+       `:proof_stale` (COV-E006, not an overclaim); no `:root` is `:proof_unbound`.
+       A bound P record counts. P is exempt from `in_proven_run`: a proof is checked,
+       not executed, so it has no place in the proven run.
 
   6. mutation (owner ruling Q7), for kinds `R`, `C`, `B` only; `P` is exempt.
      When the record's `language` has a mutation tool (rust, js, ts, javascript, typescript, elixir, julia),
@@ -93,6 +98,7 @@ defmodule Hypatia.Coverage.Evidence do
     :incomplete_rung,
     :proof_check_not_passed,
     :no_covers_decls,
+    :no_covers,
     :unapproved_checker,
     :no_generator,
     :no_vectors,
@@ -219,7 +225,7 @@ defmodule Hypatia.Coverage.Evidence do
          why when why != :ok <- binding(record, opts) do
       {:not_counted, why}
     else
-      _ -> by_kind(record["kind"], record, min_cases)
+      _ -> by_kind(record["kind"], record, {min_cases, opts})
     end
   end
 
@@ -246,6 +252,9 @@ defmodule Hypatia.Coverage.Evidence do
   # A record counts only if it affirmatively ran in the proven run (`in_proven_run: true`).
   # Otherwise it produced none of the proven coverage and cannot back it, whichever
   # collector wrote it.
+  # Exception: kind P. A proof is checked, not executed, so it is never in the proven run and
+  # the requirement does not apply to it (design §2.2, §4.2).
+  defp proven_run_member(:counted, %{"kind" => "P"}), do: :counted
   defp proven_run_member(:counted, %{"in_proven_run" => true}), do: :counted
   defp proven_run_member(:counted, _record), do: {:not_counted, :not_in_proven_run}
   defp proven_run_member(decision, _record), do: decision
@@ -323,9 +332,16 @@ defmodule Hypatia.Coverage.Evidence do
   def reason_text(:unapproved_checker),
     do: "proof checker is not an approved deductive verifier (bounded checkers do not count as P)"
 
-  def reason_text(:proof_binding_not_implemented),
+  def reason_text(:proof_stale),
     do:
-      "proof record complete, but binding to source (COV-E006) and declaration coverage are not built yet; not counted in this increment"
+      "proof was checked against different source (a covered range changed, moved or is missing); not counted (COV-E006)"
+
+  def reason_text(:proof_unbound),
+    do:
+      "proof cannot be bound to source without the checkout (no root given); not counted (COV-E006)"
+
+  def reason_text(:no_covers),
+    do: "proof claim has no covers entries (decl, file, lines, source_sha256) to bind to source"
 
   def reason_text(:no_covers_decls), do: "proof claim with no covered declarations (covers_decls)"
 
@@ -351,7 +367,7 @@ defmodule Hypatia.Coverage.Evidence do
   defp by_kind("E", _r, _m), do: {:not_counted, :example_test}
   defp by_kind("M", _r, _m), do: {:not_counted, :mock_test}
 
-  defp by_kind("R", r, min_cases) do
+  defp by_kind("R", r, {min_cases, _opts}) do
     seed = dig(r, ["run", "property", "seed"])
     cases = dig(r, ["run", "property", "cases"])
 
@@ -392,17 +408,16 @@ defmodule Hypatia.Coverage.Evidence do
     end
   end
 
-  defp by_kind("P", r, _m) do
+  defp by_kind("P", r, {_m, opts}) do
     case dig(r, ["run", "proof", "ladder"]) do
       [_ | _] = ladder ->
         cond do
           not Enum.all?(ladder, &complete_rung?/1) -> {:not_counted, :incomplete_rung}
           not Enum.all?(ladder, &rung_passed?/1) -> {:not_counted, :proof_check_not_passed}
-          not covers_decls?(r) -> {:not_counted, :no_covers_decls}
+          not covers_decls?(r) and not covers_given?(r) -> {:not_counted, :no_covers_decls}
           not Enum.all?(ladder, &approved_checker?/1) -> {:not_counted, :unapproved_checker}
-          # Hashes are not yet bound to the checkout (COV-E006) and covers_decls are not yet
-          # resolved into line/branch facts, so no P record counts in this increment.
-          true -> {:not_counted, :proof_binding_not_implemented}
+          not covers_present?(r) -> {:not_counted, :no_covers}
+          true -> bind_proof(r, Keyword.get(opts, :root))
         end
 
       _ ->
@@ -411,6 +426,17 @@ defmodule Hypatia.Coverage.Evidence do
   end
 
   defp by_kind(_other, _r, _m), do: {:not_counted, :unknown_kind}
+
+  defp bind_proof(r, root) do
+    case Hypatia.Coverage.ProofBinding.bind(r, root) do
+      {:ok, _ranges} -> :counted
+      {:error, why} -> {:not_counted, why}
+    end
+  end
+
+  defp covers_given?(r), do: dig(r, ["run", "proof", "covers"]) != nil
+
+  defp covers_present?(r), do: Hypatia.Coverage.ProofBinding.covers(r) != :error
 
   defp conformance_vectors(c, r) do
     vectors = dig(c, ["vectors"])
