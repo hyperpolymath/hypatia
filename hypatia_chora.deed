@@ -83,16 +83,26 @@
   ; ECOSYSTEM.a2ml: [metadata] project and ecosystem, [position] type and
   ; purpose. Not translated: [metadata] last-updated and media-type,
   ; [position] category, tier and role, [position.consumers],
-  ; [position.producers] and [integration-points] (no table row), and the
-  ; seven [related-projects] entries, whose relationships (sibling-standard,
-  ; data-dependency, dispatch-target, scanner-source, mcp-host) are outside
-  ; the closed set the (related) row allows. The source has no [pipeline]
-  ; section, so there is no :coordination.
+  ; [position.producers] and [integration-points] (no table row). The seven
+  ; [related-projects] entries are (related) clauses: their relationships
+  ; (sibling-standard, data-dependency, dispatch-target, scanner-source,
+  ; mcp-host) joined the closed set by owner ruling 2026-11-14 (standards
+  ; clauses/ecosystem.abnf v1.1.0), each description is :notes, and the
+  ; sibling/infrastructure group names are not carried (the mapping's
+  ; grouped-entry row). The source has no [pipeline] section, so there is no
+  ; :coordination.
   (ecosystem
     :project "hypatia"
     :ecosystem "hyperpolymath"
     :position-type "component"
-    :purpose "Neurosymbolic CI/CD intelligence layer — scans repos via panic-attack, classifies findings through the Safety Triangle, dispatches fixes to gitbot-fleet, learns from outcomes via 5 neural networks.")
+    :purpose "Neurosymbolic CI/CD intelligence layer — scans repos via panic-attack, classifies findings through the Safety Triangle, dispatches fixes to gitbot-fleet, learns from outcomes via 5 neural networks."
+    (related :name "verification-ecosystem/echidnabot" :relationship sibling-standard :notes "Receives ProofObligation dispatches from Hypatia FleetDispatcher at confidence >= 0.85. Retrain loop feeds back via LearningScheduler N5.")
+    (related :name "verification-ecosystem/ephapax" :relationship sibling-standard :notes "Linear-type verifier. Hypatia classifies ephapax-relevant findings and routes to echidnabot for formal verification.")
+    (related :name "verification-ecosystem/o" :relationship sibling-standard :notes "Peer verification tool in the verification-ecosystem monorepo.")
+    (related :name "nextgen-databases/verisim" :relationship data-dependency :notes "VeriSimDB provides the canonical flat-file store (verisim-data) that Hypatia reads via VCL queries.")
+    (related :name "fleet-ecosystem/git-automation-ecosystem/gitbot-fleet" :relationship dispatch-target :notes "7 bots (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot) receive dispatches from FleetDispatcher.")
+    (related :name "verification-ecosystem/panic-attack" :relationship scanner-source :notes "panic-attack assail produces JSON AssailReport consumed by Hypatia rules engine. panicbot wraps the CLI.")
+    (related :name "boj-server" :relationship mcp-host :notes "All Hypatia MCP capabilities served via BoJ MCP cartridge. No standalone MCP server."))
   ; AGENTIC.a2ml: [metadata] version and last-updated, [agent-permissions]
   ; and the five [maintenance-integrity] axioms the table lists. The source
   ; has no @profile line, so there is no (profile). Not translated:
