@@ -130,4 +130,39 @@ defmodule Hypatia.Rules.HonestCompletionTest do
       assert findings == []
     end
   end
+
+  describe "collect_evidence/1 — where state is found" do
+    @describetag :tmp_dir
+
+    @deed """
+    ;; SPDX-License-Identifier: MPL-2.0
+    (repo-deed
+      :schema-version "1.0.0"
+      :canonical-name "x"
+      :repo-uuid #u8"gv-clade-index:github.com/o/x"
+      :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
+      (status :phase active))
+    """
+
+    test "the chora deed's top-level (status) clause is the state", %{tmp_dir: tmp} do
+      File.write!(Path.join(tmp, "x_chora.deed"), @deed)
+      assert HonestCompletion.collect_evidence(tmp).has_state_file
+    end
+
+    test "a STATE.deed descriptile is the state", %{tmp_dir: tmp} do
+      dir = Path.join(tmp, ".machine_readable/descriptiles")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "STATE.deed"), "")
+      assert HonestCompletion.collect_evidence(tmp).has_state_file
+    end
+
+    test "a deed without (status), and no state file, is no state", %{tmp_dir: tmp} do
+      File.write!(
+        Path.join(tmp, "x_chora.deed"),
+        String.replace(@deed, "(status :phase active)", "(meta)")
+      )
+
+      refute HonestCompletion.collect_evidence(tmp).has_state_file
+    end
+  end
 end
