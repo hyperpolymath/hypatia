@@ -112,6 +112,40 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert WorkflowAudit.check_actions_lock_tag_keys("not a lock") == []
   end
 
+  test "a lock the full audit refuses gets no tag-keyed advisory beside it" do
+    alias Hypatia.Rules.WorkflowAudit
+
+    sha = String.duplicate("a", 40)
+
+    # A tag-keyed record plus a self-SHA leaf no workflow calls: valid without
+    # workflow context, refused with it.
+    lock = """
+    version: 'v0.0.2'
+    workflows:
+        '.github/workflows/ci.yml':
+            - 'actions/checkout@v7.0.1'
+            - 'actions/setup-node@#{sha}'
+    dependencies:
+        'actions/checkout@v7.0.1':
+            ref: 'v7.0.1'
+            commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+            owner_id: 44036562
+            repo_id: 197814629
+        'actions/setup-node@#{sha}':
+            ref: '#{sha}'
+            commit: 'sha1-#{sha}'
+            owner_id: 44036562
+            repo_id: 197814630
+    """
+
+    assert {:ok, _} = ActionsLock.parse(lock)
+    wf = %{"ci.yml" => @workflow}
+
+    %{findings: fs} = WorkflowAudit.audit(["ci.yml"], wf, actions_lock: lock)
+    assert Enum.any?(fs, &(&1[:type] == :invalid_actions_lock))
+    refute Enum.any?(fs, &(&1[:type] == :actions_lock_tag_keyed))
+  end
+
   test "accepts uppercase hexadecimal commit suffixes" do
     lock =
       String.replace(

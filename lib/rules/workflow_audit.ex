@@ -106,7 +106,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     # The lock is repository-wide too: once per audit, not per file.
     lock_tag_keys =
-      if opts[:partial], do: [], else: check_actions_lock_tag_keys(opts[:actions_lock])
+      if opts[:partial],
+        do: [],
+        else: check_actions_lock_tag_keys(opts[:actions_lock], workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -520,16 +522,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
   Pinned-Dependencies pattern and per-file scans. A lock that does not parse
   is `invalid_actions_lock`'s, so nothing is reported here for it.
   """
-  def check_actions_lock_tag_keys(nil), do: []
+  def check_actions_lock_tag_keys(lock_content, workflow_contents \\ nil)
 
-  def check_actions_lock_tag_keys(lock_content) when is_binary(lock_content) do
-    case Hypatia.Rules.ActionsLock.parse(lock_content) do
+  def check_actions_lock_tag_keys(nil, _workflow_contents), do: []
+
+  def check_actions_lock_tag_keys(lock_content, workflow_contents) when is_binary(lock_content) do
+    # Parse as check_unpinned_actions/2 does: with the workflows, the
+    # self-SHA leaf check runs, so a lock it refuses is reported once, as
+    # invalid_actions_lock, and not here too.
+    opts =
+      if is_map(workflow_contents),
+        do: [reusable_callers: Hypatia.Rules.ActionsLock.reusable_callers(workflow_contents)],
+        else: []
+
+    case Hypatia.Rules.ActionsLock.parse(lock_content, opts) do
       {:ok, lock} -> tag_keyed_findings(lock)
       {:error, _reason} -> []
     end
   end
 
-  def check_actions_lock_tag_keys(_), do: []
+  def check_actions_lock_tag_keys(_, _workflow_contents), do: []
 
   defp tag_keyed_findings(%Hypatia.Rules.ActionsLock{} = lock) do
     case Hypatia.Rules.ActionsLock.tag_keyed_keys(lock) do
