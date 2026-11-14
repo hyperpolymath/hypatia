@@ -13,13 +13,18 @@ Not yet ingested: the full CodeQL, Sonar and Semgrep rule lists, and per-rule li
 
 Numbers: see `matrix.json` (regenerate counts from it; they change as rules land).
 
-== Route (ADR 0003, cicd-squabbler#154)
-Each row has a `route`: `first-line` (squabbler autofix, via Tsunami-breaker), `referral`
-(Hypatia answers with a Bustfile, via Extended Hypatia) or `owner-only`. The value is a
-heuristic from fix status and gap reason, not a ruling: owner-only = needs a person;
-referral = fix needs escalation or judgement; first-line = otherwise. `upstream` = triage the job that should have produced the missing input (row `upstream_artifact_missing`); `unrouted` = not yet assessed.
+== Route (ADR 0003, cicd-squabbler#154; ADR 0004)
+Each row has a `route`: `first-line` (squabbler FIX or ACT), `referral` (Hypatia answers with a
+Bustfile), `owner-only` (needs a person), `noise` (advisory bot messages such as CodeRabbit and
+Codex rate-limit or credit limits, per ruling R7), `upstream` (triage the job that should have
+produced the missing input, for example a rollup or `upstream_artifact_missing`), or `unrouted`
+(not yet assessed). Where a row names a squabbler rule in `sq_id`, the squabbler's classification
+wins (ADR 0003). Rows from cicd-squabbler ADR 0004 are estate-specific and keyed by their SQ id.
+`fixst` also takes `rerun` (squabbler ACT rules). Otherwise the value is a heuristic from fix
+status and gap reason, not a ruling.
 
-Rows whose evidence cites hypatia#1064/#1065 are set to `unassessed` until their detector exists in this tree and is verified; the thread reports them as detected.
+Rows whose evidence cites hypatia#1064/#1065/#1090 are set to `unassessed` until their detector
+exists in this tree and is verified; the reconciliation thread reports them as detected or drafted.
 
 == Owner ruling needed
 Two rules disagree: the dictask canon-lockstep gate demands `rsr-profile.a2ml`, while the estate no-new-A2ML policy forbids it (row `standards/rsr-profile.a2ml vs no-new-A2ML`).
