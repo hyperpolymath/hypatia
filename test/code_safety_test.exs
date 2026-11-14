@@ -972,6 +972,47 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       refute exec_sync?("import {spawn as run} from 'node:child_process';\nrun(cmd, a);\n")
     end
 
+    test "a shell key nested inside another option is not the call's option (A)" do
+      refute exec_sync?("spawn(c, a, {env: {shell: '/bin/bash'}});\n")
+      refute exec_sync?("spawnSync(c, a, {env: {...process.env, shell: true}, cwd});\n")
+      assert exec_sync?("spawn(c, a, {env: {shell: 'x'}, shell: true});\n")
+    end
+
+    test "an ignore directive on the import line does not hide the calls below it (1)" do
+      code =
+        "import * as cp from 'node:child_process'; // hypatia:ignore js_exec_sync -- import only\n" <>
+          "\ncp.exec(command);\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [3]
+    end
+
+    test "the compiled TypeScript call form is followed (2)" do
+      code =
+        "const child_process_1 = require(\"child_process\");\n" <>
+          "(0, child_process_1.exec)(cmd);\n(0, child_process_1.execSync)(cmd);\n" <>
+          "(0, child_process_1.spawn)(cmd, args, { shell: true });\n"
+
+      [f] = Enum.filter(CodeSafety.scan_content(code, "javascript"), &(&1.rule == :js_exec_sync))
+      assert f.lines == [2, 3, 4]
+      refute exec_sync?("const cp_1 = require('child_process');\n(0, cp_1.spawn)(cmd, args);\n")
+    end
+
+    test "a ; or bracket inside a string or template argument does not end the call (3)" do
+      assert exec_sync?("spawn(`echo ${input}; date`, [], {shell: true});\n")
+      assert exec_sync?("spawnSync('a); b', ['(', ']'], {shell: true});\n")
+      assert exec_sync?("execFile(cmd, [x], /* ; ) */ {shell: '/bin/sh'});\n")
+    end
+
+    test "a spawn call written inside a string or comment is not a call" do
+      refute exec_sync?("const doc = 'spawn(cmd, a, {shell: true})';\n")
+      refute exec_sync?("// spawn(cmd, a, {shell: true})\n")
+    end
+
+    test "arguments nested deeper than two levels no longer hide the option" do
+      assert exec_sync?("spawn(a(b(c(d))), [e(f(g()))], {shell: true});\n")
+    end
+
     test "a dynamic import binds child_process too" do
       assert exec_sync?("const cp = await import('node:child_process');\ncp.exec(command);\n")
       assert exec_sync?("const {exec: sh} = await import('child_process');\nsh(command);\n")
