@@ -90,7 +90,8 @@ defmodule Hypatia.Deed do
   `estate_chora.deed` is the estate deed and never a repo deed; then the J14
   contractile and descriptile names, which are case-sensitive; then the
   `_praxis.deed` and `_chora.deed` suffixes, split on the final suffix so a
-  stem may hold dots.
+  stem may hold dots. Either stem must be non-empty and hold only ASCII
+  letters, digits, `.`, `_` and `-`.
   """
   def dispatch(filename) when is_binary(filename) do
     base = Path.basename(filename)
@@ -101,16 +102,20 @@ defmodule Hypatia.Deed do
       base == "0-AI-MANIFEST.deed" -> {:ok, "repo-deed"}
       MapSet.member?(@contractile_files, base) -> {:ok, "contractile-deed"}
       MapSet.member?(@descriptile_files, base) -> {:ok, "descriptile-deed"}
-      String.ends_with?(base, "_praxis.deed") -> {:ok, "praxis-deed"}
-      String.ends_with?(base, "_chora.deed") -> chora_stem(base)
+      String.ends_with?(base, "_praxis.deed") -> stem(base, "_praxis.deed", "praxis-deed")
+      String.ends_with?(base, "_chora.deed") -> stem(base, "_chora.deed", "repo-deed")
       true -> {:error, "filename #{inspect(base)} matches no deed dispatch pattern"}
     end
   end
 
-  # stem = 1*( ALPHA / DIGIT / "-" / "." / "_" ).
-  defp chora_stem(base) do
-    if Regex.match?(~r/\A[A-Za-z0-9._-]+_chora\.deed\z/, base),
-      do: {:ok, "repo-deed"},
+  # praxis-file = stem "_praxis.deed"; repo-file = stem "_chora.deed";
+  # stem = 1*( ALPHA / DIGIT / "-" / "." / "_" ). Both suffixes take the same
+  # stem rule: non-empty, ASCII letters, digits, ".", "_" and "-" only.
+  defp stem(base, suffix, head) do
+    stem = binary_part(base, 0, byte_size(base) - byte_size(suffix))
+
+    if Regex.match?(~r/\A[A-Za-z0-9._-]+\z/, stem),
+      do: {:ok, head},
       else: {:error, "illegal deed filename stem: #{base}"}
   end
 
