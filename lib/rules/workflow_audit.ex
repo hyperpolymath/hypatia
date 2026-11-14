@@ -4542,10 +4542,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `--exclude=refs/heads/x`,
   # `--since`, `-n`.
   defp all_history_log_opts?(text) do
-    @log_opts
-    |> Regex.scan(text, capture: :all_but_first)
-    # A repeated --log-opts overwrites the earlier one: the last value runs.
-    |> Enum.take(-1)
+    # A repeated --log-opts overwrites the earlier one within one command,
+    # so the last value of each command is judged; any command may qualify.
+    text
+    |> String.replace(~r/\\\r?\n[ \t]*/, " ")
+    |> String.split(~r/\n|&&|;|\|\|?|&/)
+    |> Enum.flat_map(&Enum.take(Regex.scan(@log_opts, &1, capture: :all_but_first), -1))
     |> Enum.any?(fn groups ->
       value = Enum.join(groups, " ")
 

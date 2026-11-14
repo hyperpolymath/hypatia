@@ -132,6 +132,30 @@ defmodule Hypatia.Rules.GitleaksFullHistoryTest do
     assert check(wf) == []
   end
 
+  test "a full scan followed by a separate ranged command is still flagged" do
+    wf =
+      String.replace(
+        @wf,
+        ~s(--log-opts="--all" --redact),
+        ~s(--log-opts="--all" --redact\n      - run: gitleaks git --log-opts="HEAD~1..HEAD")
+      )
+
+    assert wf =~ "HEAD~1"
+    assert [%{rule: "WF031"}] = check(wf)
+  end
+
+  test "within one command the last --log-opts is the one that runs" do
+    wf =
+      String.replace(
+        @wf,
+        ~s(--log-opts="--all"),
+        ~s(--log-opts="--all" --log-opts="HEAD~1..HEAD")
+      )
+
+    assert wf =~ "HEAD~1"
+    assert check(wf) == []
+  end
+
   test "a comment mentioning --all is not a scan" do
     wf =
       String.replace(
