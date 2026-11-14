@@ -415,6 +415,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
     end
 
+    test "a program printing the rollup phrase is not read as a cancellation" do
+      log =
+        "worker did not succeed (result: cancelled)\n" <>
+          "  1) test frobnicates (FooTest)\n     Assertion with == failed\n"
+
+      %{matches: ms} = T.classify(log, %{})
+      refute Enum.any?(ms, &(&1.rule == T.id("runner_cancelled")))
+    end
+
     test "startup_failure with no log is a referral, never a rerun" do
       %{primary: p} = T.classify("", %{conclusion: "startup_failure"})
       assert p.rule == T.id("workflow_startup_failure")

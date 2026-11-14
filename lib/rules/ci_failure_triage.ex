@@ -85,7 +85,9 @@ defmodule Hypatia.Rules.CiFailureTriage do
         # (hypatia#1091, run 43601615541): a newer push cancelled the older
         # run, so the superseded head's rollup goes red. Only `cancelled`;
         # `result: failure` is a real failure and stays the rollup's.
-        ~r/did not succeed \(result: cancelled\)/
+        # Anchored to the runner's `##[error]` annotation, so a test or
+        # program that merely prints the phrase does not hide a failure.
+        ~r/##\[error\][^\n]*did not succeed \(result: cancelled\)/
       ],
       action: :none,
       retries: 0,
