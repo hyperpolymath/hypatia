@@ -1067,7 +1067,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   # rule-order policy's `scanner.commit`. All must name one commit.
   @hypatia_env ~r/^\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/m
   @hypatia_env_flow ~r/[{,]\s*["']?HYPATIA_SHA["']?\s*:\s*["']?([0-9a-fA-F]{40})/
-  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})/i
+  @hypatia_flag ~r/--hypatia-ref(?:=|[ \t]+)["']?([0-9a-f]{40})(?=["'\s;|&)]|\z)/i
 
   @doc """
   Hypatia pin drift: Hypatia pinned at different commits across a repo's
@@ -1131,7 +1131,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
 
   # `HYPATIA_SHA` is case-sensitive: a lowercase `hypatia_sha` does not set
   # the scanner on a Linux runner (Codex on #1103).
-  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:\s|\\\n)+)["']?([0-9a-fA-F]{40})\b/
+  #
+  # The flag's argument follows `=`, blanks or a backslash-newline: a bare
+  # line break in a literal script ends the command (a folded scalar has
+  # already turned its breaks into spaces). The SHA must end the argument:
+  # `<sha>-backup` is not that commit (Codex on #1103).
+  @hypatia_ref_flag ~r/--hypatia-ref(?:=|(?:[ \t]|\\\n)+)["']?([0-9a-fA-F]{40})(?=["'\s;|&)]|\z)/
 
   # Walks the tree with the key that holds each node. `HYPATIA_SHA` counts
   # only inside an `env:` mapping, and `--hypatia-ref` only inside a `run:`
@@ -1170,20 +1175,17 @@ defmodule Hypatia.Rules.CiFailureTriage do
   defp run_pins(label, "run", value) do
     case Hypatia.Kyaml.deref(value) do
       %{kind: :string, value: v} = scalar when is_binary(v) ->
-        lines = String.split(v, "\n")
-        starts = lines |> Enum.scan(0, &(&2 + byte_size(&1) + 1)) |> then(&[0 | &1])
-
-        code =
-          Enum.map_join(lines, "\n", &strip_line_comment(String.to_charlist(&1), nil, []))
+        # Shell comments blanked by the shell's quoting rules, offsets kept,
+        # so a match maps to its own source line through the scalar's
+        # segments, in a folded scalar too (Codex on #1103).
+        code = Hypatia.Workflow.shell_mask(v)
 
         for [{off, _}, {s_off, s_len}] <- Regex.scan(@hypatia_ref_flag, code, return: :index) do
-          k = code |> binary_part(0, off) |> String.split("\n") |> length() |> Kernel.-(1)
-
           %{
             file: label,
             key: "--hypatia-ref",
             sha: code |> binary_part(s_off, s_len) |> String.downcase(),
-            line: scalar_line(scalar, Enum.at(starts, k))
+            line: scalar_line(scalar, off)
           }
         end
 
@@ -1237,7 +1239,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
 
   # Fallback for YAML outside the parser's subset (Codex on #1103): a
   # `repository: hyperpolymath/hypatia` and a sibling `ref:` at the same
-  # indentation, in either order, with nothing shallower between them.
+  # indentation, in either order, with nothing shallower between them, under
+  # the `with:` of a step that `uses: actions/checkout@…`.
   defp checkout_pins_by_text(label, yaml) do
     lines = String.split(yaml, "\n")
 
@@ -1249,6 +1252,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
                ~r/^([ \t]*)(?:-[ \t]+)?["']?repository["']?[ \t]*:[ \t]*["']?hyperpolymath\/hypatia["']?[ \t]*$/i,
                line
              ),
+           true <- checkout_input?(lines, n, String.length(ind)),
            {ref, ref_n} <- sibling_ref(lines, n, String.length(ind)) do
         [%{file: label, key: "checkout ref", sha: String.downcase(ref), line: ref_n}]
       else
@@ -1278,6 +1282,55 @@ defmodule Hypatia.Rules.CiFailureTriage do
   end
 
   defp indent(line), do: byte_size(line) - byte_size(String.trim_leading(line))
+
+  # Is line `n` (at `depth`) an input under a `with:` whose step uses
+  # actions/checkout? The step is the `with:` line's siblings: up to and
+  # including the `- ` that opens the item, down to the next shallower line.
+  defp checkout_input?(lines, n, depth) do
+    parent =
+      (n - 1)..1//-1
+      |> Enum.map(&{Enum.at(lines, &1 - 1), &1})
+      |> Enum.find(fn {l, _} -> String.trim(l) != "" and indent(l) < depth end)
+
+    with {w_line, w} <- parent,
+         [_, lead] <- Regex.run(~r/^([ \t]*(?:-[ \t]+)?)["']?with["']?[ \t]*:[ \t]*$/, w_line) do
+      wi = byte_size(lead)
+
+      up =
+        (w - 1)..1//-1
+        |> Enum.map(&Enum.at(lines, &1 - 1))
+        |> Enum.reduce_while([], fn l, acc ->
+          cond do
+            String.trim(l) == "" or indent(l) >= wi -> {:cont, [l | acc]}
+            content_indent(l) == wi -> {:halt, [l | acc]}
+            true -> {:halt, acc}
+          end
+        end)
+
+      down =
+        lines
+        |> Enum.drop(w)
+        |> Enum.take_while(&(String.trim(&1) == "" or indent(&1) >= wi))
+
+      Enum.any?(up ++ [w_line | down], fn l ->
+        content_indent(l) == wi and
+          Regex.match?(
+            ~r/^[ \t]*(?:-[ \t]+)?["']?uses["']?[ \t]*:[ \t]*["']?actions\/checkout@/i,
+            l
+          )
+      end)
+    else
+      _ -> false
+    end
+  end
+
+  # The column a line's key starts at: after a `- ` item marker, if any.
+  defp content_indent(line) do
+    case Regex.run(~r/^[ \t]*-[ \t]+/, line) do
+      [lead] -> byte_size(lead)
+      _ -> indent(line)
+    end
+  end
 
   # A checkout of hyperpolymath/hypatia, read from the parsed workflow so a
   # blank line or any number of sibling inputs in `with:` cannot hide it.

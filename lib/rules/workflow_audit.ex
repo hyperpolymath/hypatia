@@ -5356,22 +5356,36 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # Only a step that can turn the job red counts, on a step that is not
   # `continue-on-error: true`: a non-zero `exit`, or a bare `[ … success … ]`
   # / `test … success` line, which fails the step by its own status under
-  # `bash -e` (Codex on #1105). A test inside `if`, `&&` or `||` is a
-  # condition, not a failure. `::error` alone is an annotation and does not
-  # fail the step (CodeRabbit on #1105).
+  # `bash -e` (Codex on #1105). A test inside `if` or `||` is a condition,
+  # not a failure; so is one in an `&&` list, unless that list ends the
+  # script, whose status is then the step's (Codex on #1105). `::error` alone
+  # is an annotation and does not fail the step (CodeRabbit on #1105). An
+  # `exit` in quotes or a shell comment is text, not a command (Codex on
+  # #1105); `exit "$code"` still counts.
   defp can_fail?(job) do
     Enum.any?(job.steps, fn step ->
       is_binary(step.run) and not tolerated_failure?(step) and
         not excludes_cancellation?(step.if || "", :step) and
-        (Regex.match?(~r/\bexit\s+(?:[1-9]|"?\$)/, step.run) or bare_test_fails?(step.run))
+        (Regex.match?(
+           ~r/\bexit\s+(?:[1-9]|"?\$|")/,
+           Hypatia.Workflow.shell_mask(step.run, quotes: true)
+         ) or
+           bare_test_fails?(Hypatia.Workflow.shell_mask(step.run)))
     end)
   end
 
   defp bare_test_fails?(run) do
     @bare_success_test
-    |> Regex.scan(run)
-    |> Enum.any?(fn [line] ->
-      not Regex.match?(~r/&&|\|\||^\s*(?:if|while|until|elif)\b/, line)
+    |> Regex.scan(run, return: :index)
+    |> Enum.any?(fn [{off, len}] ->
+      line = binary_part(run, off, len)
+      rest = binary_part(run, off + len, byte_size(run) - off - len)
+
+      cond do
+        Regex.match?(~r/\|\||^\s*(?:if|while|until|elif)\b/, line) -> false
+        String.contains?(line, "&&") -> String.trim(rest) == ""
+        true -> true
+      end
     end)
   end
 
@@ -5411,7 +5425,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `always() && needs.x.result == 'success'` is skipped once x is cancelled,
   # but it only protects x (CodeRabbit on #1105). It is a guard when every
   # need the job judges has its own success conjunct, in property or index
-  # form; a wildcard read judges every direct need (Codex on #1105). Same
+  # form, on either side of `==` (Codex on #1105); a wildcard read judges every direct need (Codex on #1105). Same
   # structural reading as excludes_cancellation?/1: `||` or grouping make it
   # uncertain.
   defp judged_needs_must_succeed?(cond_text, reads, needs) do
@@ -5426,7 +5440,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           m <-
             [
               Regex.run(
-                ~r/\Aneeds(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")\z/,
+                ~r/\A(?:needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\])==(?:'success'|"success")|(?:'success'|"success")==needs(?:\.([A-Za-z0-9_-]+)|\[['"]([A-Za-z0-9_-]+)['"]\])(?:\.result|\[['"]result['"]\]))\z/,
                 c,
                 capture: :all_but_first
               )
