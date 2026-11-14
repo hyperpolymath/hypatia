@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot) via a safety triangle pipeline, with 8 neural networks on a shared blackboard for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and 33 Elixir rule modules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot) via a safety triangle pipeline, with 8 neural networks on a shared blackboard for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and 44 source files of Elixir rule modules and their helpers for pattern detection.
 
 > **Counts in this file are load-bearing — agents act on them.** They were re-measured
 > against the tree on 2026-08-07. If you change the shape of the system, re-measure
@@ -32,7 +32,7 @@ Hypatia                       # 170 Elixir source files under lib/ (recursive tr
 ├── Data layer                 # verisim-data (canonical flat-file store)
 ├── Safety systems             # Rate limiter, quarantine, batch rollback (see Known Gaps — inert)
 ├── OTP Application           # 24 supervised children (+2 conditional) — see lib/application.ex
-├── Elixir rules engine       # 33 rule modules (lib/rules/) — error catalog, pattern detection
+├── Elixir rules engine       # 44 source files (lib/rules/): rule modules and their helpers — error catalog, pattern detection
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (18 exported functions) + 16 protocol connectors
 ├── Rust workspace            # adapters, cli, data, fixer, integration
@@ -43,7 +43,7 @@ Hypatia                       # 170 Elixir source files under lib/ (recursive tr
 
 ## Key Commands
 
-`just` is the primary entry point (43 recipes, `just --summary | wc -w`; `CONTRIBUTING.md` treats it as canonical):
+`just` is the primary entry point (45 recipes, `just --summary | wc -w`; `CONTRIBUTING.md` treats it as canonical):
 
 ```bash
 just --list           # every recipe
@@ -64,8 +64,9 @@ cargo build     # Build Rust workspace
 cargo test      # Test Rust workspace
 ```
 
-`mix test` excludes 242 `:verisim_data` tests. They are **not** run in CI and do **not** pass —
-see Known Gaps 3 before quoting a green suite.
+`mix test` excludes 246 tests over 5 tags (the last line of `mix test` counts them all; its
+`Excluding tags` line names the tags). The `:verisim_data` tests among them are **not** run in CI
+and do **not** pass — see Known Gaps 3 before quoting a green suite.
 
 ## Machine-Readable Artefacts
 
@@ -312,8 +313,10 @@ into redoing finished work.
    (DEBT-REGISTER T-1.)
 4. **Rust CI is entirely blocked** by a stale `dtolnay/rust-toolchain@stable` pin in
    `.github/workflows/actions.lock` — 13 jobs die at `Set up job`. (DEBT-REGISTER CI-1.)
-5. **ESN training-data schema drift** — the echo-state forecaster has been learning from a
-   shape it no longer receives.
+5. **ESN training-data schema** — `TrainingPipeline.build_esn_training_data/1` reads both row
+   shapes (`pattern` + `fixed_at`, and `recipe_id` + `timestamp`) and keeps only qualified rows
+   (`lib/neural/training_pipeline.ex`; `mix test test/neural_training_qualification_test.exs`:
+   5 tests, 0 failures). Not measured: the state of a live trained ESN.
 6. **Silent scanner false-negatives** — wildcard recipes dropped, directory-mode dead patterns.
 7. **Neural training-data balance** — ~99% success in the historical outcome log.
    `lib/neural/rebalancer.ex` mitigates via synthetic regressions (Strategy A); B and C now exist
