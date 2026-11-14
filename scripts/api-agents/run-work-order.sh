@@ -27,7 +27,10 @@ die() {
 id=${1:-}
 dry=${2:-}
 [ -n "$id" ] || die "usage: run-work-order.sh ID [--dry-run]"
-case "$id" in *[!A-Za-z0-9-]*) die "the id has a character that is not a letter, a digit or a hyphen: $id" ;; esac
+case "$id" in
+  *[!A-Za-z0-9-]*) die "the id has a character that is not a letter, a digit or a hyphen: $id" ;;
+  *) ;;
+esac
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null) || die "run this inside a git checkout"
 dir=${WO_DIR:-$repo/docs/operations/e0-closeout/work-orders}
@@ -51,7 +54,10 @@ cap=$(attr cap-usd); turns=$(attr max-turns); wo_repo=$(attr repo)
 for v in "$agent" "$model" "$effort" "$cap" "$turns" "$wo_repo"; do
   [ -n "$v" ] || die "$file lacks one of the header lines agent, model, effort, cap-usd, max-turns, repo"
 done
-case "$cap$turns" in *[!0-9]*) die "cap-usd and max-turns must be whole numbers in $file" ;; esac
+case "$cap$turns" in
+  *[!0-9]*) die "cap-usd and max-turns must be whole numbers in $file" ;;
+  *) ;;
+esac
 
 origin=$(git -C "$repo" remote get-url origin 2>/dev/null || true)
 case "$origin" in

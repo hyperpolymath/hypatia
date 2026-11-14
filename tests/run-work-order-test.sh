@@ -23,8 +23,9 @@ mkdir -p "$repo/scripts/api-agents" "$repo/.claude/profiles" "$repo/wo"
 cp "$here/scripts/api-agents/run-work-order.sh" "$repo/scripts/api-agents/"
 cp "$here/.claude/profiles/e0-headless.json" "$repo/.claude/profiles/"
 order() { # order ID REPO
+  local id=$1 wo_repo=$2
   printf '= %s: fixture\n:wo-id: %s\n:wo-repo: %s\n:wo-size: small\n:wo-agent: e0-executor\n:wo-model: sonnet\n:wo-effort: medium\n:wo-cap-usd: 5\n:wo-max-turns: 120\n:wo-branch: fix/x\n:wo-depends: none\n' \
-    "$1" "$1" "$2" > "$repo/wo/$1-fixture.adoc"
+    "$id" "$id" "$wo_repo" > "$repo/wo/$id-fixture.adoc"
 }
 order E0-98 hyperpolymath/hypatia
 order E0-99 hyperpolymath/gitbot-fleet
@@ -47,34 +48,34 @@ export STUB_LOG="$work/args.log" HYPATIA_LEDGER="$work/ledger.jsonl" WO_DIR="$re
 export PATH="$work/bin:$PATH"
 : > "$STUB_LOG"
 run() { (cd "$repo" && sh scripts/api-agents/run-work-order.sh "$@"); }
-lines() { if [ -f "$HYPATIA_LEDGER" ]; then wc -l < "$HYPATIA_LEDGER"; else echo 0; fi; }
+lines() { if [[ -f "$HYPATIA_LEDGER" ]]; then wc -l < "$HYPATIA_LEDGER"; else echo 0; fi; }
 want="--agent e0-executor --model sonnet --effort medium --max-budget-usd 5 --max-turns 120 --permission-mode dontAsk"
 
 out=$(run E0-98 --dry-run)
-[[ "$out" == *"$want"* ]] && [ ! -s "$STUB_LOG" ] && ok "dry run prints the command and calls nothing" || fail "dry run: $out"
+[[ "$out" == *"$want"* ]] && [[ ! -s "$STUB_LOG" ]] && ok "dry run prints the command and calls nothing" || fail "dry run: $out"
 
 if (unset ANTHROPIC_API_KEY; run E0-98) 2>/dev/null; then fail "ran without an API key"; fi
-[ ! -s "$STUB_LOG" ] && [ "$(lines)" = 0 ] && ok "no API key: refused, nothing called, no ledger line" || fail "no API key"
+[[ ! -s "$STUB_LOG" ]] && [[ "$(lines)" == 0 ]] && ok "no API key: refused, nothing called, no ledger line" || fail "no API key"
 
 export ANTHROPIC_API_KEY=test-not-a-real-key
 run E0-98 >/dev/null
 [[ "$(cat "$STUB_LOG")" == *"$want"* ]] && ok "the run passes the model, effort, cap and turns of the work order" || fail "arguments: $(cat "$STUB_LOG")"
 line=$(tail -n 1 "$HYPATIA_LEDGER")
-[ "$(lines)" = 1 ] && [ "$(jq -cS . <<<"$line")" = "$line" ] && ok "one ledger line, in canonical form" || fail "ledger: $line"
-[ "$(jq -r '[.work_order, .cost_usd, .turns, .exit, .model] | join(" ")' <<<"$line")" = "E0-98 1.25 7 0 sonnet" ] &&
+[[ "$(lines)" == 1 ]] && [[ "$(jq -cS . <<<"$line")" == "$line" ]] && ok "one ledger line, in canonical form" || fail "ledger: $line"
+[[ "$(jq -r '[.work_order, .cost_usd, .turns, .exit, .model] | join(" ")' <<<"$line")" == "E0-98 1.25 7 0 sonnet" ]] &&
   ok "the ledger line has the work order, cost, turns, exit code and model" || fail "ledger fields: $line"
 
 code=0; STUB_EXIT=3 run E0-98 >/dev/null || code=$?
-[ "$code" = 3 ] && [ "$(tail -n 1 "$HYPATIA_LEDGER" | jq -r .exit)" = 3 ] && ok "a failed run keeps its exit code and still gets a ledger line" || fail "exit code $code"
+[[ "$code" == 3 ]] && [[ "$(tail -n 1 "$HYPATIA_LEDGER" | jq -r .exit)" == 3 ]] && ok "a failed run keeps its exit code and still gets a ledger line" || fail "exit code $code"
 
 before=$(wc -l < "$STUB_LOG")
 for bad in E0-97 E0-99 '../E0-98' 'E0-98;id'; do
   if run "$bad" >/dev/null 2>&1; then fail "accepted $bad"; fi
 done
-[ "$(wc -l < "$STUB_LOG")" = "$before" ] && ok "an unknown id, a work order for another repo and an unsafe id are refused" || fail "a refused id reached claude"
+[[ "$(wc -l < "$STUB_LOG")" == "$before" ]] && ok "an unknown id, a work order for another repo and an unsafe id are refused" || fail "a refused id reached claude"
 
 echo change > "$repo/untracked.txt"
 if run E0-98 >/dev/null 2>&1; then fail "ran with a dirty working tree"; fi
-[ "$(wc -l < "$STUB_LOG")" = "$before" ] && ok "a dirty working tree is refused" || fail "dirty tree reached claude"
+[[ "$(wc -l < "$STUB_LOG")" == "$before" ]] && ok "a dirty working tree is refused" || fail "dirty tree reached claude"
 
 echo "run-work-order: $pass checks passed"
