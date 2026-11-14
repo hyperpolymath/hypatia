@@ -905,6 +905,15 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr.yml", wf)) == []
     end
 
+    test "esac as the case subject does not close the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case esac in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs2.yml", wf)) == []
+    end
+
     test "the word case as an argument does not open a case" do
       wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
       found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
