@@ -212,8 +212,8 @@ Keep every `main` commit's verdict and the last 30 days of PR commits. Raw facts
 | Language | Tool and output | Line | Branch | Note
 
 | Rust | `cargo llvm-cov` JSON (already in `rust-ci.yml`); `--branch` for branches | yes | yes (nightly flag; to verify in experiment) | Per-test attribution via `cargo nextest` (one process per test) with `LLVM_PROFILE_FILE=%p`.
-| JS | `c8` (V8 native), lcov | yes | yes | V8 "branches" are block ranges, not conditions. Not comparable to llvm branches.
-| Elixir | `mix test --cover` (Erlang `:cover`), exported to lcov | yes | *no* | Erlang `:cover` has no branch data. TOOL-LIMIT.
+| JS | `c8` (V8 native), lcov. Built: parsed by `Hypatia.Coverage.Lcov`. | yes | yes, but see §4.4 | V8 "branches" are block ranges, not conditions. Not comparable to llvm branches. Block ids change between runs, so two runs cannot be compared on branches yet (§4.4).
+| Elixir | `mix test --cover` (Erlang `:cover`), exported to lcov by `Hypatia.Coverage.CoverTool`. Built. | yes | *no* | Erlang `:cover` has no branch data. TOOL-LIMIT. The exporter never writes `BRDA` or `BRF`.
 | Julia | `--code-coverage=user`, `.cov` files to lcov (CoverageTools) | yes | *no* | TOOL-LIMIT for branches.
 | Zig | `kcov` (DWARF), cobertura or lcov | yes | *no* | Zig built-in fuzz instrumentation may give edge data later.
 | Idris2 | none reliable | *no* | *no* | Judged by *proof coverage*: each declaration is covered if it is total and named by a checked theorem. Plus the proven-tests cell matrix.
@@ -239,6 +239,74 @@ If a covered declaration's content hash changed since the proof was checked, the
 * Paths are normalised to repo-relative. Unmapped paths are an error, not a silent drop (COV-E003).
 * *Expected flags* are declared per repo. A verdict waits for all of them, then times out to `UNJUDGED`, never to `PASS`.
 * *Carry-forward*: a flag whose files and tests are unchanged since its last judged commit may reuse that result. It is labelled "carried forward from <sha>" and expires after 14 days.
+
+=== 4.4 Collecting today (Elixir and JS)
+
+Both write LCOV, and both write a sidecar `<report>.meta.json` next to it.
+The sidecar has schema `hypatia.proven-coverage.report-meta/1` and the fields `repo`, `commit`, `run_id`, `role`, `tool`, `tool_version`.
+`role` is `raw` for the run of all tests and `proven` for the run of the counted subset (§4.2).
+
+==== Elixir
+
+A repo opts in with one line in `mix.exs`. Hypatia's own `mix.exs` does not use it yet, because that would change its CI.
+
+----
+test_coverage: [tool: Hypatia.Coverage.CoverTool, export_lcov: "cover/lcov.info"]
+----
+
+The tool is the one Mix calls for `--cover`. It keeps Mix's summary, threshold and HTML output.
+It adds `cover/lcov.info` and `cover/lcov.info.meta.json`. Only lines that `:cover` reports are written. Branches are not measurable.
+Repo and commit come from `GITHUB_REPOSITORY` and `GITHUB_SHA`, the run id from `GITHUB_RUN_ID`, the role from `HYPATIA_COVERAGE_ROLE`.
+A value that is unknown is left out of the sidecar and a warning is printed. Nothing is invented.
+
+Evidence comes from `Hypatia.Coverage.EvidenceFormatter`, an ExUnit formatter. Put this in `test/test_helper.exs`:
+
+----
+ExUnit.configure(formatters: [ExUnit.CLIFormatter, Hypatia.Coverage.EvidenceFormatter])
+----
+
+An untagged test is kind `E`. A stronger test carries two tags: `@tag :proven` to select it, and `@tag evidence: %{kind: "R", generator: ..., seed: ..., cases: ..., fixtures: ..., mutation: ...}` to describe it.
+`--only evidence` selects every test that has the tag, kind `E` included, so the counted subset is selected with `:proven`.
+
+Raw and proven runs (the proven run is a subset of the raw run, §4.2):
+
+----
+export GITHUB_REPOSITORY=owner/name GITHUB_SHA=$(git rev-parse HEAD)
+HYPATIA_COVERAGE_ROLE=raw    HYPATIA_EVIDENCE_OUT=cover/evidence.json mix test --cover
+cp cover/lcov.info cover/raw.lcov; cp cover/lcov.info.meta.json cover/raw.lcov.meta.json
+HYPATIA_COVERAGE_ROLE=proven mix test --cover --only proven
+mv cover/lcov.info cover/proven.lcov; mv cover/lcov.info.meta.json cover/proven.lcov.meta.json
+mix hypatia.coverage.report --raw cover/raw.lcov --proven cover/proven.lcov \
+  --evidence cover/evidence.json --repo $GITHUB_REPOSITORY --sha $GITHUB_SHA --root . --shadow
+----
+
+Evidence is taken from the raw run only. In the proven run the excluded tests are written as `skipped`, so do not use that file.
+
+==== JS
+
+`c8` writes LCOV itself. The real fixture is in `test/fixtures/coverage/js_demo/` (c8 10.1.3, Node 22).
+Node 22 also has a native reporter, `node --experimental-test-coverage --test-reporter=lcov`, which `Hypatia.Coverage.Lcov` parses too. It needs no dependency.
+
+----
+npx c8@10 --reporter=lcovonly --report-dir=cover/raw    --include 'src/**' node --test test/*.test.js
+npx c8@10 --reporter=lcovonly --report-dir=cover/proven --include 'src/**' node --test test/props.test.js
+----
+
+The proven run is the property-style subset. Write the sidecar with a few lines of shell after each run:
+
+----
+meta() { # $1 = report path, $2 = raw|proven
+  printf '{"schema":"hypatia.proven-coverage.report-meta/1","repo":"%s","commit":"%s","run_id":"%s","role":"%s","tool":"c8","tool_version":"%s"}\n' \
+    "$GITHUB_REPOSITORY" "$GITHUB_SHA" "${GITHUB_RUN_ID:-local-$$}" "$2" \
+    "$(npx c8@10 --version)" > "$1.meta.json"
+}
+meta cover/raw/lcov.info raw; meta cover/proven/lcov.info proven
+----
+
+There is no JS evidence emitter in this increment. The evidence file is written by hand, in the §3.1 shape (the demo has one).
+
+*Branches in JS.* c8 numbers its branch blocks in order, and V8 reports a block only when its count differs from its parent. So the same branch has a different `BRDA` block id in the raw run and in the proven run, and the proven run can have fewer arms. Hypatia then sees "arms covered in proven but absent in raw" and refuses the pair with COV-E011 (it never guesses a match). Until there is a stable key (for example a source range from a V8 JSON report), JS is judged on *lines*: remove the branch records before the report, for example `grep -vE "^(BRDA|BRF|BRH):" cover/raw/lcov.info > cover/raw.lcov`, and copy the sidecar to `cover/raw.lcov.meta.json`. The report then says "Branches: not measurable".
+The `LF` and `BRF` totals that c8 and Node write agree with their records, so the parser's cross-check holds with no change.
 
 == 5. How the result is shown
 
@@ -460,7 +528,12 @@ Each error says: what happened, why, what to run locally, and who owns it (repo 
 * Build model: Sonnet, medium effort (defined steps). Fixture generation: Haiku, low.
 * Push needs the Extended Hypatia session and the owner's "go".
 
-Second increment: the same for Elixir (`:cover` to lcov) and JS (`c8`), then the stamped collector in proven-cicd-and-workflows.
+Second increment (built): Elixir and JS collectors, commands in §4.4.
+
+* Elixir: `Hypatia.Coverage.CoverTool` (Mix `--cover` tool that also writes LCOV and the sidecar), `Hypatia.Coverage.CoverExport` (pure `:cover` data to LCOV) and `Hypatia.Coverage.EvidenceFormatter` (ExUnit formatter, one evidence record per test).
+* JS: no new module. `Hypatia.Coverage.Lcov` reads c8 and Node native LCOV. Tests use real c8 output and the report task with `--root` at the committed demo sources. Evidence is hand-written; there is no JS emitter yet.
+* Known limit: JS branch ids are not stable between runs (§4.4), so JS is judged on lines.
+* Not built: the stamped collector in proven-cicd-and-workflows, a JS evidence emitter, Hypatia's own `mix.exs` using `CoverTool`.
 
 == 11. Fixes needed in proven-tests-and-benches first
 
