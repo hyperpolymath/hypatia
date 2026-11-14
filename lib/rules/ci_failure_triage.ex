@@ -464,7 +464,13 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "dependency_advisory",
       layer: :code,
-      patterns: [~r/\bRUSTSEC-\d{4}-\d{4}\b/, ~r/error: \d+ vulnerabilit(y|ies) found/],
+      patterns: [
+        ~r/\bRUSTSEC-\d{4}-\d{4}\b/,
+        ~r/error: \d+ vulnerabilit(y|ies) found/,
+        # A wrapper script's per-lockfile verdict, with no RUSTSEC id in the
+        # log (echidna#504: `fuzz/Cargo.lock: FAILED (vulnerabilities found)`).
+        ~r/\bCargo\.lock: FAILED \(vulnerabilities found\)/
+      ],
       # An advisory id in a test or fixture is not an audit failure.
       context: [~r/\d+ vulnerabilit(y|ies) found|cargo[- ]audit|cargo[- ]deny|Crate:\s+\S+/i],
       action: :report,
@@ -474,6 +480,22 @@ defmodule Hypatia.Rules.CiFailureTriage do
       reason:
         "A dependency has a published advisory (cargo audit). A person bumps or " <>
           "replaces it; never ignore the advisory to pass."
+    },
+    %{
+      name: "shellcheck_findings",
+      layer: :code,
+      # ShellCheck's own finding form, `SC2030 (info): ...` (trope-checker#116,
+      # exit 123). The code and severity together; a bare "SC2030" in prose
+      # or a disable directive does not match.
+      patterns: [~r/\bSC\d{4} \((?:error|warning|info|style)\): /],
+      context: [~r/shellcheck|^In \S+ line \d+:/im],
+      action: :report,
+      retries: 0,
+      fix: nil,
+      escalation: :owner,
+      reason:
+        "ShellCheck found problems in a shell script. A person fixes the script " <>
+          "(or adds a reasoned inline disable); never weaken the lint to pass."
     },
     %{
       name: "review_rate_limited",
@@ -550,7 +572,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
     %{
       name: "sonar_not_authorized",
       layer: :config,
-      patterns: [~r/Not authorized or organization not found/],
+      patterns: [
+        ~r/Not authorized or organization not found/,
+        # The scanner's own call to SonarCloud refused the token (aerie#103:
+        # JRE metadata GET -> HTTP 403). 401/403 only; a 5xx is Sonar's outage.
+        ~r/https:\/\/(?:api\.)?sonarcloud\.io\/\S+ failed with HTTP 40[13]\b/
+      ],
       # An app may log the phrase; only a Sonar scanner run ties it to Sonar.
       context: [~r/sonar-scanner|SonarQube|SonarCloud/i],
       action: :owner,
@@ -559,7 +586,8 @@ defmodule Hypatia.Rules.CiFailureTriage do
       escalation: :owner,
       reason:
         "The Sonar scanner's token or project binding is not valid for this " <>
-          "organization (lithoglyph). The owner fixes the setting."
+          "organization (lithoglyph), or SONAR_TOKEN was refused (aerie). The " <>
+          "owner renews the token or fixes the setting."
     },
     %{
       name: "pages_not_enabled",
