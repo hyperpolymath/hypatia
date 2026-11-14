@@ -251,8 +251,16 @@ defmodule Hypatia.CrossRepoLearningTest do
         assert result.local_outcomes == 0
         assert result.local_confidence == nil
         # With no local row the target takes the transferred value, before
-        # annealing (blend_confidence/4).
-        assert is_float(result.blended_confidence)
+        # annealing (blend_confidence/4). So the blended value is that value
+        # annealed under the annealing state of the recipe, and it differs from
+        # what a target with no evidence at all gets (the prior 0.5, annealed).
+        annealing_state = Hypatia.OutcomeTracker.get_annealing_state(recipe)
+
+        assert result.blended_confidence ==
+                 Hypatia.ConfidenceAnnealing.anneal(1.0, annealing_state)
+
+        refute result.blended_confidence ==
+                 Hypatia.ConfidenceAnnealing.anneal(0.5, annealing_state)
       end
 
       # Two verified successes are below the transfer minimum: nothing moves.
