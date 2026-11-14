@@ -42,11 +42,16 @@ order E0-95 hyperpolymath/hypatia
 order E0-93 hyperpolymath/hypatia sonnet --mirror     # an option of git push, not a branch
 order E0-92 hyperpolymath/hypatia sonnet +HEAD:topic  # a refspec that forces
 sed -i "s/^:wo-id: E0-95$/:wo-id: E0-94/" "$repo/wo/E0-95-fixture.adoc" # the header names another id
-url=https://example.invalid/hyperpolymath/hypatia
+# A local bare repository is the origin, so that the launch script can fetch main from it.
+url="$work/remote/hyperpolymath/hypatia.git"
+mkdir -p "$work/remote/hyperpolymath"
+git init -q --bare "$url"
 git -C "$repo" init -q
 git -C "$repo" remote add origin "$url"
 git -C "$repo" add -A
-git -C "$repo" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false commit -q -m fixture
+commit() { git -C "$repo" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false commit -q "$@"; }
+commit -m fixture
+git -C "$repo" -c push.negotiate=false push -q origin HEAD:main
 
 # A stub claude: it records its arguments and the effort variable, and prints a result.
 mkdir -p "$work/bin"
@@ -127,9 +132,23 @@ if CLAUDE_CODE_USE_BEDROCK=1 run E0-98 >/dev/null 2>&1; then fail "ran with a pr
 if ANTHROPIC_BASE_URL=https://example.invalid run E0-98 >/dev/null 2>&1; then fail "ran with another endpoint"; fi
 [[ "$(calls)" == "$before" ]] && ok "a provider variable and another endpoint are refused" || fail "a routed run reached claude"
 
+sed -i "s/^:wo-cap-usd: 5$/:wo-cap-usd: 25/" "$repo/wo/E0-98-fixture.adoc"
+commit -a -m "a work order that main does not have"
+if run E0-98 >/dev/null 2>&1; then fail "ran a work order that differs from main"; fi
+git -C "$repo" reset -q --hard HEAD~1
+[[ "$(calls)" == "$before" ]] && ok "a work order that differs from origin/main is refused" || fail "a stale work order reached claude"
+
 mv "$skill" "$skill.off"
 if run E0-98 --dry-run >/dev/null 2>&1; then fail "accepted a checkout without the skill"; fi
 mv "$skill.off" "$skill"
 ok "a checkout without the e0-work-order skill is refused"
+
+# The skill names these commands with no variable part, so each needs its exact rule.
+rules=$(jq -r ".permissions.allow[]" "$here/.claude/profiles/e0-headless.json")
+for cmd in "git fetch origin" "git merge --no-edit origin/main" "mix --version"; do
+  grep -qxF "Bash($cmd)" <<<"$rules" || fail "the profile has no exact rule for: $cmd"
+done
+if grep -q "^Bash(git push" <<<"$rules"; then fail "the profile has a push rule"; fi
+ok "the profile has an exact rule for each fixed command of the skill, and no push rule"
 
 echo "run-work-order: $pass checks passed"

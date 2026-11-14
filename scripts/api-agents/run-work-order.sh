@@ -137,6 +137,12 @@ case "$charmap" in
   *) die "the locale is $charmap, not UTF-8: 1 test of the suite fails then. Set LANG to a UTF-8 locale, for example C.UTF-8" ;;
 esac
 [ -z "$(git -C "$repo" status --porcelain)" ] || die "the working tree has changes: commit or stash them first"
+# The skill reads the work order on origin/main, and the run starts with the
+# agent, the skills and the rules of this checkout. The cap, the model and the
+# ledger line come from this checkout too, so all of them must equal main.
+git -C "$repo" fetch -q origin main || die "cannot fetch main from origin"
+git -C "$repo" diff --quiet origin/main -- "${file#"$repo"/}" .claude scripts/api-agents 2>/dev/null ||
+  die "the work order or the kit (.claude, scripts/api-agents) differs from origin/main: start the run from a checkout of main"
 command -v claude >/dev/null 2>&1 || die "the claude command is not on PATH"
 command -v jq >/dev/null 2>&1 || die "jq is not on PATH"
 
