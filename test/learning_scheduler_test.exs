@@ -634,4 +634,283 @@ defmodule Hypatia.LearningSchedulerTest do
       assert length(stored_rows(tmp)) == 1
     end
   end
+
+  # ── E0-03: fleet rows that cannot be qualified stay as audit rows ───
+
+  describe "fleet audit rows" do
+    alias Hypatia.OutcomeTracker
+
+    setup %{tmp: tmp} do
+      orig_fleet = Application.fetch_env(:hypatia, :fleet_path)
+      fleet = Path.join(tmp, "fleet")
+      Application.put_env(:hypatia, :fleet_path, fleet)
+
+      fleet_file = Path.join(fleet, "shared-context/learning/fix-outcomes.jsonl")
+      File.mkdir_p!(Path.dirname(fleet_file))
+      File.write!(fleet_file, "")
+
+      on_exit(fn ->
+        case orig_fleet do
+          {:ok, val} -> Application.put_env(:hypatia, :fleet_path, val)
+          :error -> Application.delete_env(:hypatia, :fleet_path)
+        end
+      end)
+
+      %{fleet_file: fleet_file}
+    end
+
+    # The shape that the fleet writes (gitbot-fleet `legacy_outcome`): the
+    # outcome is "success" beside each verdict other than "failed".
+    defp fleet_row(verdict, extra \\ %{}) do
+      outcome = if verdict == "failed", do: "failure", else: "success"
+
+      %{
+        "recipe_id" => "recipe-e0-03",
+        "repo" => "owner/repo",
+        "file" => "a.txt",
+        "bot" => "robot-repo-automaton",
+        "outcome" => outcome,
+        "verdict" => verdict,
+        "exit_code" => 0,
+        "before_hits" => 2,
+        "after_hits" => 0
+      }
+      |> Map.merge(extra)
+    end
+
+    defp write_fleet(fleet_file, rows) do
+      File.write!(fleet_file, Enum.map_join(rows, "", &(Jason.encode!(&1) <> "\n")))
+    end
+
+    defp fleet_stored(tmp) do
+      case File.ls(outcomes_dir(tmp)) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+          |> Enum.flat_map(fn f ->
+            outcomes_dir(tmp)
+            |> Path.join(f)
+            |> File.read!()
+            |> String.split("\n", trim: true)
+            |> Enum.map(&Jason.decode!/1)
+          end)
+
+        {:error, _} ->
+          []
+      end
+    end
+
+    test "a no_op row and an unverified row are stored once and give no learning",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      write_fleet(fleet_file, [
+        fleet_row("no_op", %{"before_hits" => 0}),
+        fleet_row("unverified", %{"before_hits" => nil, "after_hits" => nil})
+      ])
+
+      # An audit row is stored but is not counted as a processed outcome.
+      assert {0, signature} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      rows = fleet_stored(tmp)
+      assert length(rows) == 2
+      assert rows |> Enum.map(& &1["verification"]) |> Enum.sort() == ["no_op", "unverified"]
+      assert Enum.all?(rows, &(&1["origin"] == "gitbot-fleet"))
+      assert Enum.all?(rows, &is_binary(&1["fleet_import_id"]))
+
+      # No positive and no negative learning: the rows fall under `ignored`.
+      assert OutcomeTracker.qualified_outcome_counts(rows) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 2}
+
+      # A second poll, with the cache and cold, stores nothing again.
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(signature)
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+      assert length(fleet_stored(tmp)) == 2
+    end
+
+    test "a success row with no verdict is stored as unqualified", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      row = fleet_row("x") |> Map.drop(["verdict", "exit_code", "before_hits", "after_hits"])
+      write_fleet(fleet_file, [row])
+
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [stored] = fleet_stored(tmp)
+      assert stored["verification"] == "unqualified"
+      assert stored["outcome"] == "success"
+
+      assert OutcomeTracker.qualified_outcome_counts([stored]) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 1}
+    end
+
+    test "a verified verdict with no supporting numbers is stored as unqualified", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      write_fleet(fleet_file, [fleet_row("verified", %{"before_hits" => 0})])
+
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [stored] = fleet_stored(tmp)
+      assert stored["verification"] == "unqualified"
+      assert stored["verdict"] == "verified"
+      assert OutcomeTracker.qualified_outcome_counts([stored]).successes == 0
+    end
+
+    test "an incomplete verdict with the outcome success and after_hits above 0 is 1 failure",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      # The fleet writes the legacy outcome "success" beside "incomplete".
+      write_fleet(fleet_file, [fleet_row("incomplete", %{"after_hits" => 3})])
+
+      assert {1, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [stored] = fleet_stored(tmp)
+      assert stored["outcome"] == "failure"
+      assert stored["verification"] == "incomplete"
+
+      assert OutcomeTracker.qualified_outcome_counts([stored]) ==
+               %{successes: 0, failures: 1, false_positives: 0, ignored: 0}
+    end
+
+    test "an incomplete verdict with the outcome failure is also 1 failure, and with no hits it is audit",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      write_fleet(fleet_file, [
+        fleet_row("incomplete", %{"outcome" => "failure", "after_hits" => 1}),
+        fleet_row("incomplete", %{"after_hits" => 0, "file" => "b.txt"})
+      ])
+
+      assert {1, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      rows = fleet_stored(tmp)
+      assert length(rows) == 2
+
+      assert OutcomeTracker.qualified_outcome_counts(rows) ==
+               %{successes: 0, failures: 1, false_positives: 0, ignored: 1}
+    end
+
+    test "a stored fleet row keeps the 4 audit fields of its source row", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      write_fleet(fleet_file, [
+        fleet_row("verified"),
+        fleet_row("failed", %{
+          "exit_code" => 2,
+          "file" => "c.txt",
+          "before_hits" => 1,
+          "after_hits" => 1
+        })
+      ])
+
+      assert {2, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      rows = fleet_stored(tmp)
+      verified = Enum.find(rows, &(&1["verification"] == "verified"))
+      failed = Enum.find(rows, &(&1["verification"] == "failed"))
+
+      assert Map.take(verified, ["verdict", "exit_code", "before_hits", "after_hits"]) ==
+               %{"verdict" => "verified", "exit_code" => 0, "before_hits" => 2, "after_hits" => 0}
+
+      assert Map.take(failed, ["verdict", "exit_code", "before_hits", "after_hits"]) ==
+               %{"verdict" => "failed", "exit_code" => 2, "before_hits" => 1, "after_hits" => 1}
+    end
+
+    test "an audit map cannot replace fleet_import_id, origin or verification", %{tmp: tmp} do
+      assert {:ok, record} =
+               OutcomeTracker.record_fleet_outcome(
+                 "recipe-e0-03",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 "source-id-1",
+                 "unqualified",
+                 %{
+                   "verification" => "verified",
+                   "origin" => "elsewhere",
+                   "fleet_import_id" => "forged",
+                   "outcome" => "failure",
+                   "verdict" => "no_op"
+                 }
+               )
+
+      assert record["verification"] == "unqualified"
+      assert record["origin"] == "gitbot-fleet"
+      assert record["fleet_import_id"] == "source-id-1"
+      assert record["outcome"] == "success"
+      assert record["verdict"] == "no_op"
+
+      assert [stored] = fleet_stored(tmp)
+      assert stored["verification"] == "unqualified"
+      assert OutcomeTracker.qualified_outcome_counts([stored]).successes == 0
+    end
+
+    test "a row whose verdict and outcome disagree is audit evidence and is named in a warning",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      # The verdict says "failed", the outcome says "success".
+      write_fleet(fleet_file, [fleet_row("failed", %{"outcome" => "success", "exit_code" => 1})])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(self(), {:poll, LearningScheduler.ingest_fleet_outcomes(nil)})
+        end)
+
+      assert_received {:poll, {0, _}}
+      assert log =~ "verdict"
+      assert log =~ "disagrees with outcome"
+
+      assert [stored] = fleet_stored(tmp)
+      assert stored["verification"] == "unqualified"
+      assert stored["verdict"] == "failed"
+      assert OutcomeTracker.qualified_outcome_counts([stored]).failures == 0
+    end
+
+    test "every source row goes to exactly one bucket" do
+      rows = [
+        fleet_row("verified"),
+        fleet_row("failed", %{"exit_code" => 1}),
+        fleet_row("incomplete", %{"after_hits" => 2}),
+        fleet_row("no_op"),
+        fleet_row("unverified"),
+        fleet_row("verified", %{"before_hits" => 0}),
+        fleet_row("no_op", %{"recipe_id" => nil}),
+        fleet_row("no_op", %{"repo" => ""}),
+        fleet_row("verified", %{"bot" => "hypatia"}),
+        %{"nonsense" => true}
+      ]
+
+      buckets =
+        Enum.map(rows, fn row ->
+          case LearningScheduler.classify_fleet_record(row) do
+            {:ok, _, _, _, _, _} -> :qualified
+            {:audit, _, _, _, _, _} -> :audit
+            :skip -> :skip
+          end
+        end)
+
+      assert Enum.frequencies(buckets) == %{qualified: 3, audit: 3, skip: 4}
+      assert length(buckets) == length(rows)
+    end
+
+    test "an audit row does not change a recipe that the scheduler recomputes", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      recipes = Path.join(tmp, "recipes")
+      File.mkdir_p!(recipes)
+      recipe_file = Path.join(recipes, "recipe-e0-03.json")
+
+      File.write!(
+        recipe_file,
+        Jason.encode!(%{"id" => "recipe-e0-03", "confidence" => 0.5, "confidence_prior" => 0.5})
+      )
+
+      before_bytes = File.read!(recipe_file)
+
+      write_fleet(fleet_file, [fleet_row("no_op"), fleet_row("unverified")])
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert length(fleet_stored(tmp)) == 2
+      assert File.read!(recipe_file) == before_bytes
+    end
+  end
 end

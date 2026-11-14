@@ -62,20 +62,32 @@ defmodule Hypatia.OutcomeTracker do
   defp untrusted_verification(metadata), do: metadata
 
   @doc """
-  Import a postcondition-verified fleet attempt without echoing it into the
-  source fleet log. The provenance id makes repeat imports detectable.
+  Import a fleet attempt without echoing it into the source fleet log. The
+  provenance id makes repeat imports detectable.
+
+  A qualified attempt (see `qualified_outcome_counts/1`) is learning evidence.
+  An attempt that cannot be qualified is still stored, as an audit row: it is
+  visible and countable as an attempt, and it is `ignored` by every learning
+  count. The caller sets `verification` to `"no_op"`, `"unverified"` or
+  `"unqualified"` for such a row.
+
+  `audit` is a map of extra fields of the source row (for example `"verdict"`,
+  `"exit_code"`, `"before_hits"` and `"after_hits"`). It is merged under the
+  fields of this function: it cannot replace `fleet_import_id`, `origin` or
+  `verification`, nor any field that the row always carries.
   """
-  def record_fleet_outcome(recipe_id, repo, file, outcome, source_id, verification) do
+  def record_fleet_outcome(recipe_id, repo, file, outcome, source_id, verification, audit \\ %{})
+      when is_map(audit) do
     persist_outcome(
       recipe_id,
       repo,
       file,
       outcome,
-      %{
+      Map.merge(audit, %{
         "fleet_import_id" => source_id,
         "origin" => "gitbot-fleet",
         "verification" => verification
-      },
+      }),
       false
     )
   end
@@ -166,16 +178,19 @@ defmodule Hypatia.OutcomeTracker do
 
         # The event is committed even when the derived recipe summary is
         # temporarily unavailable. The LearningScheduler retries that recipe
-        # from the durable log on the next cycle.
-        case do_update_recipe_confidence(recipe_id, store, fn -> :ok end) do
-          {:error, reason} ->
-            Logger.warning("Outcome logged; recipe update pending: #{inspect(reason)}")
+        # from the durable log on the next cycle. A fleet audit row is not
+        # evidence, so it does not recompute a recipe.
+        unless fleet_audit_row?(record) do
+          case do_update_recipe_confidence(recipe_id, store, fn -> :ok end) do
+            {:error, reason} ->
+              Logger.warning("Outcome logged; recipe update pending: #{inspect(reason)}")
 
-          :recipe_not_found ->
-            Logger.warning("Outcome logged; recipe not yet registered: #{recipe_id}")
+            :recipe_not_found ->
+              Logger.warning("Outcome logged; recipe not yet registered: #{recipe_id}")
 
-          _ ->
-            :ok
+            _ ->
+              :ok
+          end
         end
 
         Hypatia.Telemetry.outcome_recorded(
@@ -192,6 +207,11 @@ defmodule Hypatia.OutcomeTracker do
         Logger.error("Outcome not persisted: #{inspect(reason)}")
         {:error, {:outcome_log_write, reason}}
     end
+  end
+
+  # A row that the fleet import stored without qualifying it.
+  defp fleet_audit_row?(record) do
+    Map.get(record, "origin") == "gitbot-fleet" and not qualified_outcome?(record)
   end
 
   @doc false
@@ -641,7 +661,10 @@ defmodule Hypatia.OutcomeTracker do
   Returns :improving, :declining, or :stable.
   """
   def confidence_trend(recipe_id) do
-    outcomes = load_outcomes_for_recipe(recipe_id)
+    # A fleet audit row is stored but is not evidence (it can carry the legacy
+    # outcome "success"), so it is neither a success here nor a row that can
+    # push evidence out of the window below.
+    outcomes = recipe_id |> load_outcomes_for_recipe() |> Enum.reject(&fleet_audit_row?/1)
 
     if length(outcomes) < 3 do
       :insufficient_data

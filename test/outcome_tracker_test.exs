@@ -155,7 +155,9 @@ defmodule Hypatia.OutcomeTrackerTest do
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
-      assert Hypatia.LearningScheduler.classify_fleet_record(row) == :skip
+      # A row that is not evidence is kept as an audit row (E0-03).
+      assert Hypatia.LearningScheduler.classify_fleet_record(row) ==
+               {:audit, "recipe-a", "example", ".", :success, "unqualified"}
 
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 2, "after_hits" => 0})
@@ -163,10 +165,14 @@ defmodule Hypatia.OutcomeTrackerTest do
 
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 0, "after_hits" => 0})
-             ) == :skip
+             ) == {:audit, "recipe-a", "example", ".", :success, "unqualified"}
 
       assert Hypatia.LearningScheduler.classify_fleet_record(Map.put(row, "verdict", "no_op")) ==
-               :skip
+               {:audit, "recipe-a", "example", ".", :success, "no_op"}
+
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.put(row, "verdict", "unverified")
+             ) == {:audit, "recipe-a", "example", ".", :success, "unverified"}
 
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "failed", "exit_code" => 1, "outcome" => "failure"})
@@ -178,6 +184,11 @@ defmodule Hypatia.OutcomeTrackerTest do
                  "after_hits" => 2,
                  "outcome" => "failure"
                })
+             ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+
+      # The fleet writes the legacy outcome "success" beside "incomplete".
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2})
              ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
 
       assert Hypatia.LearningScheduler.classify_fleet_record(
@@ -194,6 +205,76 @@ defmodule Hypatia.OutcomeTrackerTest do
   describe "confidence_trend/1" do
     test "returns insufficient_data for recipe with few outcomes" do
       assert OutcomeTracker.confidence_trend("recipe-nonexistent") == :insufficient_data
+    end
+
+    # E0-03 review finding: a fleet audit row (stored, but not evidence) has
+    # the outcome "success" when the fleet writes the legacy value. The trend
+    # must not read it as a success, and it must not push evidence out of the
+    # window of the last 10 rows.
+    test "fleet audit rows do not make a recipe look like it is improving" do
+      recipe = "recipe-trend-audit-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "a#{n}.txt",
+                   :success,
+                   "#{recipe}-audit-#{n}",
+                   "no_op"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :insufficient_data
+    end
+
+    test "fleet audit rows do not displace qualified failures from the window" do
+      recipe = "recipe-trend-window-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "f#{n}.txt",
+                   :failure,
+                   "#{recipe}-failed-#{n}",
+                   "failed"
+                 )
+      end
+
+      for n <- 1..12 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "u#{n}.txt",
+                   :success,
+                   "#{recipe}-audit-#{n}",
+                   "unverified"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :declining
+    end
+
+    test "qualified rows still give the trend" do
+      recipe = "recipe-trend-qualified-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "v#{n}.txt",
+                   :success,
+                   "#{recipe}-verified-#{n}",
+                   "verified"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :improving
     end
   end
 

@@ -766,8 +766,10 @@ defmodule Hypatia.LearningScheduler do
     before_hits = Map.get(record, "before_hits")
     after_hits = Map.get(record, "after_hits")
 
+    fleet_outcome = Map.get(record, "outcome")
+
     classified =
-      case {verdict, Map.get(record, "outcome")} do
+      case {verdict, fleet_outcome} do
         {"verified", "success"}
         when is_integer(before_hits) and before_hits > 0 and
                after_hits == 0 ->
@@ -776,7 +778,11 @@ defmodule Hypatia.LearningScheduler do
         {"failed", "failure"} when is_integer(exit_code) and exit_code != 0 ->
           {:failure, "failed"}
 
-        {"incomplete", "failure"} when is_integer(after_hits) and after_hits > 0 ->
+        # The fleet writes the legacy outcome "success" beside "incomplete"
+        # (it reports the exit status only), so both outcomes qualify. The
+        # numbers decide: the weak point is still there after the fix.
+        {"incomplete", o}
+        when o in ["success", "failure"] and is_integer(after_hits) and after_hits > 0 ->
           {:failure, "incomplete"}
 
         _ ->
@@ -791,7 +797,14 @@ defmodule Hypatia.LearningScheduler do
         :skip
 
       classified == :unqualified ->
-        :skip
+        # Not evidence, but an attempt: keep it as an audit row. It has no
+        # positive and no negative weight (`qualified_outcome_counts/1` puts it
+        # under `ignored`). Only the verdicts that say so are named; every other
+        # case is "unqualified".
+        audit_verification =
+          if verdict in ["no_op", "unverified"], do: verdict, else: "unqualified"
+
+        {:audit, recipe_id, repo, file, audit_outcome(fleet_outcome), audit_verification}
 
       true ->
         {outcome, verification} = classified
@@ -800,6 +813,30 @@ defmodule Hypatia.LearningScheduler do
   end
 
   def classify_fleet_record(_record), do: :skip
+
+  # The outcome that an audit row keeps: what the source row says, and
+  # nothing is invented for a value that is not "success" or "failure".
+  defp audit_outcome("success"), do: :success
+  defp audit_outcome("failure"), do: :failure
+  defp audit_outcome(_other), do: :unknown
+
+  # The audit fields of a source row that a stored fleet row keeps.
+  defp fleet_audit_fields(record) when is_map(record) do
+    Map.take(record, ["verdict", "exit_code", "before_hits", "after_hits"])
+  end
+
+  # A fleet row has 2 fields that can disagree: the verdict and the outcome.
+  # The legacy "success" beside a verdict other than "failed" is the normal
+  # shape, so only these pairs are a disagreement.
+  defp fleet_fields_disagree?(record) do
+    case {Map.get(record, "verdict"), Map.get(record, "outcome")} do
+      {"failed", "success"} -> true
+      {"verified", "failure"} -> true
+      {"no_op", "failure"} -> true
+      {"unverified", "failure"} -> true
+      _ -> false
+    end
+  end
 
   @doc false
   def fleet_source_id(line, line_number) when is_binary(line) and is_integer(line_number) do
@@ -877,22 +914,34 @@ defmodule Hypatia.LearningScheduler do
         case Jason.decode(line) do
           {:ok, record} ->
             case classify_fleet_record(record) do
-              {:ok, recipe_id, repo, file, outcome, verification} ->
+              {kind, recipe_id, repo, file, outcome, verification} when kind in [:ok, :audit] ->
                 id = fleet_source_id(line, line_number)
 
                 if MapSet.member?(seen, id) do
                   {:cont, {:ok, seen, count}}
                 else
+                  if kind == :audit and fleet_fields_disagree?(record) do
+                    Logger.warning(
+                      "LearningScheduler: fleet row #{line_number}: verdict " <>
+                        "#{inspect(Map.get(record, "verdict"))} disagrees with outcome " <>
+                        "#{inspect(Map.get(record, "outcome"))}; stored as an audit row"
+                    )
+                  end
+
                   case Hypatia.OutcomeTracker.record_fleet_outcome(
                          recipe_id,
                          repo,
                          file,
                          outcome,
                          id,
-                         verification
+                         verification,
+                         fleet_audit_fields(record)
                        ) do
+                    # An audit row is stored and acknowledged, and it is not
+                    # counted as a processed outcome.
                     {:ok, _record} ->
-                      {:cont, {:ok, MapSet.put(seen, id), count + 1}}
+                      {:cont,
+                       {:ok, MapSet.put(seen, id), count + if(kind == :ok, do: 1, else: 0)}}
 
                     {:error, reason} ->
                       {:halt, {:error, {:write_failed, line_number, reason}}}
