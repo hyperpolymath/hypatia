@@ -78,11 +78,14 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
   `rollbacks.jsonl`). Set the status `rolled_back` only after each write
   succeeds. When a write fails, return `{:error, reason}` and leave the
   status as it was, so that a later call can do the rollback again.
-. A retry writes no second outcome row. Before it writes the `false_positive`
-  row of an original outcome, it checks the log for a rollback row with the
-  same `batch_id`, `recipe_id`, `repo` and `file`, and it skips the write
-  when one exists. The retry still lists that outcome in the manifest, so
-  the manifest is complete and has each instruction once.
+. A retry writes no second outcome row. No stable id exists for an outcome,
+  and 2 original outcomes can share the same `batch_id`, `recipe_id`, `repo`
+  and `file`. So count by key. For each key, let N be the number of original
+  outcomes and M the number of rollback rows already in the log. The retry
+  writes N minus M rows for that key (none when M is N or more), and it
+  skips the first M originals of that key in the order of the log. The retry
+  still lists every original outcome in the manifest, so the manifest is
+  complete and has each instruction once.
 
 == Acceptance
 
@@ -100,6 +103,10 @@ order. Use the result as a design rule. Its match to the Elixir is assumed.
   `rollbacks.jsonl`, a retry completes the rollback, writes no second
   outcome row for any original outcome, and gives a manifest with each
   instruction once.
+* A test shows a retry with 2 original outcomes that share the same `batch_id`,
+  `recipe_id`, `repo` and `file`, where the first rollback row was written and
+  the second write failed: the retry writes exactly 1 more row, so the log
+  holds 2 rollback rows for that key.
 * A test shows that a second `rollback/2` of the same batch adds 0 rows to
   the outcome log and 0 lines to `rollbacks.jsonl`.
 * The diff touches `lib/safety/batch_rollback.ex` and `test/safety_test.exs` only.
