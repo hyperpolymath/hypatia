@@ -8,7 +8,10 @@
 # needs a row in the Hypatia to squabbler rule map, proven/registry/sq-map.tsv
 # in hyperpolymath/proven-cicd-and-workflows. This job fails a change here that
 # adds such a rule without that row, and names the row, so the author adds it in
-# a proven-cicd PR first and then re-runs this job.
+# a proven-cicd PR first, pending (praxis `absent`), and then re-runs this job.
+# After this change merges, proven-cicd flips the column to `present` when it
+# moves its Hypatia pin. That order keeps both repositories green; a row added
+# `present` would fail proven-cicd's own check against its pin.
 #
 # What is checked: the registry the rule sources emit now, from
 # `scripts/gen-rules-praxis.sh --stdout`, not the committed
@@ -17,8 +20,12 @@
 # check ("Rule registry (hypatia_rules_praxis.deed) matches the code and lints").
 #
 # proven-cicd is read at main, not at a pin: the question is whether the rule is
-# mapped now. The verdict is proven-cicd's own tests/registry-sq-map.sh. A failed
-# checkout, generator or test is NOT RUN and fails the job; it is never a pass.
+# mapped now. The verdict is proven-cicd main's own tests/registry-sq-map.sh,
+# run with HYPATIA_PRAXIS_SOURCE=1 (this change's registry, so a praxis-column
+# mismatch is a WARN and only a missing row fails). Because the job runs whatever
+# test proven-cicd main holds, any tightening of that test lands in this job,
+# and so in Hypatia's CI, with no Hypatia change. A failed checkout, generator
+# or test is NOT RUN and fails the job; it is never a pass.
 #
 # Not a required check: making it one is a ruleset change for the owner.
 
