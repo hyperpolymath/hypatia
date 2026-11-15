@@ -108,6 +108,42 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert refused.source_error == :fixture_refusal
   end
 
+  # E0-24: an untrained novelty network cannot say that a finding is known, so each
+  # finding counts as novel and is held at report_only (fail closed). The board status
+  # stays :unknown, so "untrained" is not mistaken for "novel by distance".
+  test "an untrained cohort counts every finding as novel and holds it at report_only", ctx do
+    write_training_store(ctx.first)
+    {server, _cohort} = coordinator()
+    refute :sys.get_state(server).rbf.trained
+
+    assert %{rbf: %{novelty: :untrained, is_novel: true}, is_novel: true} =
+             Coordinator.analyze(@finding, server)
+
+    assert %{
+             is_novel: true,
+             strategy: :report_only,
+             raw_strategy: :report_only,
+             reason: reason
+           } = Coordinator.dispatch_recommendation(@finding, server)
+
+    assert reason =~ "untrained"
+  end
+
+  test "once the novelty network is trained, a finding it knows is not held as novel", ctx do
+    write_training_store(ctx.first)
+    {server, _cohort} = coordinator()
+    assert :ok = Coordinator.force_cycle(server)
+    assert {:ok, %{cycle_count: 1}} = barrier(server, ctx.first)
+    assert :sys.get_state(server).rbf.trained
+
+    analysis = Coordinator.analyze(@finding, server)
+    assert analysis.rbf.novelty != :untrained
+    assert analysis.is_novel == match?({:novel, _}, analysis.rbf.novelty)
+
+    rec = Coordinator.dispatch_recommendation(@finding, server)
+    refute rec.reason =~ "untrained"
+  end
+
   test "an actual ready cohort can analyze, train and persist its own source", ctx do
     write_training_store(ctx.first)
     {server, _cohort} = coordinator()
@@ -133,6 +169,18 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     end
 
     refute File.exists?(Path.join(ctx.second, "neural-states"))
+  end
+
+  # E0-23: the autoencoder encodes nothing yet (an all-zero latent, cluster 0). Its
+  # result says so, and the coordinator gives it no weight in the derived confidence.
+  test "the autoencoder's result is marked as a placeholder", ctx do
+    write_training_store(ctx.first)
+    {server, _cohort} = coordinator()
+
+    assert %{vae: %{placeholder: true, cluster_id: 0, latent: latent}} =
+             Coordinator.analyze(@finding, server)
+
+    assert Enum.all?(latent, &(&1 == 0.0))
   end
 
   test "running A cannot answer, learn or persist as empty B and cannot resume by switching back",

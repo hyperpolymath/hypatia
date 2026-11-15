@@ -496,13 +496,7 @@ defmodule Hypatia.Neural.Coordinator do
       trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
       trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
 
-      raw_strategy =
-        cond do
-          novel -> :report_only
-          confidence >= 0.95 -> :auto_execute
-          confidence >= 0.85 -> :review
-          true -> :report_only
-        end
+      raw_strategy = raw_strategy(novel, confidence)
 
       # Annealing gate: clamp strategy based on recipe's outcome maturity.
       # A recipe with only 3 outcomes cannot reach :auto_execute regardless
@@ -521,7 +515,7 @@ defmodule Hypatia.Neural.Coordinator do
         preferred_bots: Enum.take(trusted_bots, 3),
         preferred_recipes: Enum.take(trusted_recipes, 5),
         is_novel: novel,
-        reason: dispatch_reason(strategy, confidence, novel),
+        reason: dispatch_reason(strategy, confidence, novel, novelty_untrained?(trace)),
         annealing_clamped: strategy != raw_strategy,
         architecture: :blackboard,
         networks_consulted: @network_count
@@ -779,7 +773,7 @@ defmodule Hypatia.Neural.Coordinator do
       output: rbf_output,
       similarity: rbf_confidence,
       novelty: novelty,
-      is_novel: match?({:novel, _}, novelty)
+      is_novel: novelty_flag(novelty)
     }
 
     write_board!(state, :rbf, :novelty_result, result)
@@ -919,7 +913,7 @@ defmodule Hypatia.Neural.Coordinator do
   # ── Confidence Derivation ───────────────────────────────
 
   @doc false
-  defp derive_confidence(trace) do
+  def derive_confidence(trace) do
     # Derive confidence from the full reasoning trace rather than
     # hardcoded fixed weights. Each network contributes evidence.
     networks = trace.networks || %{}
@@ -943,7 +937,12 @@ defmodule Hypatia.Neural.Coordinator do
       {esn_pred, if(has_network?(networks, :esn), do: 0.15, else: 0.0)},
       # New networks contribute smaller initial weights (they're untrained)
       {gnn_confidence(networks), if(has_network?(networks, :gnn), do: 0.05, else: 0.0)},
-      {vae_confidence(networks), if(has_network?(networks, :vae), do: 0.05, else: 0.0)},
+      # A network that returns a fixed placeholder adds nothing (E0-23).
+      {vae_confidence(networks),
+       if(has_network?(networks, :vae) and not placeholder?(networks, :vae, :interpretation),
+         do: 0.05,
+         else: 0.0
+       )},
       {seq_confidence(networks), if(has_network?(networks, :sequence), do: 0.05, else: 0.0)}
     ]
 
@@ -984,6 +983,21 @@ defmodule Hypatia.Neural.Coordinator do
   end
 
   defp has_network?(networks, key), do: Map.has_key?(networks, key)
+
+  # Does the entry say that it is a placeholder? Only the mark `placeholder: true`
+  # does: an entry with no mark, or with `placeholder: false`, is evidence.
+  defp placeholder?(networks, network_key, entry_key) do
+    case Map.get(networks, network_key) do
+      entries when is_list(entries) ->
+        match?(
+          %{value: %{placeholder: true}},
+          Enum.find(entries, fn e -> e.key == entry_key end)
+        )
+
+      _ ->
+        false
+    end
+  end
 
   defp gnn_confidence(networks) do
     extract_confidence(
@@ -1035,7 +1049,44 @@ defmodule Hypatia.Neural.Coordinator do
     end
   end
 
-  defp novelty_status(novelty) do
+  @doc false
+  # Does the finding count as novel? An untrained network cannot say that a finding
+  # is known, so it counts as novel: until the novelty network is trained, each
+  # finding is held at report_only (fail closed; design of 2026-11-14 on merge
+  # honesty, decision 5). The board status below stays :unknown, so a reader can
+  # tell "untrained" from "novel by distance".
+  def novelty_flag({:novel, _}), do: true
+  def novelty_flag(:untrained), do: true
+  def novelty_flag(_known_or_other), do: false
+
+  @doc false
+  # The strategy that confidence and novelty give, before the annealing gate.
+  # A novel finding is report_only whatever its confidence.
+  def raw_strategy(true, _confidence), do: :report_only
+
+  def raw_strategy(false, confidence) do
+    cond do
+      confidence >= 0.95 -> :auto_execute
+      confidence >= 0.85 -> :review
+      true -> :report_only
+    end
+  end
+
+  defp novelty_untrained?(trace) do
+    case Map.get(trace.networks || %{}, :rbf) do
+      entries when is_list(entries) ->
+        case Enum.find(entries, fn e -> e.key == :novelty_result end) do
+          %{value: %{novelty: :untrained}} -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  @doc false
+  def novelty_status(novelty) do
     case novelty do
       {:novel, _} -> :novel
       {:known, _} -> :known
@@ -1044,7 +1095,7 @@ defmodule Hypatia.Neural.Coordinator do
     end
   end
 
-  defp dispatch_reason(strategy, confidence, novel) do
+  defp dispatch_reason(strategy, confidence, novel, untrained?) do
     base =
       case strategy do
         :auto_execute -> "High confidence (#{Float.round(confidence, 3)})"
@@ -1052,10 +1103,15 @@ defmodule Hypatia.Neural.Coordinator do
         :report_only -> "Low confidence (#{Float.round(confidence, 3)})"
       end
 
-    if novel do
-      base <> "; NOVEL finding forced to report_only"
-    else
-      base
+    cond do
+      untrained? ->
+        base <> "; novelty network untrained, finding held as novel (fail closed) at report_only"
+
+      novel ->
+        base <> "; NOVEL finding forced to report_only"
+
+      true ->
+        base
     end
   end
 
