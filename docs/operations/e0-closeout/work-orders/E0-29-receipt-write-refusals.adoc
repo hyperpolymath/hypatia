@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-29: The receipt writer refuses what the model refuses
+:wo-id: E0-29
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 140
+:wo-branch: fix/e0-29-receipt-write-refusals
+:wo-depends: none
+
+== Goal
+
+`Receipt.write/3` answers an error for an `event_id` that already has a receipt, and
+refuses to write a `verified` receipt that has no observation. These are the two
+differences between the running writer and the Idris2 model of `E0-10` that the owner
+has ruled on.
+
+== Authority
+
+Owner rulings of 2026-11-15 on the review of the pull request of `E0-10` (pull request
+1164): 1A, "a duplicate receipt write returns an error"; and 2A, "add the guard in
+`Receipt.write`". Related: `docs/design/e0-receipt.adoc`, section 8 (P1 and P2).
+
+== Facts measured
+
+Commit `4de4d69f`, measured on 2026-11-15 on a clean tree.
+
+* Read: `lib/hypatia/receipt.ex`, `write/3`: when `exists?/2` is true the `with` falls to
+  `true -> :ok`, so a second write for the same `event_id` writes nothing and returns `:ok`.
+  The model answers `Left DuplicateEventId` (`append` in `src/Hypatia/ABI/Receipt.idr`).
+* Read: `build/2` always sets `proof_or_test_ref.row_sha256` and sets `observations` only
+  from the row. A `verified` row with no hit counts and a source other than a rescan gives
+  `observations == %{}`. The model cannot build it (`verifiedOk`) and `schema/receipt.ncl`
+  refuses it. `test/receipt_model_mirror_test.exs` pins both differences as known differences.
+* Read: callers of `Receipt.write/3`: `OutcomeTracker.write_receipt/2` and
+  `Receipt.repair/2` (which checks `exists?/2` first) log `receipt_pending` on an error, and
+  `FleetDispatcher.write_neural_receipt/4` does the same.
+* Read: no production entry point makes a `verified` row without observations (the mirror
+  test runs every fleet classification).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first: (a) a second `write/3` for an `event_id` returns
+  `{:error, :duplicate_event_id}` and the receipt log is unchanged; (b) `check/1` refuses a
+  `verified` receipt with no observation and accepts one with an observation and a row
+  digest, and accepts a receipt that is not `verified`; (c) `write/3` returns
+  `{:error, :verified_without_evidence}` for such a row and writes nothing; (d) a fleet row
+  whose producer `event_id` is the id of an existing receipt is stored, its receipt is
+  refused, and the log says `receipt_refused` and not `receipt_pending`. See them fail.
+. Add `Receipt.check/1`. Make `write/3` return the two errors, and stop returning `:ok` for a
+  duplicate.
+. Name a refusal in the log as `receipt_refused`, with the `event_id` and the reason, in the
+  three callers. A write that failed for another reason stays `receipt_pending`.
+. Change the tests that pinned the two differences. Update the trust-boundary text of the P1
+  and P2 rows of `verification/proof-ledger.jsonl`, the header comment of
+  `src/Hypatia/ABI/Receipt.idr` and the module doc of the mirror test. Run
+  `scripts/proof-ledger.sh check` and `render --write`, and `scripts/check-verdicts.sh`.
+
+== Acceptance
+
+* The new tests pass, and (a) to (d) failed before step 3. Give both outputs.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* A mutation check: remove the duplicate refusal and test (a) fails; remove the guard and
+  tests (b) and (c) fail.
+* `scripts/check-verdicts.sh`, `scripts/proof-ledger.sh check` and `render --check` pass.
+
+== Stop and ask
+
+* A caller relies on `:ok` for a duplicate.
+* A production path makes a `verified` row without an observation. Report it and do not
+  guard it away.
+* The cost reaches the cap before the acceptance checks pass.

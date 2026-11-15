@@ -734,7 +734,7 @@ defmodule Hypatia.FleetDispatcher do
       :ok
     else
       {:error, reason} ->
-        Logger.warning("receipt_pending event_id=#{event_id} reason=#{inspect(reason)}")
+        Hypatia.Receipt.report_failure(event_id, reason)
     end
   rescue
     error ->
