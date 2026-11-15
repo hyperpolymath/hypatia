@@ -919,7 +919,7 @@ defmodule Hypatia.Neural.Coordinator do
   # ── Confidence Derivation ───────────────────────────────
 
   @doc false
-  defp derive_confidence(trace) do
+  def derive_confidence(trace) do
     # Derive confidence from the full reasoning trace rather than
     # hardcoded fixed weights. Each network contributes evidence.
     networks = trace.networks || %{}
@@ -943,7 +943,12 @@ defmodule Hypatia.Neural.Coordinator do
       {esn_pred, if(has_network?(networks, :esn), do: 0.15, else: 0.0)},
       # New networks contribute smaller initial weights (they're untrained)
       {gnn_confidence(networks), if(has_network?(networks, :gnn), do: 0.05, else: 0.0)},
-      {vae_confidence(networks), if(has_network?(networks, :vae), do: 0.05, else: 0.0)},
+      # A network that returns a fixed placeholder adds nothing (E0-23).
+      {vae_confidence(networks),
+       if(has_network?(networks, :vae) and not placeholder?(networks, :vae, :interpretation),
+         do: 0.05,
+         else: 0.0
+       )},
       {seq_confidence(networks), if(has_network?(networks, :sequence), do: 0.05, else: 0.0)}
     ]
 
@@ -984,6 +989,21 @@ defmodule Hypatia.Neural.Coordinator do
   end
 
   defp has_network?(networks, key), do: Map.has_key?(networks, key)
+
+  # Does the entry say that it is a placeholder? Only the mark `placeholder: true`
+  # does: an entry with no mark, or with `placeholder: false`, is evidence.
+  defp placeholder?(networks, network_key, entry_key) do
+    case Map.get(networks, network_key) do
+      entries when is_list(entries) ->
+        match?(
+          %{value: %{placeholder: true}},
+          Enum.find(entries, fn e -> e.key == entry_key end)
+        )
+
+      _ ->
+        false
+    end
+  end
 
   defp gnn_confidence(networks) do
     extract_confidence(

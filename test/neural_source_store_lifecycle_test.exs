@@ -108,6 +108,18 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert refused.source_error == :fixture_refusal
   end
 
+  # E0-23: the autoencoder encodes nothing yet (an all-zero latent, cluster 0). Its
+  # result says so, and the coordinator gives it no weight in the derived confidence.
+  test "the autoencoder's result is marked as a placeholder", ctx do
+    write_training_store(ctx.first)
+    {server, _cohort} = coordinator()
+
+    assert %{vae: %{placeholder: true, cluster_id: 0, latent: latent}} =
+             Coordinator.analyze(@finding, server)
+
+    assert Enum.all?(latent, &(&1 == 0.0))
+  end
+
   test "an actual ready cohort can analyze, train and persist its own source", ctx do
     write_training_store(ctx.first)
     {server, _cohort} = coordinator()
