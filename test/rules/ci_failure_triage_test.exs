@@ -22,7 +22,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"rate-limit-then-tests-red.txt", "api_rate_limit", :rerun},
     {"merge-ref-race.txt", "merge_ref_race", :report},
     {"invalid-lockfile-pin.txt", "actions_lock_invalid_pin", :fix},
-    {"cancelled-deposit.txt", "runner_cancelled", :none},
+    {"cancelled-deposit.txt", "runner_cancelled", :rerun},
     {"app-id-empty.txt", "secret_or_variable_missing", :owner},
     {"app-key-openssh.txt", "app_key_wrong_format", :owner},
     {"rsr-score-segfault.txt", "toolchain_segfault", :owner},
@@ -70,7 +70,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-131888629871-cargo-audit.txt", "dependency_advisory", :report},
     {"coderabbit-review-limit.txt", "review_rate_limited", :none},
     {"codex-credits.txt", "review_quota_exhausted", :none},
-    {"deed-cancelled.txt", "runner_cancelled", :none},
+    {"deed-cancelled.txt", "runner_cancelled", :rerun},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},
     {"real-43358533401-graphql-502.txt", "api_server_error", :rerun},
@@ -79,7 +79,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-43357534889-rollup.txt", "rollup_cascade", :upstream},
     # hypatia#1091: the CI Status rollup on a superseded head, red only
     # because a newer push cancelled the job it waits on.
-    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :none},
+    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :rerun},
     {"real-43416333174-orchestrate-raise.txt", "runtime_exception", :report},
     {"real-43150955344-rustfmt.txt", "format_diff", :fix},
     {"real-43357534889-container-build.txt", "compile_error", :report}
@@ -555,6 +555,44 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     test "every budget is at most 1, matching the squabbler's one re-run per job" do
       assert Enum.all?(T.rules(), &(&1.retries <= 1))
       assert Enum.all?(T.rules(), &(&1.action == :rerun or &1.retries == 0))
+    end
+
+    test "runner_cancelled is one guarded rerun (owner ruling 2026-11-15)" do
+      r = Enum.find(T.rules(), &(&1.name == "runner_cancelled"))
+      assert %{action: :rerun, retries: 1, guard: :head_current, escalation: :none} = r
+    end
+
+    test "every other rule is unguarded, and no unguarded rule reruns a cancellation" do
+      for r <- T.rules(), r.name != "runner_cancelled", do: assert(r.guard == :none)
+    end
+
+    test "a cancelled run whose head is still current is re-run once, then is noise" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      assert %{action: :rerun, persistent: false} = T.decide(p, 0, %{head_current: true})
+
+      assert %{action: :none, persistent: true, route: "noise"} =
+               T.decide(p, 1, %{head_current: true})
+    end
+
+    test "a superseded cancelled run (newer push or newer run) is never re-run" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      d = T.decide(p, 0, %{head_current: false})
+      assert %{action: :none, route: "noise", persistent: false, guard_refused: :head_current} = d
+    end
+
+    test "a guarded rerun with no context refuses rather than reruns" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0)
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0, %{})
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0, nil)
+      assert %{action: :none} = T.decide(p, 0, %{head_current: "true"})
+      assert %{action: :none} = T.decide(p, 0, %{head_current: nil})
+    end
+
+    test "the guard does not touch unguarded reruns" do
+      %{primary: p} = T.classify(File.read!(Path.join(@dir, "rate-limit-setup-bun.txt")))
+      assert %{action: :rerun} = T.decide(p, 0)
+      refute Map.has_key?(T.decide(p, 0), :guard_refused)
     end
 
     test "a fix or owner decision never becomes a rerun" do
