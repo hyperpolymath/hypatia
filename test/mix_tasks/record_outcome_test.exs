@@ -102,6 +102,28 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
     assert stored_rows(root) == []
   end
 
+  # A runner learns what this task takes from `mix help hypatia.record_outcome`
+  # (gitbot-fleet E0-02 reads it for --verdict), so every switch must be named there.
+  describe "the usage text" do
+    test "names every switch that the task takes" do
+      source = File.read!(Path.expand("../../lib/mix/tasks/hypatia.record_outcome.ex", __DIR__))
+      [_, block] = Regex.run(~r/@switches \[(.*?)\]/s, source)
+
+      switches =
+        Regex.scan(~r/^\s*([a-z_]+):/m, block)
+        |> Enum.map(fn [_, name] -> "--" <> String.replace(name, "_", "-") end)
+
+      assert length(switches) >= 10
+      assert "--match-kind" in switches
+
+      doc = Mix.Task.moduledoc(RecordOutcome)
+
+      for switch <- switches do
+        assert doc =~ switch, "#{switch} is a switch of the task and is not in its usage text"
+      end
+    end
+  end
+
   # E0-18: the pattern of the dispatch and the kind of match travel on the command
   # line, through each of the 3 ways that the task writes a row.
   describe "--pattern-id and --match-kind" do
