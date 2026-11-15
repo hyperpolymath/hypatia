@@ -27,7 +27,7 @@ state and commitments. Companion detail:
   model checking, which is `tested-only`, not a proof). What each artefact
   proves, and how strongly, is the proof ledger
   (`verification/proof-ledger.jsonl`, rendered in
-  `verification/PROOF-STATUS.adoc#proof-ledger`): 22 proven of 42;
+  `verification/PROOF-STATUS.adoc#proof-ledger`): 27 proven of 47;
   0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Four of the
   Lean proofs rested on the Lean kernel axioms `propext` and `Quot.sound`,
   which a source scan does not see and `Lean.collectAxioms` does; they moved
