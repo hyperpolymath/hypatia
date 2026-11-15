@@ -77,7 +77,7 @@ sum_for() {
   name=$1
   case "$name" in
     otp-27.3.4.19) echo 8ce4332d7b90fef51f1ecaf4b9fe2a2e363b2c1b6025b0ff044ee1bf7d346f87 ;;
-    elixir-1.17.3-otp-27) echo 867ba03a0e012861f739b27030d06ab23d73245200c4e3fed3e8385fb98ba692 ;;
+    elixir-1.19.4-otp-27) echo 0ff2a75771d9b81d2b5d563df5c97bd27a58eeeb9b338323c1623b211ab4f2c2 ;;
     just-1.34.0) echo 42df46f7ce727bdb2c3b5357017d885bd2033e8dbb154ca8e8f229e75093aeca ;;
     idris2-v0.7.0) echo 27780073c8631826d846499840b3857d9b9a4fd5 ;;
     zig-*) awk -F"'" '/ZIG_SHA256:/ { print $2; exit }' "$repo/.github/workflows/zig.yml" ;;

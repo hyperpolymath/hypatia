@@ -114,7 +114,7 @@ just compile-abi           # Idris2 ABI
 === Elixir development
 
 `mise.toml` pins Erlang/OTP and an Elixir build for that OTP, matching the
-OTP 27 / Elixir 1.17 test lane. With mise installed and activated, install and
+OTP 27.3.4.19 / Elixir 1.19.4 CI lanes. With mise installed and activated, install and
 bootstrap the Elixir dependencies from the repository root:
 
 [source,bash]

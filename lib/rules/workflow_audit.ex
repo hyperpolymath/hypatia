@@ -236,10 +236,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
               [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
               {MapSet.put(seen, name), with_to, reusable, in_j, name}
 
-            in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
+            (in_j and curj) && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
               {seen, MapSet.put(with_to, curj), reusable, in_j, curj}
 
-            in_j and curj && String.match?(line, ~r/^    uses:\s*\S/) ->
+            (in_j and curj) && String.match?(line, ~r/^    uses:\s*\S/) ->
               {seen, with_to, MapSet.put(reusable, curj), in_j, curj}
 
             String.match?(line, ~r/^[A-Za-z]/) ->
