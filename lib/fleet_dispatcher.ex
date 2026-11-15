@@ -699,6 +699,48 @@ defmodule Hypatia.FleetDispatcher do
   # place for it is this function.
   defp trusted_verification(_finding), do: nil
 
+  # The receipt of a neural learning update (E0-09, owner ruling D2). The evidence
+  # is the qualified outcome that was handed to the coordinator; there is no row
+  # in a log, so the receipt names the digest of that evidence in canonical form.
+  # It never raises: a receipt that cannot be written is logged as receipt_pending.
+  # There is no row to rebuild it from, so nothing repairs it later.
+  defp write_neural_receipt(pattern, repo, outcome, verification) do
+    data_root = Path.expand(Hypatia.Paths.verisimdb_data())
+
+    evidence = %{
+      "file" => ".",
+      "outcome" => outcome,
+      "recipe_id" => pattern,
+      "repo" => repo,
+      "verification" => verification
+    }
+
+    event_id = Hypatia.EventId.generate()
+
+    with {:ok, bytes} <- Hypatia.Receipt.encode(evidence),
+         row =
+           Map.merge(evidence, %{
+             "event_id" => event_id,
+             "event_id_source" => "hypatia",
+             "source_kind" => "neural_path"
+           }),
+         ctx = %{
+           kind: :neural_path,
+           log: "neural/outcome-queue",
+           line: "0",
+           row_sha256: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+         },
+         :ok <- Hypatia.Receipt.write(data_root, row, ctx: ctx) do
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning("receipt_pending event_id=#{event_id} reason=#{inspect(reason)}")
+    end
+  rescue
+    error ->
+      Logger.warning("receipt_pending reason=#{Exception.message(error)}")
+  end
+
   # :queued records a volatile source-bound submission, never completed learning.
   @doc false
   def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
@@ -766,6 +808,7 @@ defmodule Hypatia.FleetDispatcher do
          "verification" => verification
        }) do
       record_neural_outcome(finding, outcome_str, server)
+      write_neural_receipt(to_string(pattern), to_string(repo), outcome_str, verification)
     else
       Logger.info(
         "Learning loop: outcome for pattern '#{pattern}' in #{repo} not learned: " <>

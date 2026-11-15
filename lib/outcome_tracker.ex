@@ -24,6 +24,19 @@ defmodule Hypatia.OutcomeTracker do
   # without this marker are NOT trusted even if the counts happen to match.
   @annealing_evidence_version 1
 
+  # The fields that tie a row to its receipt (design section 3, E0-09). They are
+  # set by Hypatia, or by the trusted fleet import, never by a caller of the public
+  # entry: a caller who could choose an `event_id` could make the receipt of a
+  # later event look like a replay, and no receipt would be written for it.
+  @receipt_context_keys [
+    "event_id",
+    "event_id_source",
+    "source_kind",
+    "source_line",
+    "source_row_sha256",
+    "source_bot"
+  ]
+
   @doc """
   Record an outcome from a fix attempt.
 
@@ -48,8 +61,12 @@ defmodule Hypatia.OutcomeTracker do
       repo,
       file,
       outcome,
-      metadata |> canonical_fields() |> untrusted_verification(),
-      true
+      metadata
+      |> canonical_fields()
+      |> untrusted_verification()
+      |> Map.drop(@receipt_context_keys),
+      true,
+      :local_caller
     )
   end
 
@@ -164,7 +181,8 @@ defmodule Hypatia.OutcomeTracker do
         "origin" => "gitbot-fleet",
         "verification" => verification
       }),
-      false
+      false,
+      :fleet_import
     )
   end
 
@@ -221,7 +239,15 @@ defmodule Hypatia.OutcomeTracker do
     end)
   end
 
-  defp persist_outcome(recipe_id, repo, file, outcome, metadata, publish_to_fleet?) do
+  defp persist_outcome(
+         recipe_id,
+         repo,
+         file,
+         outcome,
+         metadata,
+         publish_to_fleet?,
+         kind \\ :local_caller
+       ) do
     store = capture_outcome_store()
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     outcome_str = Atom.to_string(outcome)
@@ -236,10 +262,17 @@ defmodule Hypatia.OutcomeTracker do
       "bot" => "hypatia"
     }
 
-    record = Map.merge(metadata, base)
+    record = metadata |> Map.merge(base) |> with_event_identity(kind)
 
     case write_outcome_log(record, store) do
       :ok ->
+        # The row is the commit of the event; its receipt is written next, into the
+        # store that the row was written into, and before the derived updates. A
+        # failed receipt write never hides the committed event from the caller: it
+        # is logged as receipt_pending and written when the recipe is next
+        # recomputed (`update_recipe_confidence/1`).
+        write_receipt(store, record)
+
         if publish_to_fleet?, do: write_fleet_outcome(record)
 
         if qualified_outcome?(record) do
@@ -283,6 +316,50 @@ defmodule Hypatia.OutcomeTracker do
         Logger.error("Outcome not persisted: #{inspect(reason)}")
         {:error, {:outcome_log_write, reason}}
     end
+  end
+
+  # Every row carries the identity of its event and where it came from. The id is
+  # minted by Hypatia (profile T, `Hypatia.EventId`). Only the trusted fleet import
+  # may bring a producer's id, and only a valid one.
+  defp with_event_identity(record, kind) do
+    producer_id = Map.get(record, "event_id")
+
+    {id, source} =
+      if kind == :fleet_import and Hypatia.EventId.valid?(producer_id),
+        do: {producer_id, "producer"},
+        else: {Hypatia.EventId.generate(), "hypatia"}
+
+    record
+    |> Map.put("event_id", id)
+    |> Map.put("event_id_source", source)
+    |> Map.put("source_kind", Atom.to_string(kind))
+  end
+
+  defp write_receipt(store, record) do
+    case Hypatia.Receipt.write(store.data_root, record) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "receipt_pending event_id=#{Map.get(record, "event_id")} reason=#{inspect(reason)}"
+        )
+    end
+  rescue
+    error ->
+      Logger.warning(
+        "receipt_pending event_id=#{Map.get(record, "event_id")} reason=#{Exception.message(error)}"
+      )
+  end
+
+  # Write the receipts that a failed write left missing, into the store that the
+  # recipe is recomputed in. It never raises.
+  defp repair_receipts(recipe_id) do
+    store = capture_outcome_store()
+    Hypatia.Receipt.repair(store.data_root, recipe_id)
+  rescue
+    error ->
+      Logger.warning("receipt repair failed for #{recipe_id}: #{Exception.message(error)}")
   end
 
   # A row that the fleet import stored without qualifying it.
@@ -559,7 +636,7 @@ defmodule Hypatia.OutcomeTracker do
   # The one path that may stamp "verified": `record_and_verify/5` calls it only
   # after `verify_fix/3` found the weak point of a named category gone.
   defp record_rescanned_outcome(recipe_id, repo, file, outcome, metadata) do
-    persist_outcome(recipe_id, repo, file, outcome, metadata, true)
+    persist_outcome(recipe_id, repo, file, outcome, metadata, true, :local_rescan)
   end
 
   @doc """
@@ -574,6 +651,7 @@ defmodule Hypatia.OutcomeTracker do
   but cannot redirect that operation to B.
   """
   def update_recipe_confidence(recipe_id) do
+    repair_receipts(recipe_id)
     update_recipe_confidence(recipe_id, fn -> :ok end)
   end
 
