@@ -486,3 +486,83 @@ confidence.
   decision D3 gives the answer for new rows.
 * The cost of the repair scan on a large log: it is bounded by the recipes that a
   cycle recomputes, and no figure was measured.
+
+== 10. Review notes (second reading, 2026-11-15)
+
+The design above was written in one pass. A second reading against the code found
+the gaps below. None of them is a ruling. Each one changes what `E0-09` can build,
+so the owner should see them before ruling on <<decisions>>. The status stays
+`PROPOSED`.
+
+[cols="1,4,4",options="header"]
+|===
+|Id |Gap |What it changes
+
+|R1
+|*The design contradicts itself on audit rows.* The `verdict` field allows
+`audit_only` (section 3), but D1 and D6 give a receipt only to a _qualified_
+event, and `E0-03` now stores audit rows.
+|Decide: do audit rows get a receipt? If yes, D1 becomes "one receipt for each
+event that the gate reads", and the repair rule of section 5.3 must read audit rows too.
+If no, remove `audit_only` from the closed set of `verdict`. Recommended (most
+correct in the long term): yes, with `verdict` `audit_only`, because an audit row is
+an auditable attempt (issue 984, step 9) and it is the row that is hardest to
+find again.
+
+|R2
+|*The receipt must be written into the store that the row was written into.*
+`OutcomeTracker.persist_outcome/6` captures the outcome store once
+(`capture_outcome_store/0`) and binds every write to it, because the data root can
+change at run time (the runtime-store tests of `E0` pin this). Section 6 says "under the
+verisim-data root" and does not say which one.
+|The receipt writer takes the captured store of the row, never the current
+configuration. A receipt in another store than its row is a "receipt with no row" in
+the repair rule.
+
+|R3
+|*A receipt failure and the callers' contract.* `persist_outcome/6` returns
+`{:ok, record}`, and its callers match `{:ok, record} =` (`record_and_verify/5`, the
+Mix task). Section 5.3 says that a failed receipt write returns an error after the row
+is committed; those callers would crash with a `MatchError`, and the committed event
+would be invisible to them.
+|Decide the return shape before `E0-09`: for example `{:ok, record}` plus a logged
+`:receipt_pending` and a repair on the next cycle, or a new return value that the
+callers handle. The rule that the failure is loud (A5) is kept by the log line and by
+the repair, not by a crash.
+
+|R4
+|*An absent minting tool.* D3 mints the id of a local row with `uuid-v8 t` through
+`System.cmd`. Section 4 does not say what happens when the command is missing. The
+same shape of fault was just fixed for the absent scanner (`#1148`): an absent tool
+raised and the caller got no row.
+|A missing tool gives no `event_id` and puts `event_id` in `missing_evidence`. It
+never raises, and it never invents an id.
+
+|R5
+|*Cost of minting by a process for each row.* One `System.cmd` for each outcome row
+is a process spawn on the write path.
+|Prefer an Elixir implementation of profile T (ADR-008 lists Elixir among the
+languages for the shared generators), or mint in a batch for an import. Not a
+blocker; a cost to decide.
+
+|R6
+|*The echo row.* A local row is also appended to the fleet log
+(`persist_outcome/6` with `publish_to_fleet?` true) and the import skips rows with
+`"bot": "hypatia"`. The design does not say that the echo carries the same
+`event_id` as the local row.
+|The echo carries the `event_id` of the row it echoes, and `E0-11` must treat an
+echo as the same event, never as a producer id.
+
+|R7
+|*The repair scan reads a whole recipe each cycle.* Section 5.3 bounds it by the
+recipes that a cycle recomputes, and that is still every row of each such recipe.
+|Keep a per-recipe high-water mark of the last receipted row, or accept the cost. No
+figure was measured.
+
+|R8
+|*Withdrawal of a legacy local row.* D7 needs an id, and a local row written before
+`E0-09` has none (the stop of `E0-07`).
+|A withdrawal of a row with no `event_id` or `fleet_import_id` is refused loudly. It
+is not guessed from `(file, line)`.
+|===
+
