@@ -913,4 +913,231 @@ defmodule Hypatia.LearningSchedulerTest do
       assert File.read!(recipe_file) == before_bytes
     end
   end
+
+  # E0-11: a producer's event_id is the identity of a fleet row (issue 984, steps 6
+  # and 8; docs/design/e0-receipt.adoc, sections 4 and 5.2). Ids are generated here:
+  # the estate UUID gate refuses a non-v8 literal in source, so a wrong id is made
+  # from a good one by changing one nibble.
+  describe "producer event_id" do
+    alias Hypatia.{EventId, Receipt}
+
+    setup %{tmp: tmp} do
+      orig_fleet = Application.fetch_env(:hypatia, :fleet_path)
+      fleet = Path.join(tmp, "fleet")
+      Application.put_env(:hypatia, :fleet_path, fleet)
+
+      fleet_file = Path.join(fleet, "shared-context/learning/fix-outcomes.jsonl")
+      File.mkdir_p!(Path.dirname(fleet_file))
+      File.write!(fleet_file, "")
+
+      on_exit(fn ->
+        case orig_fleet do
+          {:ok, val} -> Application.put_env(:hypatia, :fleet_path, val)
+          :error -> Application.delete_env(:hypatia, :fleet_path)
+        end
+      end)
+
+      %{fleet_file: fleet_file}
+    end
+
+    defp producer_row(extra \\ %{}) do
+      Map.merge(
+        %{
+          "recipe_id" => "recipe-e0-11",
+          "repo" => "owner/repo",
+          "file" => "a.txt",
+          "bot" => "robot-repo-automaton",
+          "outcome" => "success",
+          "verdict" => "verified",
+          "exit_code" => 0,
+          "before_hits" => 2,
+          "after_hits" => 0
+        },
+        extra
+      )
+    end
+
+    defp put_rows(fleet_file, rows) do
+      File.write!(fleet_file, Enum.map_join(rows, "", &(Jason.encode!(&1) <> "\n")))
+    end
+
+    defp producer_stored(tmp) do
+      case File.ls(outcomes_dir(tmp)) do
+        {:ok, files} ->
+          for f <- files,
+              String.ends_with?(f, ".jsonl"),
+              line <-
+                outcomes_dir(tmp)
+                |> Path.join(f)
+                |> File.read!()
+                |> String.split("\n", trim: true),
+              do: Jason.decode!(line)
+
+        {:error, _} ->
+          []
+      end
+    end
+
+    defp with_nibble(id, index, nibble) do
+      binary_part(id, 0, index) <> nibble <> binary_part(id, index + 1, byte_size(id) - index - 1)
+    end
+
+    test "two rows with the same event_id on different lines are imported once", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      id = EventId.generate()
+      put_rows(fleet_file, [producer_row(%{"event_id" => id}), producer_row(%{"event_id" => id})])
+
+      assert {1, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [row] = producer_stored(tmp)
+      assert row["event_id"] == id
+      assert row["event_id_source"] == "producer"
+      assert row["fleet_import_id"] == id
+    end
+
+    test "two rows with the same content and different event_ids are imported twice", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      a = EventId.generate()
+      b = EventId.generate()
+      assert a != b
+      put_rows(fleet_file, [producer_row(%{"event_id" => a}), producer_row(%{"event_id" => b})])
+
+      assert {2, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert tmp |> producer_stored() |> Enum.map(& &1["event_id"]) |> Enum.sort() ==
+               Enum.sort([a, b])
+    end
+
+    test "a replay of the same log imports nothing more", %{fleet_file: fleet_file} do
+      id = EventId.generate()
+      put_rows(fleet_file, [producer_row(%{"event_id" => id})])
+
+      assert {1, signature} = LearningScheduler.ingest_fleet_outcomes(nil)
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(signature)
+      # A cold start (no cached signature) is stopped by the stored ids.
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+    end
+
+    test "a malformed event_id is not imported and is reported with its line; the next rows are",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      good = EventId.generate()
+      version_7 = with_nibble(EventId.generate(), 14, "7")
+
+      malformed = [
+        {"not-an-id", 1},
+        {version_7, 2},
+        {String.upcase(good), 3},
+        {nil, 4},
+        {42, 5}
+      ]
+
+      rows =
+        Enum.map(malformed, fn {bad, _line} -> producer_row(%{"event_id" => bad}) end) ++
+          [producer_row(%{"event_id" => good})]
+
+      put_rows(fleet_file, rows)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(self(), {:poll, LearningScheduler.ingest_fleet_outcomes(nil)})
+        end)
+
+      assert_received {:poll, {1, signature}}
+
+      assert [row] = producer_stored(tmp)
+      assert row["event_id"] == good
+
+      for {_bad, line} <- malformed do
+        assert log =~ "fleet row #{line}: event_id is not a valid"
+      end
+
+      # The refused rows are not retried into the log on the next poll.
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(signature)
+      assert length(producer_stored(tmp)) == 1
+    end
+
+    test "a log with no event_id gives the same ids as before this change", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      rows = [producer_row(), producer_row(%{"file" => "b.txt"})]
+      put_rows(fleet_file, rows)
+
+      assert {2, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      lines = fleet_file |> File.read!() |> String.split("\n", trim: true)
+
+      expected =
+        lines
+        |> Enum.with_index(1)
+        |> Enum.map(fn {l, n} -> LearningScheduler.fleet_source_id(l, n) end)
+
+      stored = producer_stored(tmp)
+      assert stored |> Enum.map(& &1["fleet_import_id"]) |> Enum.sort() == Enum.sort(expected)
+      # Hypatia mints the event_id of a row that has none, and says so.
+      assert Enum.all?(
+               stored,
+               &(&1["event_id_source"] == "hypatia" and EventId.valid?(&1["event_id"]))
+             )
+    end
+
+    test "a start record is not stored, and the outcome row with its event_id is imported once",
+         %{tmp: tmp, fleet_file: fleet_file} do
+      id = EventId.generate()
+
+      start = %{
+        "chain_version" => "e0-receipt/1",
+        "event_id" => id,
+        "kind" => "start",
+        "producer" => "robot-repo-automaton",
+        "recipe_id" => "recipe-e0-11",
+        "repo" => "owner/repo"
+      }
+
+      put_rows(fleet_file, [start, producer_row(%{"event_id" => id})])
+
+      assert {1, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [row] = producer_stored(tmp)
+      assert row["event_id"] == id
+      assert row["outcome"] == "success"
+      assert row["verification"] == "verified"
+    end
+
+    test "a start record alone stores nothing and counts as nothing imported", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      start = %{
+        "event_id" => EventId.generate(),
+        "kind" => "start",
+        "recipe_id" => "recipe-e0-11",
+        "repo" => "owner/repo"
+      }
+
+      put_rows(fleet_file, [start])
+
+      assert {0, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+      assert producer_stored(tmp) == []
+    end
+
+    test "the receipt of a producer row names the producer's id and says so", %{
+      tmp: tmp,
+      fleet_file: fleet_file
+    } do
+      id = EventId.generate()
+      put_rows(fleet_file, [producer_row(%{"event_id" => id})])
+
+      assert {1, _} = LearningScheduler.ingest_fleet_outcomes(nil)
+
+      assert [receipt] = Receipt.all(tmp)
+      assert receipt["event_id"] == id
+      assert receipt["provenance"]["event_id_source"] == "producer"
+      assert receipt["verdict"] == "credited_success"
+    end
+  end
 end

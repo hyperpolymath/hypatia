@@ -824,19 +824,45 @@ defmodule Hypatia.LearningScheduler do
   # and where the evidence sits: its line number, the digest of its exact bytes and
   # the bot that wrote it. The row is stored with them, so the receipt can be
   # written again identically.
-  defp fleet_receipt_context(record, line, line_number) do
+  defp fleet_receipt_context(record, line, line_number, producer_id) do
     bot =
       case Map.get(record, "bot") do
         b when is_binary(b) -> b
         _ -> "unknown"
       end
 
-    Map.merge(fleet_audit_fields(record), %{
+    identity = if producer_id, do: %{"event_id" => producer_id}, else: %{}
+
+    fleet_audit_fields(record)
+    |> Map.merge(identity)
+    |> Map.merge(%{
       "source_line" => Integer.to_string(line_number),
       "source_row_sha256" => :crypto.hash(:sha256, line) |> Base.encode16(case: :lower),
       "source_bot" => bot
     })
   end
+
+  # The identity of a fleet row (issue 984, steps 6 and 8). A producer's event_id,
+  # when the row has one and it is valid, IS the identity: two rows with the same
+  # id are one event, and two with the same content and different ids are two.
+  # A row with no event_id field keeps the provisional locator of its line. A row
+  # whose event_id is present and not valid has no identity and is not imported.
+  defp fleet_identity(record, line, line_number) when is_map(record) do
+    if Map.has_key?(record, "event_id") do
+      id = Map.get(record, "event_id")
+
+      if Hypatia.EventId.valid?(id),
+        do: {:ok, id, id},
+        else: {:invalid, invalid_event_id_reason(id)}
+    else
+      {:ok, fleet_source_id(line, line_number), nil}
+    end
+  end
+
+  defp invalid_event_id_reason(id) when is_binary(id),
+    do: "got " <> inspect(String.slice(id, 0, 40))
+
+  defp invalid_event_id_reason(id), do: "got " <> inspect(id)
 
   # The audit fields of a source row that a stored fleet row keeps.
   defp fleet_audit_fields(record) when is_map(record) do
@@ -930,40 +956,59 @@ defmodule Hypatia.LearningScheduler do
         {:cont, {:ok, seen, count}}
       else
         case Jason.decode(line) do
+          # A start record names an attempt before the fix runs (design of E0-08,
+          # section 5.2). It is not an outcome, it is not stored, and its id does
+          # not count as imported: the outcome row with the same event_id is the
+          # event. It belongs in fix-attempts.jsonl; a producer that writes it
+          # here does no harm.
+          {:ok, %{"kind" => "start"}} ->
+            {:cont, {:ok, seen, count}}
+
           {:ok, record} ->
             case classify_fleet_record(record) do
               {kind, recipe_id, repo, file, outcome, verification} when kind in [:ok, :audit] ->
-                id = fleet_source_id(line, line_number)
-
-                if MapSet.member?(seen, id) do
-                  {:cont, {:ok, seen, count}}
-                else
-                  if kind == :audit and fleet_fields_disagree?(record) do
+                case fleet_identity(record, line, line_number) do
+                  {:invalid, reason} ->
+                    # Present and not valid: not imported, and the rows after it
+                    # still are. It stays in the append-only source as evidence.
                     Logger.warning(
-                      "LearningScheduler: fleet row #{line_number}: verdict " <>
-                        "#{inspect(Map.get(record, "verdict"))} disagrees with outcome " <>
-                        "#{inspect(Map.get(record, "outcome"))}; stored as an audit row"
+                      "LearningScheduler: fleet row #{line_number}: event_id is not a valid " <>
+                        "ADR-008 version 8 id (#{reason}); not imported"
                     )
-                  end
 
-                  case Hypatia.OutcomeTracker.record_fleet_outcome(
-                         recipe_id,
-                         repo,
-                         file,
-                         outcome,
-                         id,
-                         verification,
-                         fleet_receipt_context(record, line, line_number)
-                       ) do
-                    # An audit row is stored and acknowledged, and it is not
-                    # counted as a processed outcome.
-                    {:ok, _record} ->
-                      {:cont,
-                       {:ok, MapSet.put(seen, id), count + if(kind == :ok, do: 1, else: 0)}}
+                    {:cont, {:ok, seen, count}}
 
-                    {:error, reason} ->
-                      {:halt, {:error, {:write_failed, line_number, reason}}}
-                  end
+                  {:ok, id, producer_id} ->
+                    if MapSet.member?(seen, id) do
+                      {:cont, {:ok, seen, count}}
+                    else
+                      if kind == :audit and fleet_fields_disagree?(record) do
+                        Logger.warning(
+                          "LearningScheduler: fleet row #{line_number}: verdict " <>
+                            "#{inspect(Map.get(record, "verdict"))} disagrees with outcome " <>
+                            "#{inspect(Map.get(record, "outcome"))}; stored as an audit row"
+                        )
+                      end
+
+                      case Hypatia.OutcomeTracker.record_fleet_outcome(
+                             recipe_id,
+                             repo,
+                             file,
+                             outcome,
+                             id,
+                             verification,
+                             fleet_receipt_context(record, line, line_number, producer_id)
+                           ) do
+                        # An audit row is stored and acknowledged, and it is not
+                        # counted as a processed outcome.
+                        {:ok, _record} ->
+                          {:cont,
+                           {:ok, MapSet.put(seen, id), count + if(kind == :ok, do: 1, else: 0)}}
+
+                        {:error, reason} ->
+                          {:halt, {:error, {:write_failed, line_number, reason}}}
+                      end
+                    end
                 end
 
               :skip ->
