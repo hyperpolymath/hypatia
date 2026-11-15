@@ -179,7 +179,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `echo_state_network.ex` | Reservoir | Confidence trajectory forecasting + drift detection |
 | `radial_neural_network.ex` | RBF | Finding similarity, novelty detection, classification |
 | `graph_neural_network.ex` | GNN | Structural learning over the repo/finding graph |
-| `variational_autoencoder.ex` | VAE | Latent representations of findings |
+| `variational_autoencoder.ex` | VAE | **Placeholder.** Encodes nothing yet: the latent vector is all zeros and the cluster is always 0. Its result says `placeholder: true` and it has weight 0.0 in the derived confidence |
 | `sequence_model.ex` | Sequence | Sequential dispatch modelling |
 | `blackboard.ex` | ETS | Shared board all 8 networks read/write, six phases |
 | `coordinator.ex` | GenServer | Orchestrates all 8 networks over the blackboard |

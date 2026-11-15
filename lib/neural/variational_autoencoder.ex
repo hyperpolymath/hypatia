@@ -85,11 +85,15 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
       cluster_id = 0
       label = Map.get(state.cluster_labels, cluster_id, "unclustered")
 
+      # `placeholder: true` says that nothing was encoded: the latent vector is all
+      # zeros and the cluster is always 0. The coordinator gives a placeholder no
+      # weight in the derived confidence (E0-23). A trained autoencoder drops the mark.
       result = %{
         latent: latent,
         cluster_id: cluster_id,
         label: label,
-        context_size: map_size(context.networks)
+        context_size: map_size(context.networks),
+        placeholder: true
       }
 
       SourceStore.accept!(
