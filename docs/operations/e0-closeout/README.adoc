@@ -102,7 +102,7 @@ function name is the stable locator. Measure again before you edit.
 |E0-04 |Verification comes from a rescan, not from the caller |M |opus |$12 |none
 |E0-05 |The live neural path learns from qualified evidence only |S |sonnet |$6 |E0-04
 |E0-06 |Test: a failed write leaves the source unacknowledged |S |sonnet |$4 |none
-|E0-07 |Withdrawn evidence changes confidence and tier |M |opus |$16 |none
+|E0-07 |Withdrawn evidence changes confidence and tier |M |opus |$16 |E0-09 (owner ruling 2026-11-15: local rows need ids first)
 |E0-08 |The receipt: design and ruling packet |Design |opus |$10 |none
 |E0-09 |The receipt: schema, emitter and tests |M |sonnet |$18 |E0-05, E0-08
 |E0-10 |The receipt: Idris2 model and gate |M |opus |$25 |E0-09
