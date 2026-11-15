@@ -84,20 +84,56 @@ defmodule Hypatia.OutcomeTracker do
   defp field_text(value) when is_atom(value), do: Atom.to_string(value)
   defp field_text(_value), do: nil
 
-  # `"verified"` is the one value that makes a success row positive evidence
-  # (see `qualified_outcome_counts/1`), so a caller of the public entry point
-  # cannot set it. Any other value can only lower or keep trust.
+  # Two verifications are written by a trusted source only, never by a caller of
+  # the public entry point:
+  #   * "verified" makes a success row positive evidence (see
+  #     `qualified_outcome_counts/1`): only a rescan of Hypatia or the qualified
+  #     fleet import writes it;
+  #   * "rollback_requested" makes a false-positive row negative evidence about a
+  #     batch rollback (owner ruling 7A, 2026-11-15): only `record_batch_rollback/4`
+  #     writes it, for `BatchRollback`.
+  # Any other value can only lower or keep trust, and is kept.
+  @trusted_only_verifications ["verified", "rollback_requested"]
+
   defp untrusted_verification(metadata) do
-    if field_text(Map.get(metadata, "verification")) == "verified" do
+    claimed = field_text(Map.get(metadata, "verification"))
+
+    if claimed in @trusted_only_verifications do
       Logger.warning(
-        "OutcomeTracker: a caller claimed verification \"verified\"; stored as \"unverified\""
+        "OutcomeTracker: a caller claimed verification #{inspect(claimed)}; stored as \"unverified\""
       )
 
       metadata
       |> Map.put("verification", "unverified")
-      |> Map.put("claimed_verification", "verified")
+      |> Map.put("claimed_verification", claimed)
     else
       metadata
+    end
+  end
+
+  @doc """
+  Record that a batch rollback marked an outcome as a false positive. This is the
+  trusted entry for `Hypatia.Safety.BatchRollback`: the public `record_outcome/5`
+  rewrites a caller's `rollback_requested`, so a made-up rollback cannot be
+  counted. `batch_id` must be a non-empty string; otherwise `{:error,
+  :invalid_batch_id}` and nothing is written.
+  """
+  def record_batch_rollback(recipe_id, repo, file, batch_id) do
+    if is_binary(batch_id) and String.trim(batch_id) != "" do
+      persist_outcome(
+        recipe_id,
+        repo,
+        file,
+        :false_positive,
+        %{
+          "verification" => "rollback_requested",
+          "caused_by" => "batch_rollback",
+          "batch_id" => batch_id
+        },
+        true
+      )
+    else
+      {:error, :invalid_batch_id}
     end
   end
 

@@ -558,6 +558,78 @@ defmodule Hypatia.OutcomeTrackerTest do
       assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
     end
 
+    # E0-27 (owner ruling 7A): only BatchRollback can write a rollback_requested row.
+    test "a caller cannot write a rollback_requested row through the public entry", %{
+      root: root
+    } do
+      forged = [
+        %{
+          "verification" => "rollback_requested",
+          "caused_by" => "batch_rollback",
+          "batch_id" => "b1"
+        },
+        %{
+          verification: :rollback_requested,
+          caused_by: "batch_rollback",
+          batch_id: "b1"
+        },
+        %{verification: "rollback_requested", caused_by: "batch_rollback", batch_id: "b1"}
+      ]
+
+      for metadata <- forged do
+        assert {:ok, record} =
+                 OutcomeTracker.record_outcome(
+                   "recipe-e0-27-forged",
+                   "owner/repo",
+                   "a.txt",
+                   :false_positive,
+                   metadata
+                 )
+
+        assert record["verification"] == "unverified"
+        assert record["claimed_verification"] == "rollback_requested"
+      end
+
+      rows = stored(root)
+      assert length(rows) == 3
+
+      assert OutcomeTracker.qualified_outcome_counts(rows) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 3}
+    end
+
+    test "the batch rollback entry writes a row that the gate counts as a false positive", %{
+      root: root
+    } do
+      assert {:ok, record} =
+               OutcomeTracker.record_batch_rollback(
+                 "recipe-e0-27",
+                 "owner/repo",
+                 "a.txt",
+                 "batch-1"
+               )
+
+      assert record["verification"] == "rollback_requested"
+      assert record["caused_by"] == "batch_rollback"
+      assert record["batch_id"] == "batch-1"
+      assert record["outcome"] == "false_positive"
+
+      assert [row] = stored(root)
+
+      assert OutcomeTracker.qualified_outcome_counts([row]) ==
+               %{successes: 0, failures: 0, false_positives: 1, ignored: 0}
+    end
+
+    test "the batch rollback entry refuses a batch id that is not a non-empty string", %{
+      root: root
+    } do
+      for bad <- ["", nil, :batch, 42, "   "] do
+        assert {:error, :invalid_batch_id} =
+                 OutcomeTracker.record_batch_rollback("recipe-e0-27", "owner/repo", "a.txt", bad)
+      end
+
+      assert stored(root) == []
+    end
+
     test "a caller's other fields and negative verifications are kept", %{root: root} do
       assert {:ok, record} =
                OutcomeTracker.record_outcome(
