@@ -467,6 +467,97 @@ defmodule Hypatia.OutcomeTrackerTest do
       assert OutcomeTracker.qualified_outcome_counts([row]).successes == 0
     end
 
+    # Review finding: the guard compared one exact representation. A map with
+    # an atom key, or an atom value, reached the log as "verified" anyway,
+    # because the JSON encoder writes atoms as strings.
+    test "the guard holds whatever the type of the key or the value", %{root: root} do
+      variants = [
+        %{verification: "verified"},
+        %{"verification" => :verified},
+        %{verification: :verified}
+      ]
+
+      for metadata <- variants do
+        assert {:ok, record} =
+                 OutcomeTracker.record_outcome(
+                   "recipe-e0-04-types",
+                   "owner/repo",
+                   "a.txt",
+                   :success,
+                   metadata
+                 )
+
+        refute record["verification"] == "verified"
+      end
+
+      rows = stored(root)
+      assert length(rows) == 3
+      assert Enum.all?(rows, &(&1["verification"] == "unverified"))
+      assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
+    end
+
+    test "a stored row has one verification field, not two", %{root: root} do
+      assert {:ok, _} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-dup",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 %{
+                   verification: "unverified"
+                 }
+               )
+
+      [file] = Path.wildcard(Path.join([root, "data", "outcomes", "*.jsonl"]))
+      [line] = file |> File.read!() |> String.split("\n", trim: true)
+      assert length(String.split(line, ~s("verification"))) == 2
+    end
+
+    test "two keys that name the same field are refused, and nothing is written", %{root: root} do
+      assert_raise ArgumentError, fn ->
+        OutcomeTracker.record_outcome("recipe-e0-04-clash", "owner/repo", "a.txt", :success, %{
+          :verification => "verified",
+          "verification" => "unverified"
+        })
+      end
+
+      assert stored(root) == []
+    end
+
+    test "an audit map or a :metadata option with an atom key cannot stamp verified", %{
+      root: root
+    } do
+      assert {:ok, audit} =
+               OutcomeTracker.record_fleet_outcome(
+                 "recipe-e0-04-audit",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 "source-id-types",
+                 "unqualified",
+                 %{verification: "verified", origin: "elsewhere", fleet_import_id: "forged"}
+               )
+
+      assert audit["verification"] == "unqualified"
+      assert audit["origin"] == "gitbot-fleet"
+      assert audit["fleet_import_id"] == "source-id-types"
+
+      assert {:ok, via_metadata, _} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-meta",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 metadata: %{verification: "verified"}
+               )
+
+      refute via_metadata["verification"] == "verified"
+
+      rows = stored(root)
+      assert length(rows) == 2
+      assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
+    end
+
     test "a caller's other fields and negative verifications are kept", %{root: root} do
       assert {:ok, record} =
                OutcomeTracker.record_outcome(
