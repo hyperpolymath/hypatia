@@ -68,6 +68,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     file: :string,
     outcome: :string,
     pattern_id: :string,
+    match_kind: :string,
     category: :string,
     repo_path: :string,
     no_verify: :boolean,
@@ -120,6 +121,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       end
 
     verdict = validate_verdict!(Keyword.get(opts, :verdict), Keyword.fetch!(opts, :outcome))
+    labels = labels!(opts)
 
     recipe = Keyword.fetch!(opts, :recipe)
     repo = Keyword.fetch!(opts, :repo)
@@ -137,9 +139,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       cond do
         verdict in [nil, "verified"] and verify? ->
           call_opts =
-            if verdict,
-              do: Keyword.put(call_opts, :metadata, %{"verdict" => verdict}),
-              else: call_opts
+            Keyword.put(call_opts, :metadata, put_verdict(labels, verdict))
 
           {:ok, record, v} =
             Hypatia.OutcomeTracker.record_outcome_for_fix(
@@ -161,7 +161,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
               repo,
               file,
               outcome_atom,
-              put_verdict(%{"verification" => "unverified"}, verdict)
+              put_verdict(Map.put(labels, "verification", "unverified"), verdict)
             )
 
           {record, :not_verified}
@@ -175,7 +175,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
               repo,
               file,
               outcome_atom,
-              %{"verification" => verdict, "verdict" => verdict}
+              Map.merge(labels, %{"verification" => verdict, "verdict" => verdict})
             )
 
           {record, :not_verified}
@@ -219,6 +219,27 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
         verdict
     end
   end
+
+  # The pattern and the kind of match of the dispatch (E0-18). The kind must be one
+  # that the matcher makes; anything else is refused, and no kind is no label.
+  @match_kinds ~w(exact category fuzzy)
+
+  defp labels!(opts) do
+    kind = Keyword.get(opts, :match_kind)
+
+    if kind not in [nil, ""] and kind not in @match_kinds do
+      Mix.shell().error("invalid --match-kind '#{kind}' (use exact|category|fuzzy)")
+      exit({:shutdown, 1})
+    end
+
+    %{}
+    |> put_label("pattern_id", Keyword.get(opts, :pattern_id))
+    |> put_label("match_kind", kind)
+  end
+
+  defp put_label(labels, _key, nil), do: labels
+  defp put_label(labels, _key, ""), do: labels
+  defp put_label(labels, key, value), do: Map.put(labels, key, value)
 
   defp put_verdict(metadata, nil), do: metadata
   defp put_verdict(metadata, verdict), do: Map.put(metadata, "verdict", verdict)
