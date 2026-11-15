@@ -230,10 +230,13 @@ defmodule Hypatia.CrossRepoLearningTest do
       )
     end
 
+    defp expected_for_three, do: Hypatia.OutcomeTracker.bayesian_update(0.5, 3, 0)
+
     defp anomalies_for(pred),
       do: Enum.filter(CrossRepoLearning.detect_ecosystem_anomalies(), pred)
 
-    test "case 1: a source repo with 3 verified successes and 0 failures transfers 1.0", ctx do
+    test "case 1: a source repo with 3 verified successes and 0 failures transfers the smoothed rate",
+         ctx do
       recipe = "recipe-#{ctx.tag}-small"
       source = "#{ctx.tag}-source"
       target = "#{ctx.tag}-target"
@@ -245,8 +248,11 @@ defmodule Hypatia.CrossRepoLearningTest do
       for policy <- [:moderate, :aggressive] do
         result = CrossRepoLearning.repo_confidence(recipe, target, policy)
 
-        # One source, three rows, no failure, no prior: the raw rate is 1.0.
-        assert result.transferred_confidence == 1.0
+        # One source, three rows, no failure. The rate is smoothed with the prior
+        # that local rows use (owner ruling 9A, E0-28), so 3 clean rows are not 1.0.
+        expected = Hypatia.OutcomeTracker.bayesian_update(0.5, 3, 0)
+        assert result.transferred_confidence == expected
+        assert expected > 0.5 and expected < 1.0
         assert result.transfer_sources == [source]
         assert result.local_outcomes == 0
         assert result.local_confidence == nil
@@ -257,11 +263,19 @@ defmodule Hypatia.CrossRepoLearningTest do
         annealing_state = Hypatia.OutcomeTracker.get_annealing_state(recipe)
 
         assert result.blended_confidence ==
-                 Hypatia.ConfidenceAnnealing.anneal(1.0, annealing_state)
+                 Hypatia.ConfidenceAnnealing.anneal(expected, annealing_state)
 
         refute result.blended_confidence ==
                  Hypatia.ConfidenceAnnealing.anneal(0.5, annealing_state)
       end
+
+      # More clean rows move it up, and it still stays below 1.0.
+      recipe_10 = "recipe-#{ctx.tag}-ten"
+      add_rows(ctx, recipe_10, List.duplicate({source, "success", "verified"}, 10))
+      ten = CrossRepoLearning.repo_confidence(recipe_10, target, :aggressive)
+      assert ten.transferred_confidence == Hypatia.OutcomeTracker.bayesian_update(0.5, 10, 0)
+      assert ten.transferred_confidence > expected_for_three()
+      assert ten.transferred_confidence < 1.0
 
       # Two verified successes are below the transfer minimum: nothing moves.
       recipe_2 = "recipe-#{ctx.tag}-two"
@@ -289,6 +303,8 @@ defmodule Hypatia.CrossRepoLearningTest do
       assert anomaly.type == :recipe_degradation
       # 2 of 5 rows are false positives: counted as failures (outcome != "success").
       assert anomaly.failure_rate == 0.4
+      # 2 of the 5 rows are qualified false positives (owner ruling 9A, E0-28).
+      assert anomaly.false_positive_share == 0.4
       assert anomaly.total_outcomes == 5
       assert anomaly.affected_repos == 5
       assert anomaly.severity == :warning
@@ -324,6 +340,7 @@ defmodule Hypatia.CrossRepoLearningTest do
       assert [anomaly] = anomalies_for(&(&1[:language_family] == :beam))
       assert anomaly.type == :language_family_anomaly
       assert anomaly.failure_rate == 0.4
+      assert anomaly.false_positive_share == 0.4
       assert anomaly.total_outcomes == 5
     end
 
@@ -397,6 +414,8 @@ defmodule Hypatia.CrossRepoLearningTest do
       assert [b] = anomalies_for(&(&1[:recipe_id] == noisy))
       assert Map.drop(a, [:recipe_id, :detected_at]) == Map.drop(b, [:recipe_id, :detected_at])
       assert b.failure_rate == 0.4
+      # The 2 failures are failures with evidence, not false positives.
+      assert b.false_positive_share == 0.0
       assert b.total_outcomes == 5
 
       # Language path: the same, for a family.
