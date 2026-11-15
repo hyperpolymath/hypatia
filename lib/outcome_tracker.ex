@@ -300,11 +300,24 @@ defmodule Hypatia.OutcomeTracker do
   Verify a fix by re-scanning the target repo and checking if the weak point is gone.
 
   Runs panic-attacker assail on the specific repo, then checks if the original
-  pattern still appears in the results. Returns :verified (gone), :still_present,
-  or :scan_failed.
+  pattern still appears in the results. The scan is judged by the category AND
+  the file of the fix (owner ruling 8A, E0-26):
+
+    * a weak point of `category` in `file` means the fix did not hold:
+      `:still_present`. The scan's own `file` field is compared, after a leading
+      `./` is removed; `location` is not parsed.
+    * a weak point of `category` only in another file does not refute a fix of
+      this file: `:verified`.
+    * a weak point of `category` that names no file cannot be placed, so the scan
+      gives no verification: `:cannot_locate`. It is never a guess.
+    * `file` of `nil`, `""` or `"."` is a fix at repository level, and keeps the
+      old rule: the category alone.
+
+  `verify_fix/3` means "no file". Returns `:verified`, `:still_present`,
+  `:cannot_locate`, or `:scan_failed`.
   """
-  def verify_fix(repo_path, pattern_id, category) do
-    result = do_verify_fix(repo_path, pattern_id, category)
+  def verify_fix(repo_path, pattern_id, category, file \\ nil) do
+    result = do_verify_fix(repo_path, pattern_id, category, file)
 
     Hypatia.Telemetry.verification_result(
       recipe_id: pattern_id,
@@ -315,7 +328,7 @@ defmodule Hypatia.OutcomeTracker do
     result
   end
 
-  defp do_verify_fix(repo_path, pattern_id, category) do
+  defp do_verify_fix(repo_path, pattern_id, category, file) do
     # An absent scanner is an absent verifier: no verification, and no crash.
     result =
       try do
@@ -337,23 +350,28 @@ defmodule Hypatia.OutcomeTracker do
           {:ok, scan} ->
             weak_points = Map.get(scan, "weak_points", [])
 
-            still_found =
-              Enum.any?(weak_points, fn wp ->
-                Map.get(wp, "category", "") == category
-              end)
+            case judge(weak_points, category, file) do
+              :still_present ->
+                Logger.warning(
+                  "Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present"
+                )
 
-            if still_found do
-              Logger.warning(
-                "Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present"
-              )
+                :still_present
 
-              :still_present
-            else
-              Logger.info(
-                "Verification PASSED for #{pattern_id} in #{repo_path} -- pattern removed"
-              )
+              :verified ->
+                Logger.info(
+                  "Verification PASSED for #{pattern_id} in #{repo_path} -- pattern removed"
+                )
 
-              :verified
+                :verified
+
+              :cannot_locate ->
+                Logger.warning(
+                  "Verification SKIPPED for #{pattern_id} in #{repo_path} -- the scan names a " <>
+                    "weak point of the category and does not say which file it is in"
+                )
+
+                :cannot_locate
             end
 
           {:error, _} ->
@@ -366,6 +384,50 @@ defmodule Hypatia.OutcomeTracker do
         :scan_failed
     end
   end
+
+  # What the scan says about the fix (owner ruling 8A, E0-26). A weak point of the
+  # category in THIS file refutes the fix; one in another file does not. A weak
+  # point of the category that names no file (panic-attack leaves `file` out when
+  # it has none) cannot be placed, so it neither refutes nor verifies: unless a
+  # weak point of the category in this file already refutes the fix, the scan gives
+  # no verification. A fix at repository level (no file, "." or empty) keeps the
+  # old rule: the category alone.
+  defp judge(weak_points, category, file) do
+    in_category = Enum.filter(weak_points, &(Map.get(&1, "category", "") == category))
+
+    cond do
+      in_category == [] ->
+        :verified
+
+      repo_level?(file) ->
+        :still_present
+
+      Enum.any?(in_category, &same_file?(Map.get(&1, "file"), file)) ->
+        :still_present
+
+      Enum.any?(in_category, &(not is_binary(Map.get(&1, "file")))) ->
+        :cannot_locate
+
+      true ->
+        :verified
+    end
+  end
+
+  defp repo_level?(nil), do: true
+  defp repo_level?(file), do: normalise_file(file) in ["", "."]
+
+  defp same_file?(scanned, file) when is_binary(scanned) and is_binary(file),
+    do: normalise_file(scanned) == normalise_file(file)
+
+  defp same_file?(_scanned, _file), do: false
+
+  # A leading "./" does not make a different file. `location` is not parsed:
+  # panic-attack gives the structured `file`.
+  defp normalise_file(file) when is_binary(file) do
+    file |> String.trim() |> String.replace_prefix("./", "")
+  end
+
+  defp normalise_file(_other), do: ""
 
   @doc """
   Canonical entry point for the dispatch-runner / external automaton
@@ -386,6 +448,8 @@ defmodule Hypatia.OutcomeTracker do
 
   Returns `{:ok, record, verification}` where verification is one of
   `:verified | :false_positive | :scan_unavailable | :not_verified`.
+  `:not_verified` also covers a rescan that cannot say which file a weak point
+  of the category is in (recorded as `scan_skipped`; see `verify_fix/4`).
   """
   def record_outcome_for_fix(recipe_id, repo, file, outcome, opts \\ []) do
     derived =
@@ -449,9 +513,12 @@ defmodule Hypatia.OutcomeTracker do
   hand.
 
   If `verify: true` is passed, runs `panic-attacker` against the repo
-  after recording the outcome. The verification verdict is persisted
-  on every branch (verified / still_present / scan_failed / unverified)
-  so `recipe_health/1` can compute meaningful aggregates.
+  after recording the outcome. The rescan judges the fix by its category and
+  by `file` (see `verify_fix/4`): a weak point of the category in another file
+  does not refute it. The verification verdict is persisted on every branch
+  (verified / still_present / scan_failed / unverified, and `scan_skipped`
+  when the scan cannot say which file a weak point is in) so `recipe_health/1`
+  can compute meaningful aggregates.
 
   `:metadata` (a map) is merged into each row that this function writes.
   A key that the function sets itself, such as `"verification"`, wins over
@@ -463,14 +530,28 @@ defmodule Hypatia.OutcomeTracker do
     verify_requested? = Keyword.get(opts, :verify, false) and outcome == :success
 
     # A rescan runs only when it can name the category that it looks for.
-    # With a blank category, `verify_fix/3` would find no weak point of that
+    # With a blank category, `verify_fix/4` would find no weak point of that
     # category in any scan and answer `:verified`.
     if verify_requested? and category_named?(category) do
       repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
       repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
       pattern_id = Keyword.get(opts, :pattern_id, "")
 
-      case verify_fix(repo_path, pattern_id, category) do
+      case verify_fix(repo_path, pattern_id, category, file) do
+        :cannot_locate ->
+          # The scan cannot say which file: no verification, and the gap is
+          # recorded, as for a blank category.
+          {:ok, record} =
+            record_outcome(
+              recipe_id,
+              repo,
+              file,
+              outcome,
+              Map.merge(extra, %{"verification" => "scan_skipped"})
+            )
+
+          {:ok, record, :not_verified}
+
         :verified ->
           # Record success WITH the verification stamp so recipe_health
           # can distinguish verified-clean fixes from un-verified ones.
