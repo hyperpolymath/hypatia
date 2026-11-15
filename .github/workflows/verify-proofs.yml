@@ -361,6 +361,23 @@ jobs:
             exit 1
           fi
 
+      # The E0 gate models: builtins only, strict profile (the files also carry
+      # --double-check in their OPTIONS pragma). E0ModelTables.agda is generated
+      # from the running Elixir by test/e0_agda_mirror_test.exs.
+      - name: Check the E0 gate models (strict profile)
+        working-directory: verification/proofs/agda
+        run: |
+          set -euo pipefail
+          for f in E0Model E0Import E0Agreement E0ModelTables E0ImportInstance; do
+            sha256sum "$f.agda"
+            if agda --safe --without-K --cubical-compatible "$f.agda"; then
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda pass "verification/proofs/agda/$f.agda" -- checker="Agda $AGDA_VERSION"
+            else
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda fail "verification/proofs/agda/$f.agda"
+              exit 1
+            fi
+          done
+
       - name: Ledger statuses agree with this run (agda)
         if: always()
         run: bash scripts/proof-ledger.sh derive agda "$PROOF_RECEIPTS"
