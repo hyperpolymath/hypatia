@@ -687,6 +687,18 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "robot-repo-automaton")
   end
 
+  # The trusted source of the verification of a fix outcome: a rescan of Hypatia
+  # (`OutcomeTracker.record_and_verify/5`) or a qualified record of the fleet
+  # import (`OutcomeTracker.record_fleet_outcome/7`, called by the scheduler). A
+  # `:fix_outcome` finding names neither, and carries no identity (an `event_id`
+  # or a `fleet_import_id`) by which the stored record could be found, so there
+  # is no trusted source that this path can read today. It therefore returns
+  # nil, and no outcome is learned here. The neural networks still learn from
+  # qualified rows through the learning cycle (`TrainingPipeline`). A way to
+  # bring a trusted verification to this path is a larger work order; the
+  # place for it is this function.
+  defp trusted_verification(_finding), do: nil
+
   # :queued records a volatile source-bound submission, never completed learning.
   @doc false
   def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
@@ -712,7 +724,24 @@ defmodule Hypatia.FleetDispatcher do
       {:error, :neural_unavailable}
   end
 
-  defp ingest_fix_outcome(finding) do
+  # `opts` exists for tests: `:server` is the coordinator that is called (a fake
+  # in a test), `:trusted_verification` is the function that reads the trusted
+  # source (see `trusted_verification/1`) and `:learning_file` is the file that
+  # the observation is appended to (a temporary file in a test, so that a test
+  # never writes under the real home directory). Callers outside tests do not
+  # pass them.
+  @doc false
+  def ingest_fix_outcome(finding, opts \\ []) do
+    server = Keyword.get(opts, :server, Hypatia.Neural.Coordinator)
+    verification_of = Keyword.get(opts, :trusted_verification, &trusted_verification/1)
+
+    learning_file =
+      Keyword.get_lazy(opts, :learning_file, fn ->
+        Path.expand(
+          "~/Documents/hyperpolymath-repos/gitbot-fleet/shared-context/learning/fix-outcomes.jsonl"
+        )
+      end)
+
     pattern = finding_field(finding, :pattern, "unknown")
     success = finding_field(finding, :success, false)
     repo = finding_field(finding, :repo, "unknown")
@@ -722,11 +751,27 @@ defmodule Hypatia.FleetDispatcher do
         "success=#{success}"
     )
 
-    # Feed outcome to neural coordinator for continuous learning.
-    # The coordinator updates MoE, LSM, and ESN networks with this data.
+    # Feed outcome to neural coordinator for continuous learning, but only a
+    # QUALIFIED outcome (E0-05; issue 984, step 9). The coordinator updates MoE
+    # and LSM with what it receives, so an outcome that the gate would ignore
+    # must not reach it. Every field of the finding is a claim of the caller:
+    # `success` and any `verification` in it qualify nothing. The verification
+    # comes from a trusted source, never from the finding.
     outcome_str = if success, do: "success", else: "failure"
 
-    record_neural_outcome(finding, outcome_str)
+    verification = verification_of.(finding)
+
+    if Hypatia.OutcomeTracker.qualified_outcome?(%{
+         "outcome" => outcome_str,
+         "verification" => verification
+       }) do
+      record_neural_outcome(finding, outcome_str, server)
+    else
+      Logger.info(
+        "Learning loop: outcome for pattern '#{pattern}' in #{repo} not learned: " <>
+          "no trusted verification"
+      )
+    end
 
     observation = %{
       type: pattern,
@@ -736,11 +781,6 @@ defmodule Hypatia.FleetDispatcher do
       confidence: finding_field(finding, :confidence, "unknown"),
       observed: DateTime.utc_now() |> DateTime.to_iso8601()
     }
-
-    learning_file =
-      Path.expand(
-        "~/Documents/hyperpolymath-repos/gitbot-fleet/shared-context/learning/fix-outcomes.jsonl"
-      )
 
     case Jason.encode(observation) do
       {:ok, json_line} ->
