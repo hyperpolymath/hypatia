@@ -36,6 +36,8 @@ fmt:
 # Check formatting without modifying
 fmt-check:
     cargo fmt --all --check
+    mix format --check-formatted
+
 # Run clippy lints
 lint:
     cargo clippy -- -D warnings

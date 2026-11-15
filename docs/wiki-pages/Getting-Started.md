@@ -5,7 +5,7 @@ Five minutes from clone to your first scan.
 
 ## Prerequisites
 
-- Elixir 1.18+ and Erlang/OTP 27 (for the Elixir scanner + supervision tree)
+- Elixir 1.19.4 and Erlang/OTP 27.3.4.19 (for the Elixir scanner + supervision tree; pinned in `mise.toml`)
 - Rust 1.94+ (for the high-throughput CLI workers)
 - `git` (every clone path)
 - `just` — the task runner every documented workflow goes through (`just --list`)
