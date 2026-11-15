@@ -27,6 +27,7 @@ modules = Hypatia.ABI.Types
         , Hypatia.ABI.Egress
         , Hypatia.ABI.SecretAlerts
         , Hypatia.ABI.RsrProfile
+        , Hypatia.ABI.Receipt
 
 builddir = "../../build/abi"
 

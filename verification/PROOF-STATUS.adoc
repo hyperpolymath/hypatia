@@ -60,7 +60,7 @@ receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or
 a stale underclaim.
 Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
-*Census:* 27 proven of 47; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
+*Census:* 33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
 [cols="3,1,2,2,2",options="header"]
 |===
@@ -347,6 +347,42 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |Agda 2.8.0.2, builtins only, --safe --without-K --cubical-compatible (--double-check in the file)
 |`+verification/proofs/agda/E0ImportInstance.agda+`: `+first-pass+`, `+second-pass+`, `+twice+`, `+failed+`, `+retried+`
 |One concrete instance with small ids; not a claim about the real id function
+
+|P1 of the E0 receipt design: appending a receipt whose event_id is already in the ledger is refused and leaves the ledger unchanged; appending one whose id is not in it succeeds; a ledger of distinct event_ids stays one
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+appendRefusesDuplicate+`, `+appendFresh+`, `+appendKeepsUnique+`, `+decElem+`, `+decNat+`
+|Over the Idris2 types. An event_id is a natural number with a structural decidable equality; the real ids are ADR-008 strings. The run time is held to the append by test/receipt_model_mirror_test.exs, not proved: Receipt.write writes nothing and returns ok where the model answers Left DuplicateEventId (the ledger is unchanged in both). Concurrent writers and the file system are outside the model
+
+|P2: the verdict of a receipt is the answer of the gate for its qualification and claimed outcome, or a withdrawal that names a parent; a verified receipt has a row digest and at least one observation; a receipt that credits a success is evidenced; the gate never answers withdrawn and credits a success only for a verified, claimed success
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+verdictIsGate+`, `+verifiedHasEvidence+`, `+noVerifiedWithoutObservations+`, `+creditedSuccessIsEvidenced+`, `+withdrawnHasParent+`, `+gateNeverWithdrawn+`, `+gateSuccessInverse+`
+|Over the Idris2 types. The model cannot build a verified receipt without an observation, but Receipt.build/2 does not refuse one: the Nickel contract of schema/receipt.ncl does, and the production entry points never make one (the mirror test runs every fleet classification and the rescan path; it pins the build/2 difference as a known difference). Whether the real gate computes the table is checked by the mirror test and by tests/accept/ReceiptP2GateTable.idr, not proved
+
+|The gate table of the receipt model has the 24 entries that verdict_for gives in schema/receipt.ncl, which is the one-row case of OutcomeTracker.qualified_outcome_counts/1
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+gate+`
+|A finite table, pinned by tests/accept/ReceiptP2GateTable.idr (24 equations) and compared with the emitter by test/receipt_model_mirror_test.exs, which reads the table from this file. Idris2 checks the equations; it does not show that the Elixir gate computes the table
+
+|P3: appending a receipt, including a revision that names the receipt it revises, keeps every receipt of the ledger before it; a revision keeps the qualification, claimed outcome and verdict of the receipt it revises and names it as its parent
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+appendKeepsHistory+`, `+reviseKeepsHistory+`, `+reviseKeepsClaim+`, `+reviseFill+`
+|Over the Idris2 types only. No run-time code builds a revision, a fill or a withdrawal yet (E0-07), so the mirror test has nothing to hold for P3. A withdrawal is modelled as a revision (an appended receipt), by event_id; retraction by position (Retraction.idr) and by name (the run time) is not proved here. Idempotence and order-independence of a withdrawal are not claimed
+
+|P4: a gap-filling revision keeps every present field, changes a field only if it was in missing_evidence, and every value it holds is the old one or one that came from the filler into a gap
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+fillNeverOverwrites+`, `+fillChangesOnlyGaps+`, `+fillValueIsFromExtra+`, `+reviseNeverOverwrites+`, `+fillBody+`
+|Over the Idris2 types only. Field values are natural numbers. No run-time code builds a fill yet (E0-07), so P4 has no run-time counterpart and the mirror test does not cover it
+
+|P5: a field is named in missing_evidence exactly when it is absent, over the 14 names of the closed set; the set is empty exactly when every field is present; a receipt cannot be built with a missing_evidence that differs from the gaps of its body
+|proven
+|Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
+|`+src/Hypatia/ABI/Receipt.idr+`: `+missingIff+`, `+missingEmptyIff+`, `+receiptMissingExact+`, `+fieldListed+`, `+allFields+`
+|Over the Idris2 types. Order and absence of duplicates in missing_evidence are not proved (the Nickel contract and the mirror test check them). At E0 the set is never empty at run time, because subject_identity has no source yet (issue 984, E1), so the empty case is a property of the model that is not reached. The mirror test reads the 14 names from this file and from the contract and compares them
 |===
 // END GENERATED: proof ledger
 
