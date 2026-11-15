@@ -124,10 +124,14 @@ defmodule Hypatia.TriangleRouter do
 
   # --- Private ---
 
+  # The routed pattern names the kind of match that chose its recipe (E0-18), the
+  # way it already names `routed_repo`. The tuple keeps its shape.
+  defp labelled(pattern, kind), do: Map.put(pattern, "match_kind", Atom.to_string(kind))
+
   defp try_eliminate(pattern, language) do
-    case RecipeMatcher.best_recipe_for_pattern(pattern, language) do
-      %{"triangle_tier" => "eliminate"} = recipe ->
-        {:eliminate, recipe, pattern}
+    case RecipeMatcher.best_recipe_with_kind(pattern, language) do
+      {%{"triangle_tier" => "eliminate"} = recipe, kind} ->
+        {:eliminate, recipe, labelled(pattern, kind)}
 
       _ ->
         # Check if there's a category-level eliminate substitution
@@ -144,7 +148,8 @@ defmodule Hypatia.TriangleRouter do
               "description" => Map.get(sub, "note", "Eliminate via #{category}")
             }
 
-            {:eliminate, synthetic_recipe, pattern}
+            # No recipe matched; the substitution was chosen by category.
+            {:eliminate, synthetic_recipe, labelled(pattern, :category)}
 
           _ ->
             nil
@@ -154,13 +159,13 @@ defmodule Hypatia.TriangleRouter do
 
   defp try_substitute(pattern, category, language) do
     # Try fuzzy recipe match (any tier -- if it's eliminate, promote it)
-    case RecipeMatcher.best_recipe_for_pattern(pattern, language) do
-      %{} = recipe ->
+    case RecipeMatcher.best_recipe_with_kind(pattern, language) do
+      {%{} = recipe, kind} ->
         tier = Map.get(recipe, "triangle_tier", "substitute")
 
         case tier do
-          "eliminate" -> {:eliminate, recipe, pattern}
-          _ -> {:substitute, recipe, pattern}
+          "eliminate" -> {:eliminate, recipe, labelled(pattern, kind)}
+          _ -> {:substitute, recipe, labelled(pattern, kind)}
         end
 
       nil ->
@@ -178,7 +183,8 @@ defmodule Hypatia.TriangleRouter do
               "description" => "Replace with proven/#{List.first(modules)}"
             }
 
-            {:substitute, recipe, pattern}
+            # No recipe matched; the substitution was chosen by category.
+            {:substitute, recipe, labelled(pattern, :category)}
 
           _ ->
             nil

@@ -102,6 +102,71 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
     assert stored_rows(root) == []
   end
 
+  # E0-18: the pattern of the dispatch and the kind of match travel on the command
+  # line, through each of the 3 ways that the task writes a row.
+  describe "--pattern-id and --match-kind" do
+    test "a rescanned row carries both", %{root: root} do
+      run_ok(
+        base_args(["--outcome", "success", "--pattern-id", "PA100-x", "--match-kind", "fuzzy"])
+      )
+
+      assert [row] = stored_rows(root)
+      assert row["pattern_id"] == "PA100-x"
+      assert row["match_kind"] == "fuzzy"
+    end
+
+    test "a row with --no-verify carries both", %{root: root} do
+      run_ok(
+        base_args([
+          "--outcome",
+          "success",
+          "--no-verify",
+          "--pattern-id",
+          "PA100-x",
+          "--match-kind",
+          "exact"
+        ])
+      )
+
+      assert [row] = stored_rows(root)
+      assert row["pattern_id"] == "PA100-x"
+      assert row["match_kind"] == "exact"
+      assert row["verification"] == "unverified"
+    end
+
+    test "a fleet verdict row carries both", %{root: root} do
+      run_ok(
+        base_args([
+          "--outcome",
+          "failure",
+          "--verdict",
+          "failed",
+          "--pattern-id",
+          "PA100-x",
+          "--match-kind",
+          "category"
+        ])
+      )
+
+      assert [row] = stored_rows(root)
+      assert row["pattern_id"] == "PA100-x"
+      assert row["match_kind"] == "category"
+      assert row["verification"] == "failed"
+    end
+
+    test "with neither flag the kind is unknown and there is no pattern", %{root: root} do
+      run_ok(base_args(["--outcome", "failure", "--verdict", "failed"]))
+
+      assert [row] = stored_rows(root)
+      assert row["match_kind"] == "unknown"
+      assert row["pattern_id"] == nil
+    end
+
+    test "a kind that the matcher does not make is refused and nothing is stored", %{root: root} do
+      assert_rejected(root, base_args(["--outcome", "failure", "--match-kind", "great"]))
+    end
+  end
+
   describe "verdicts that are not positive evidence" do
     test "a no_op row leaves the qualified counts at zero", %{root: root} do
       run_ok(base_args(["--outcome", "success", "--verdict", "no_op"]))

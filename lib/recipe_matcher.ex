@@ -67,7 +67,7 @@ defmodule Hypatia.RecipeMatcher do
   Caches nothing -- always reads fresh from disk.
   """
   def all_recipes do
-    recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
+    recipes_dir = Path.join(Path.expand(data_path()), "recipes")
 
     case File.ls(recipes_dir) do
       {:ok, files} ->
@@ -89,7 +89,7 @@ defmodule Hypatia.RecipeMatcher do
   Returns list of substitution entries with pa_rule, category, proven_modules, etc.
   """
   def load_substitutions do
-    path = Path.join(Path.expand(@verisimdb_data_path), "recipes/proven-substitutions.json")
+    path = Path.join(Path.expand(data_path()), "recipes/proven-substitutions.json")
 
     case File.read(path) do
       {:ok, content} ->
@@ -121,22 +121,50 @@ defmodule Hypatia.RecipeMatcher do
   to clean recipe IDs (e.g., PA009-shell-unquoted-var).
   """
   def best_recipe_for_pattern(pattern, language) when is_map(pattern) do
+    case best_recipe_with_kind(pattern, language) do
+      {recipe, _kind} -> recipe
+      nil -> nil
+    end
+  end
+
+  @doc """
+  The same lookup as `best_recipe_for_pattern/2`, with the kind of match that
+  chose the recipe: `{recipe, :exact | :category | :fuzzy}`, or `nil`.
+
+  A recipe that stands for many patterns is evidence that is merged across them.
+  The kind says how far the match reached (E0-18, design of 2026-11-14 on merge
+  honesty, decision 1): `:exact` by pattern id, `:category` by target category,
+  `:fuzzy` by PA rule prefix and a keyword of the description.
+  """
+  def best_recipe_with_kind(pattern, language) when is_map(pattern) do
     pattern_id = Map.get(pattern, "id", "")
 
     case best_recipe(pattern_id, language) do
       nil ->
         # Try category-based match first (most reliable), then fuzzy
         case category_match_recipe(pattern, language) do
-          nil -> fuzzy_match_recipe(pattern, language)
-          recipe -> recipe
+          nil ->
+            case fuzzy_match_recipe(pattern, language) do
+              nil -> nil
+              recipe -> {recipe, :fuzzy}
+            end
+
+          recipe ->
+            {recipe, :category}
         end
 
       recipe ->
-        recipe
+        {recipe, :exact}
     end
   end
 
   # --- Private ---
+
+  # Read at run time, so that a test can point the matcher at recipes of its own;
+  # the compile-time value is the default.
+  defp data_path do
+    Application.get_env(:hypatia, :verisimdb_data_path, @verisimdb_data_path)
+  end
 
   # Match recipe by target_categories field -- most reliable match
   defp category_match_recipe(pattern, language) do

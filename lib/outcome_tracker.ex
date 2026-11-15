@@ -253,7 +253,8 @@ defmodule Hypatia.OutcomeTracker do
     outcome_str = Atom.to_string(outcome)
 
     base = %{
-      "pattern_id" => nil,
+      "pattern_id" => pattern_label(metadata),
+      "match_kind" => match_kind_label(metadata),
       "recipe_id" => recipe_id,
       "repo" => repo,
       "file" => file,
@@ -334,6 +335,40 @@ defmodule Hypatia.OutcomeTracker do
     |> Map.put("event_id_source", source)
     |> Map.put("source_kind", Atom.to_string(kind))
   end
+
+  # E0-18: the pattern that the row is about, and the kind of match that chose its
+  # recipe. They are labels, and they change no credit. A label that is not valid
+  # is not stored: a pattern id is text that is not blank, and a kind is one of
+  # the 3 that the matcher makes. No kind means "unknown", never "exact".
+  @match_kinds ~w(exact category fuzzy)
+
+  defp pattern_label(metadata) do
+    case label_text(Map.get(metadata, "pattern_id")) do
+      nil ->
+        nil
+
+      text ->
+        case String.trim(text) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+    end
+  end
+
+  defp match_kind_label(metadata) do
+    case label_text(Map.get(metadata, "match_kind")) do
+      kind when kind in @match_kinds -> kind
+      _ -> "unknown"
+    end
+  end
+
+  # Text, or an atom that is not nil or a boolean ("nil" is not a pattern id).
+  defp label_text(value) when is_binary(value), do: value
+
+  defp label_text(value) when is_atom(value) and value not in [nil, true, false],
+    do: Atom.to_string(value)
+
+  defp label_text(_value), do: nil
 
   defp write_receipt(store, record) do
     case Hypatia.Receipt.write(store.data_root, record) do

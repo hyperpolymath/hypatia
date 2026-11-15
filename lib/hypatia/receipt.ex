@@ -70,8 +70,11 @@ defmodule Hypatia.Receipt do
 
     present = fn map, key -> Map.has_key?(map, key) end
 
+    labels = labels(row)
+
     missing =
-      (["head_sha", "match_kind", "pattern_id", "subject_id", "subject_identity"] ++
+      (["head_sha", "subject_id", "subject_identity"] ++
+         for(name <- ~w(match_kind pattern_id), not Map.has_key?(labels, name), do: name) ++
          for(
            key <- ~w(after_hits before_hits exit_code rescan verdict),
            not present.(observations, key),
@@ -81,27 +84,45 @@ defmodule Hypatia.Receipt do
       |> Enum.sort()
       |> Enum.uniq()
 
-    body = %{
-      "assertion" => %{
-        "claimed_outcome" => claimed_outcome(row),
-        "file" => ascii(to_text(Map.get(row, "file", ""))),
-        "recipe_id" => ascii(to_text(Map.get(row, "recipe_id", ""))),
-        "repo" => ascii(to_text(Map.get(row, "repo", "")))
-      },
-      "chain_version" => @chain_version,
-      "event_id" => event_id,
-      "missing_evidence" => missing,
-      "observations" => observations,
-      "parent_event_ids" => [],
-      "proof_or_test_ref" => proof_or_test_ref,
-      "provenance" => provenance,
-      "qualification" => qualification_of(row, verdict),
-      "source" => %{"kind" => Atom.to_string(kind), "line" => ctx.line, "log" => ctx.log},
-      "verdict" => verdict
-    }
+    body =
+      %{
+        "assertion" => %{
+          "claimed_outcome" => claimed_outcome(row),
+          "file" => ascii(to_text(Map.get(row, "file", ""))),
+          "recipe_id" => ascii(to_text(Map.get(row, "recipe_id", ""))),
+          "repo" => ascii(to_text(Map.get(row, "repo", "")))
+        },
+        "chain_version" => @chain_version,
+        "event_id" => event_id,
+        "missing_evidence" => missing,
+        "observations" => observations,
+        "parent_event_ids" => [],
+        "proof_or_test_ref" => proof_or_test_ref,
+        "provenance" => provenance,
+        "qualification" => qualification_of(row, verdict),
+        "source" => %{"kind" => Atom.to_string(kind), "line" => ctx.line, "log" => ctx.log},
+        "verdict" => verdict
+      }
+      |> Map.merge(labels)
 
     {:ok, digest} = digest(body)
     Map.put(body, "receipt_sha256", digest)
+  end
+
+  # The pattern and the kind of match of the dispatch (E0-18), when the row has
+  # them. A row with no label, or with the kind "unknown", has neither: both are
+  # then named in missing_evidence.
+  defp labels(row) do
+    pattern =
+      case Map.get(row, "pattern_id") do
+        p when is_binary(p) and p != "" -> %{"pattern_id" => ascii(p)}
+        _ -> %{}
+      end
+
+    case Map.get(row, "match_kind") do
+      k when k in ~w(exact category fuzzy) -> Map.put(pattern, "match_kind", k)
+      _ -> pattern
+    end
   end
 
   # What the single gate does with the row.
