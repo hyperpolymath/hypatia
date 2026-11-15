@@ -295,6 +295,7 @@ defmodule Hypatia.OutcomeTrackerTest do
       original = for key <- keys, do: {key, Application.fetch_env(:hypatia, key)}
       old_path = System.get_env("PATH")
       old_mode = System.get_env("FAKE_PA_MODE")
+      old_json = System.get_env("FAKE_PA_JSON")
       old_repos = System.get_env("HYPATIA_REPOS_DIR")
 
       root =
@@ -309,7 +310,8 @@ defmodule Hypatia.OutcomeTrackerTest do
       #!/bin/sh
       case "$FAKE_PA_MODE" in
         clean) echo '{"weak_points":[]}' ;;
-        present) echo '{"weak_points":[{"category":"cat-x"}]}' ;;
+        present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt"}]}' ;;
+        json) printf '%s' "$FAKE_PA_JSON" ;;
         *) exit 1 ;;
       esac
       """)
@@ -333,7 +335,12 @@ defmodule Hypatia.OutcomeTrackerTest do
 
         System.put_env("PATH", old_path || "")
 
-        for {name, old} <- [{"FAKE_PA_MODE", old_mode}, {"HYPATIA_REPOS_DIR", old_repos}] do
+        for {name, old} <-
+              [
+                {"FAKE_PA_MODE", old_mode},
+                {"FAKE_PA_JSON", old_json},
+                {"HYPATIA_REPOS_DIR", old_repos}
+              ] do
           if old, do: System.put_env(name, old), else: System.delete_env(name)
         end
 
@@ -425,6 +432,68 @@ defmodule Hypatia.OutcomeTrackerTest do
                  :success,
                  opts
                )
+    end
+
+    # E0-26 (owner ruling 8A): a fix is judged by its category AND its file. The
+    # scanner names the file of a weak point in `file` (panic-attack's WeakPoint).
+    defp rescan(root, file, weak_points) do
+      System.put_env("FAKE_PA_MODE", "json")
+      System.put_env("FAKE_PA_JSON", Jason.encode!(%{"weak_points" => weak_points}))
+
+      OutcomeTracker.record_and_verify("recipe-e0-26", "owner/repo", file, :success,
+        verify: true,
+        category: "cat-x",
+        repo_path: root
+      )
+    end
+
+    test "a clean scan verifies", %{root: root} do
+      assert {:ok, %{"verification" => "verified"}, :verified} = rescan(root, "a.txt", [])
+    end
+
+    test "the same category in the same file refutes the fix", %{root: root} do
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "a.txt", "line" => 3}])
+    end
+
+    test "the same category in ANOTHER file does not refute a fix of this file", %{root: root} do
+      assert {:ok, %{"verification" => "verified"}, :verified} =
+               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "b.txt"}])
+    end
+
+    test "another category in the same file does not refute it either", %{root: root} do
+      assert {:ok, %{"verification" => "verified"}, :verified} =
+               rescan(root, "a.txt", [%{"category" => "cat-y", "file" => "a.txt"}])
+    end
+
+    test "a weak point of the category that names no file gives no verification", %{root: root} do
+      assert {:ok, record, :not_verified} = rescan(root, "a.txt", [%{"category" => "cat-x"}])
+      assert record["verification"] == "scan_skipped"
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a weak point with no file in the scan does not hide one in the same file", %{root: root} do
+      # Both are present: the one in this file refutes the fix, whatever the other says.
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               rescan(root, "a.txt", [
+                 %{"category" => "cat-x"},
+                 %{"category" => "cat-x", "file" => "a.txt"}
+               ])
+    end
+
+    test "a leading ./ does not make a different file", %{root: root} do
+      assert {:ok, %{"verification" => "still_present"}, _} =
+               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "./a.txt"}])
+
+      assert {:ok, %{"verification" => "still_present"}, _} =
+               rescan(root, "./a.txt", [%{"category" => "cat-x", "file" => "a.txt"}])
+    end
+
+    test "a fix at repository level keeps the old rule: the category alone", %{root: root} do
+      for repo_level <- [".", ""] do
+        assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+                 rescan(root, repo_level, [%{"category" => "cat-x", "file" => "b.txt"}])
+      end
     end
 
     test "an absent scanner gives scan_failed and no credit, not a crash", %{root: root} do
