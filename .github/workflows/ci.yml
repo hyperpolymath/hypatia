@@ -431,6 +431,31 @@ jobs:
           mix hypatia.rsr_score . \
             --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
 
+  # Elixir formatting, on the same toolchain as elixir-compile. The formatter's
+  # output differs between Elixir minors (1.19 keeps the parentheses in
+  # `(a and b) && c`, 1.17 removes them), so the check is only meaningful on
+  # the one pinned version; `just fmt-check` runs the same command locally.
+  # .formatter.exs imports no deps and no plugins, so no `mix deps.get`.
+  elixir-format:
+    name: Elixir Format (dogfood toolchain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Elixir/OTP (identical to elixir-compile)
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '27.3.4.19'
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
   # ============================================================================
   # KYAML conformance: Hypatia.Kyaml against kyq's reference parser
   # ============================================================================
@@ -525,17 +550,24 @@ jobs:
       - haskell-lint
       - k9iser-validate
       - elixir-compile
+      - elixir-format
       - kyaml-conformance
     if: always()
     steps:
       - name: Check all jobs status
         env:
-          # The KYAML gate counts only when it ran to success: a cancelled or
-          # skipped run proved nothing, so it fails the rollup too.
+          # The KYAML and Elixir format gates count only when they ran to
+          # success: a cancelled or skipped run proved nothing, so it fails the
+          # rollup too.
           KYAML_CONFORMANCE: ${{ needs.kyaml-conformance.result }}
+          ELIXIR_FORMAT: ${{ needs.elixir-format.result }}
         run: |
           if [[ "$KYAML_CONFORMANCE" != "success" ]]; then
             echo "::error::kyaml-conformance did not succeed (result: $KYAML_CONFORMANCE)"
+            exit 1
+          fi
+          if [[ "$ELIXIR_FORMAT" != "success" ]]; then
+            echo "::error::elixir-format did not succeed (result: $ELIXIR_FORMAT)"
             exit 1
           fi
           if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \

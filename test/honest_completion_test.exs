@@ -47,7 +47,7 @@ defmodule Hypatia.Rules.HonestCompletionTest do
 
   describe "generate_findings/2" do
     # Base evidence map with all keys the implementation accesses
-    defp base_evidence(overrides \\ %{}) do
+    defp base_evidence(overrides) do
       Map.merge(
         %{
           believe_me_count: 0,
