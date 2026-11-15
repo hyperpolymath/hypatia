@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
     #!/bin/sh
     case "$FAKE_PA_MODE" in
       clean) echo '{"weak_points":[]}' ;;
-      present) echo '{"weak_points":[{"category":"cat-x"}]}' ;;
+      present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt"}]}' ;;
       *) exit 1 ;;
     esac
     """)

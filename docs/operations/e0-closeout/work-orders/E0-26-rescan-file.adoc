@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-26: The rescan judges a fix by its category and its file
+:wo-id: E0-26
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 140
+:wo-branch: fix/e0-26-rescan-file
+:wo-depends: none
+
+== Goal
+
+A rescan of a fix in one file is no longer refuted by a weak point of the same
+category in another file. A scan that cannot say which file a weak point is in
+gives no verification, never a guess.
+
+== Authority
+
+Owner ruling of 2026-11-15 on the design note of `E0-04` (pull request 1148,
+design point 3, option B), selector 8, answer A: the scanner names the file of a
+weak point in `file` (and `line`). Recorded in `docs/design/e0-receipt.adoc`,
+section 9a. Related: https://github.com/hyperpolymath/hypatia/issues/984[issue 984],
+acceptance A3.
+
+== Facts measured
+
+Commit `77db7688`, measured on 2026-11-15 on a clean tree.
+
+* Read: `lib/outcome_tracker.ex`, `do_verify_fix/3` (line 318) compares each weak
+  point of the scan by `Map.get(wp, "category", "") == category` for the whole
+  repository. A fix in file A is therefore refuted (`:still_present`, recorded as a
+  false positive) when file B still has a weak point of the same category.
+* Read: `verify_fix/3` (line 306) is public and takes `(repo_path, pattern_id,
+  category)`. `record_and_verify/5` (line 460) calls it with the category but does
+  not pass the `file` that it was given.
+* Read: `panic-attack` `src/types.rs` at the commit that Hypatia's CI pins
+  (`cbf2b93`, and the same on `main`): `WeakPoint` has `location: Option<String>`
+  (`path:line`), `file: Option<String>` and `line: Option<u32>`. `file` is derived
+  from `location` (`with_parsed_location`), and is left out of the JSON when it is
+  `None`. The doc comment says: "Consumers should prefer `file`/`line` over
+  parsing `location` directly." There is no `locus` field.
+* Ran: the tests of `E0-04` (`test/outcome_tracker_test.exs`) use a fake
+  `panic-attack` on `PATH` that echoes a fixed JSON; they pass.
+* The `file` that a caller gives is `"."` for a fix at repository level (the fleet
+  writes `"."` when it names no file).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/outcome_tracker_test.exs`, with the fake scanner
+  echoing a JSON that the test sets: (a) a clean scan is `:verified`; (b) a weak
+  point of the category in the same file is `:still_present`; (c) a weak point of
+  the category only in another file is `:verified`; (d) a weak point of the
+  category with no `file` field gives no verification (`scan_skipped`, result
+  `:not_verified`); (e) `./a.txt` and `a.txt` are the same file; (f) a fix at
+  repository level (`file` is `"."` or empty) keeps the old rule, the category
+  alone; (g) the same file and another file both present is `:still_present`.
+  See them fail.
+. Give `verify_fix` an optional `file`: `verify_fix/4`, with `verify_fix/3` kept and
+  meaning "no file" (the category alone, as before). Pass the `file` from
+  `record_and_verify/5`.
+. Compare `file` after removing a leading `./`. Do not parse `location`.
+. Treat a weak point of the category with no `file` as a scan that cannot say:
+  return a result that `record_and_verify/5` records as `"scan_skipped"` with
+  `:not_verified`, as it does for a blank category.
+. Update the docstrings that name the rule.
+
+== Acceptance
+
+* The new tests pass, and (b) to (g) failed before step 3. Give both outputs.
+* `mix test test/outcome_tracker_test.exs test/mix_tasks/record_outcome_test.exs`
+  passes. `mix test` has 0 failures (the known intermittent
+  `SourceStoreLifecycleTest` failure is reported, not hidden).
+* A mutation check: put the category-only rule back, and test (c) fails.
+* No file that was formatted before the change is unformatted after it.
+* The change touches only `lib/outcome_tracker.ex` and its test files.
+
+== Stop and ask
+
+* The scanner output of a real run has no `file` for a weak point of a category
+  that Hypatia fixes, so that every rescan would give `scan_skipped`.
+* A caller outside `lib/outcome_tracker.ex` relies on the category-only rule.
+* The cost reaches the cap before the acceptance checks pass.
