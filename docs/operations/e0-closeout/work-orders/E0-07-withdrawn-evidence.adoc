@@ -10,7 +10,7 @@
 :wo-cap-usd: 16
 :wo-max-turns: 240
 :wo-branch: fix/e0-07-withdrawn-evidence
-:wo-depends: none
+:wo-depends: E0-09
 
 == Goal
 
