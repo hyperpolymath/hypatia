@@ -15,16 +15,15 @@ defmodule Hypatia.ReceiptModelMirrorTest do
   The gate table and the list of fields are READ FROM `Receipt.idr`, not copied,
   so the model and this test cannot drift apart without a failure.
 
-  Two differences between the model and the run time are pinned below as
-  tests of their own, so that a change to either is noticed:
+  Since E0-29 (owner rulings 1A and 2A) the writer refuses what the model refuses:
 
-    * `Receipt.write/3` of an event_id that has a receipt writes nothing and
-      returns `:ok`; the model's `append` answers `Left DuplicateEventId`. The
-      ledger is unchanged in both, which is the property.
-    * `Receipt.build/2` does not refuse a `verified` row that has no
-      observations. The model cannot build one (`verifiedOk`), and the Nickel
-      contract refuses it. The production entry points never make one (see the
-      P2 tests); `build/2` is not a smart constructor.
+    * `Receipt.write/3` of an event_id that has a receipt returns
+      `{:error, :duplicate_event_id}` and writes nothing, as the model's `append`
+      answers `Left DuplicateEventId`.
+    * `Receipt.write/3` refuses a `verified` receipt that has no observation, as the
+      model cannot build one (`verifiedOk`) and the Nickel contract refuses it.
+      `Receipt.build/2` itself is still not a smart constructor: it builds the
+      receipt, and `Receipt.check/1` is what refuses it.
   """
   use ExUnit.Case, async: true
 
@@ -256,16 +255,16 @@ defmodule Hypatia.ReceiptModelMirrorTest do
       assert receipt["proof_or_test_ref"]["row_sha256"] =~ ~r/\A[0-9a-f]{64}\z/
     end
 
-    test "KNOWN DIFFERENCE: build/2 does not refuse a verified row with no observation" do
+    test "build/2 still builds a verified row with no observation; check/1 and write/3 refuse it" do
       receipt = Receipt.build(row("QVerified", "CSuccess"), @ctx)
 
       # The model cannot build this (`verifiedOk`) and the Nickel contract refuses
       # it ("qualification verified needs observations and an evidence reference").
-      # No production entry point makes such a row; build/2 is not a smart
-      # constructor. If build/2 or write/3 gains a guard, change this test and the
-      # trust-boundary text of the P2 row in verification/proof-ledger.jsonl.
+      # build/2 is not a smart constructor, so it still builds it; the writer does
+      # not write it (E0-29, owner ruling 2A).
       assert receipt["qualification"] == "verified"
       assert receipt["observations"] == %{}
+      assert {:error, :verified_without_evidence} = Receipt.check(receipt)
     end
   end
 
@@ -366,7 +365,7 @@ defmodule Hypatia.ReceiptModelMirrorTest do
       {:ok, root: root}
     end
 
-    test "a second write for an event_id adds nothing, and returns :ok (a known difference)", %{
+    test "a second write for an event_id adds nothing, and is an error, as in the model", %{
       root: root
     } do
       row = row("QFailed", "CFailure")
@@ -375,19 +374,20 @@ defmodule Hypatia.ReceiptModelMirrorTest do
       before = Receipt.all(root)
       assert length(before) == 1
 
-      # The model answers Left DuplicateEventId; the run time returns :ok and
-      # leaves the ledger as it was.
-      assert :ok = Receipt.write(root, row, ctx: @ctx)
+      # The model answers Left DuplicateEventId; so does the writer (E0-29, ruling 1A).
+      assert {:error, :duplicate_event_id} = Receipt.write(root, row, ctx: @ctx)
       assert Receipt.all(root) == before
     end
 
-    test "many receipts keep distinct event_ids, and a replay of any of them adds nothing", %{
+    test "many receipts keep distinct event_ids, and a replay of any of them is refused", %{
       root: root
     } do
       rows = for _ <- 1..40, do: row("QFailed", "CFailure")
 
       for r <- rows, do: assert(:ok = Receipt.write(root, r, ctx: @ctx))
-      for r <- Enum.take_random(rows, 15), do: assert(:ok = Receipt.write(root, r, ctx: @ctx))
+
+      for r <- Enum.take_random(rows, 15),
+          do: assert({:error, :duplicate_event_id} = Receipt.write(root, r, ctx: @ctx))
 
       ids = Receipt.all(root) |> Enum.map(& &1["event_id"])
       assert length(ids) == 40

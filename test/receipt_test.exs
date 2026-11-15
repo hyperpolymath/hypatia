@@ -379,13 +379,22 @@ defmodule Hypatia.ReceiptTest do
                :crypto.hash(:sha256, source_line) |> Base.encode16(case: :lower)
     end
 
-    test "a verified update on the neural path", %{root: root, data: data} do
-      neural(root, "verified")
-      assert_receive {:coordinator, _, "success"}, 500
+    # E0-29 (owner ruling 2A): the evidence of the neural path is a bare claim, with
+    # nothing observed. A `verified` receipt needs an observation, so it is refused
+    # until the trusted source of the neural path brings one. The update still
+    # reaches the coordinator. (No trusted source exists today: `trusted_verification/1`
+    # is nil, so a real finding never gets here.)
+    test "a verified update on the neural path learns, and its receipt is refused",
+         %{root: root, data: data} do
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          neural(root, "verified")
+          assert_receive {:coordinator, _, "success"}, 500
+        end)
 
-      assert [r] = Receipt.all(data)
-      assert r["verdict"] == "credited_success"
-      assert r["source"]["kind"] == "neural_path"
+      assert Receipt.all(data) == []
+      assert log =~ "receipt_refused"
+      assert log =~ "verified_without_evidence"
     end
 
     test "a qualified failure on the local rescan path (a caller's own failed claim)", %{
@@ -510,16 +519,105 @@ defmodule Hypatia.ReceiptTest do
       assert length(Receipt.all(data)) == 1
     end
 
-    test "writing the receipt of a row twice writes one", %{data: data} do
+    test "writing the receipt of a row again is refused and writes nothing", %{data: data} do
       {:ok, _} =
         OutcomeTracker.record_outcome("recipe-p2", "o/r", "f", :failure, %{
           "verification" => "failed"
         })
 
+      # record_outcome/5 already wrote the receipt of the row.
       [row] = rows(data)
-      assert :ok = Receipt.write(data, row)
-      assert :ok = Receipt.write(data, row)
+      assert {:error, :duplicate_event_id} = Receipt.write(data, row)
+      assert {:error, :duplicate_event_id} = Receipt.write(data, row)
       assert length(Receipt.all(data)) == 1
+    end
+  end
+
+  # E0-29 (owner rulings 1A and 2A): the writer refuses what the Idris2 model refuses.
+  describe "what the writer refuses" do
+    defp unevidenced_verified_row do
+      fixture_row()
+      |> Map.drop(["exit_code", "before_hits", "after_hits", "verdict"])
+      |> Map.put("verification", "verified")
+      |> Map.put("outcome", "success")
+    end
+
+    test "a second write for an event_id is an error, and the receipt log is unchanged", %{
+      data: data
+    } do
+      row = Map.put(fixture_row(), "event_id", Hypatia.EventId.generate())
+
+      assert :ok = Receipt.write(data, row, ctx: fixture_ctx())
+      before = File.read!(hd(Path.wildcard(Path.join(data, "receipts/*.jsonl"))))
+
+      assert {:error, :duplicate_event_id} = Receipt.write(data, row, ctx: fixture_ctx())
+      assert File.read!(hd(Path.wildcard(Path.join(data, "receipts/*.jsonl")))) == before
+      assert length(Receipt.all(data)) == 1
+    end
+
+    test "check/1 refuses a verified receipt with no observation, and only that" do
+      bare = Receipt.build(unevidenced_verified_row(), fixture_ctx())
+      assert bare["qualification"] == "verified"
+      assert bare["observations"] == %{}
+      assert {:error, :verified_without_evidence} = Receipt.check(bare)
+
+      # with an observation it passes
+      evidenced =
+        Receipt.build(Map.put(unevidenced_verified_row(), "after_hits", 0), fixture_ctx())
+
+      assert :ok = Receipt.check(evidenced)
+
+      # a receipt that is not verified needs none
+      failed =
+        unevidenced_verified_row()
+        |> Map.merge(%{"verification" => "failed", "outcome" => "failure"})
+        |> Receipt.build(fixture_ctx())
+
+      assert failed["observations"] == %{}
+      assert :ok = Receipt.check(failed)
+
+      # an evidence reference that is not a digest does not count
+      no_digest = put_in(evidenced, ["proof_or_test_ref", "row_sha256"], "xyz")
+      assert {:error, :verified_without_evidence} = Receipt.check(no_digest)
+    end
+
+    test "write/3 refuses a verified row with no observation and writes nothing", %{data: data} do
+      row = Map.put(unevidenced_verified_row(), "event_id", Hypatia.EventId.generate())
+
+      assert {:error, :verified_without_evidence} =
+               Receipt.write(data, row, ctx: fixture_ctx())
+
+      assert Receipt.all(data) == []
+      refute File.exists?(Path.join(data, "receipts"))
+    end
+
+    test "a producer event_id that is the id of an existing receipt is stored and its receipt is refused, loudly",
+         %{root: root, data: data} do
+      {:ok, local} =
+        OutcomeTracker.record_outcome("recipe-p3", "o/r", "f", :failure, %{
+          "verification" => "failed"
+        })
+
+      taken = local["event_id"]
+      assert [_] = Receipt.all(data)
+
+      write_fleet(root, [fleet_row("recipe-p4", "verified", %{"event_id" => taken})])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(self(), {:poll, LearningScheduler.ingest_fleet_outcomes(nil)})
+        end)
+
+      assert_received {:poll, {1, _}}
+
+      # both rows are stored; the receipt of the first is the only receipt
+      assert length(rows(data)) == 2
+      assert [receipt] = Receipt.all(data)
+      assert receipt["assertion"]["recipe_id"] == "recipe-p3"
+
+      assert log =~ "receipt_refused event_id=#{taken}"
+      assert log =~ "duplicate_event_id"
+      refute log =~ "receipt_pending event_id=#{taken}"
     end
   end
 

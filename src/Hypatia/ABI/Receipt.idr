@@ -33,10 +33,12 @@
 --     NAME.  This module proves neither.  It has no retraction: a withdrawal is a
 --     revision (an appended receipt with verdict `Withdrawn` and a parent), so what
 --     is proved here is about the append, by event_id.
---   * The runtime `Receipt.write` does not return an error for a duplicate
---     event_id: it writes nothing and returns :ok (an idempotent replay).  The
---     model's `Left DuplicateEventId` is "the ledger is unchanged"; that is the
---     property, and the return value is a difference.
+--   * The runtime `Receipt.write` answers `{:error, :duplicate_event_id}` for a
+--     duplicate event_id and writes nothing, as the model's `Left DuplicateEventId`
+--     (E0-29, owner ruling 1A; before it, the writer returned :ok).  It also
+--     refuses a verified receipt with no observation (`Receipt.check/1`, ruling
+--     2A), as `verifiedOk` makes the model unable to build one.  `Receipt.build/2`
+--     is still not a smart constructor: it builds the receipt, `check/1` refuses it.
 --
 -- The gate table `gate` is the table of `verdict_for` in schema/receipt.ncl, which
 -- is the one-row case of OutcomeTracker.qualified_outcome_counts/1.
