@@ -283,14 +283,20 @@ defmodule Hypatia.ReceiptTest do
       {_, code} = check_contract(good() |> put_in(["observations", "after_hits"], 0))
       assert code != 0
 
-      # 7. a wrong chain version, and an event_id that is not version 8
+      # 7. a wrong chain version, and an event_id that is not version 8. The estate
+      # UUID gate (`check-uuid-v8.sh --strict`) refuses a non-v8 literal in source,
+      # so the wrong id is made from the version 8 one by changing its version
+      # nibble (the character at index 14).
       {_, code} = check_contract(good() |> Map.put("chain_version", "e0-receipt/2"))
       assert code != 0
 
-      {_, code} =
-        check_contract(good() |> Map.put("event_id", "0198a7b2-6f0c-7000-8000-0123456789ab"))
+      version_7 = binary_part(@event_id, 0, 14) <> "7" <> binary_part(@event_id, 15, 21)
+      assert String.at(version_7, 14) == "7"
+      assert binary_part(version_7, 0, 14) <> "8" <> binary_part(version_7, 15, 21) == @event_id
 
+      {out, code} = check_contract(good() |> Map.put("event_id", version_7) |> reseal())
       assert code != 0
+      assert out =~ "event_id"
     end
 
     if @nickel == nil do

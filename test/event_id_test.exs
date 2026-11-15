@@ -51,15 +51,33 @@ defmodule Hypatia.EventIdTest do
     assert length(Enum.uniq(ids)) == 4_000
   end
 
+  # The estate UUID gate (`check-uuid-v8.sh --strict`, ADR-008) reads source text
+  # and has no exemption, so a deliberately wrong id cannot be written here as a
+  # literal. It is made from a version 8 id by changing one nibble: the character
+  # at index 14 is the version and the one at index 19 is the variant.
+  defp with_nibble(id, index, nibble) do
+    binary_part(id, 0, index) <> nibble <> binary_part(id, index + 1, byte_size(id) - index - 1)
+  end
+
   test "valid?/1 accepts an id and refuses what is not one" do
-    assert EventId.valid?(EventId.generate())
+    id = EventId.generate()
+    assert EventId.valid?(id)
+
+    # Each wrong id differs from the valid one in exactly one nibble, so it is
+    # that nibble that valid?/1 refuses. Putting the nibble back gives the valid
+    # id again.
+    version_7 = with_nibble(id, 14, "7")
+    variant_c = with_nibble(id, 19, "c")
+    assert String.at(version_7, 14) == "7" and String.at(variant_c, 19) == "c"
+    assert with_nibble(version_7, 14, String.at(id, 14)) == id
+    assert with_nibble(variant_c, 19, String.at(id, 19)) == id
 
     for bad <- [
           "",
           nil,
           42,
-          "0198a7b2-6f0c-7000-8000-000000000000",
-          "0198a7b2-6f0c-8000-c000-000000000000",
+          version_7,
+          variant_c,
           "0198A7B2-6F0C-8000-8000-000000000000",
           "0198a7b2-6f0c-8000-8000-00000000000"
         ] do
