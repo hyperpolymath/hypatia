@@ -57,16 +57,11 @@ defmodule Hypatia.Safety.BatchRollback do
       recipe_id = Map.get(outcome, "recipe_id")
 
       if recipe_id do
-        Hypatia.OutcomeTracker.record_outcome(
+        Hypatia.OutcomeTracker.record_batch_rollback(
           recipe_id,
           Map.get(outcome, "repo", "unknown"),
           Map.get(outcome, "file", ""),
-          :false_positive,
-          %{
-            "verification" => "rollback_requested",
-            "caused_by" => "batch_rollback",
-            "batch_id" => batch_id
-          }
+          batch_id
         )
       end
     end)

@@ -284,10 +284,14 @@ qualified-neutral xs ys ps with credits-neutral xs ys ps
                          (cong (λ z → succ (count xs) + (fail (count xs) + z)) p))
 
 ------------------------------------------------------------------------
--- T5. The guard of E0-04: the public entry point cannot stamp "verified".
+-- T5. The guard of E0-04 and E0-27: the public entry point cannot stamp
+-- "verified" (positive evidence) or "rollback_requested" (negative evidence about a
+-- batch rollback; owner ruling 7A). Only a rescan, the qualified fleet import and
+-- BatchRollback can.
 
 sanitize : Verification → Verification
 sanitize verified = unverified
+sanitize rollbackRequested = unverified
 sanitize v = v
 
 sanitize-not-verified : ∀ v → sanitize v ≡ verified → ⊥
@@ -304,21 +308,36 @@ sanitize-not-verified scanSkipped ()
 sanitize-not-verified otherVerification ()
 sanitize-not-verified missingVerification ()
 
--- The guard loses nothing but "verified".
-sanitize-keeps : ∀ v → (v ≡ verified → ⊥) → sanitize v ≡ v
-sanitize-keeps verified n with n refl
+sanitize-not-rollback : ∀ v → sanitize v ≡ rollbackRequested → ⊥
+sanitize-not-rollback verified ()
+sanitize-not-rollback failed ()
+sanitize-not-rollback incomplete ()
+sanitize-not-rollback stillPresent ()
+sanitize-not-rollback rollbackRequested ()
+sanitize-not-rollback unverified ()
+sanitize-not-rollback noOp ()
+sanitize-not-rollback unqualified ()
+sanitize-not-rollback scanFailed ()
+sanitize-not-rollback scanSkipped ()
+sanitize-not-rollback otherVerification ()
+sanitize-not-rollback missingVerification ()
+
+-- The guard loses nothing but the two trusted-only values.
+sanitize-keeps : ∀ v → (v ≡ verified → ⊥) → (v ≡ rollbackRequested → ⊥) → sanitize v ≡ v
+sanitize-keeps verified n _ with n refl
 ... | ()
-sanitize-keeps failed _ = refl
-sanitize-keeps incomplete _ = refl
-sanitize-keeps stillPresent _ = refl
-sanitize-keeps rollbackRequested _ = refl
-sanitize-keeps unverified _ = refl
-sanitize-keeps noOp _ = refl
-sanitize-keeps unqualified _ = refl
-sanitize-keeps scanFailed _ = refl
-sanitize-keeps scanSkipped _ = refl
-sanitize-keeps otherVerification _ = refl
-sanitize-keeps missingVerification _ = refl
+sanitize-keeps failed _ _ = refl
+sanitize-keeps incomplete _ _ = refl
+sanitize-keeps stillPresent _ _ = refl
+sanitize-keeps rollbackRequested _ n with n refl
+... | ()
+sanitize-keeps unverified _ _ = refl
+sanitize-keeps noOp _ _ = refl
+sanitize-keeps unqualified _ _ = refl
+sanitize-keeps scanFailed _ _ = refl
+sanitize-keeps scanSkipped _ _ = refl
+sanitize-keeps otherVerification _ _ = refl
+sanitize-keeps missingVerification _ _ = refl
 
 -- The row that OutcomeTracker.record_outcome/5 writes for a caller's claim.
 publicRow : Outcome → Verification → Bool → Row
@@ -327,6 +346,27 @@ publicRow o v b = row o (sanitize v) b
 public-never-credits-success : ∀ o v b → classify (publicRow o v b) ≡ creditSuccess → ⊥
 public-never-credits-success o v b p with credit-success-sound (publicRow o v b) p
 ... | _ , q = sanitize-not-verified v q
+
+-- E0-27. Through the public entry a false positive is credited only for
+-- "still_present" (a claim that only lowers trust): never for a rollback and never
+-- for "verified". So a made-up batch rollback is not counted.
+public-fp-needs-still-present : ∀ v b → classify (publicRow falsePositive v b) ≡ creditFalsePositive →
+  sanitize v ≡ stillPresent
+public-fp-needs-still-present verified b ()
+public-fp-needs-still-present failed b ()
+public-fp-needs-still-present incomplete b ()
+public-fp-needs-still-present stillPresent b _ = refl
+public-fp-needs-still-present rollbackRequested b ()
+public-fp-needs-still-present unverified b ()
+public-fp-needs-still-present noOp b ()
+public-fp-needs-still-present unqualified b ()
+public-fp-needs-still-present scanFailed b ()
+public-fp-needs-still-present scanSkipped b ()
+public-fp-needs-still-present otherVerification b ()
+public-fp-needs-still-present missingVerification b ()
+
+public-never-credits-rollback : ∀ b → classify (publicRow falsePositive rollbackRequested b) ≡ ignored
+public-never-credits-rollback b = refl
 
 ------------------------------------------------------------------------
 -- T6. The fleet classification of E0-03 (LearningScheduler.classify_fleet_record/1).
@@ -628,6 +668,14 @@ unguarded-credits = refl
 
 guarded-claim-ignored : classify (publicRow success verified false) ≡ ignored
 guarded-claim-ignored = refl
+
+-- The control for E0-27: a rollback row that a forged claim would produce without
+-- the guard is credited (the batch flag is true when caused_by and batch_id are given).
+unguarded-rollback-credits : classify (row falsePositive rollbackRequested true) ≡ creditFalsePositive
+unguarded-rollback-credits = refl
+
+guarded-rollback-ignored : classify (publicRow falsePositive rollbackRequested true) ≡ ignored
+guarded-rollback-ignored = refl
 
 ignored-rows-witness : AllIgnored (row success unverified false ∷ row success noOp true ∷ row failure unqualified false ∷ [])
 ignored-rows-witness = refl , refl , refl , tt

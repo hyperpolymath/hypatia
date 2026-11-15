@@ -24,6 +24,12 @@ defmodule Hypatia.TrustedCallersTest do
     "lib/outcome_tracker.ex" => "defines it"
   }
 
+  # Modules that may call the trusted rollback entry (E0-27, owner ruling 7A).
+  @rollback_entry_callers %{
+    "lib/safety/batch_rollback.ex" => "records the outcomes that a batch rollback marks",
+    "lib/outcome_tracker.ex" => "defines it"
+  }
+
   defp code_lines(path) do
     path
     |> File.read!()
@@ -53,6 +59,23 @@ defmodule Hypatia.TrustedCallersTest do
 
     # The scheduler really does call it (the allowlist is not stale).
     assert "lib/learning_scheduler.ex" in files
+  end
+
+  test "only BatchRollback calls the trusted rollback entry" do
+    files =
+      callers_of(~r/record_batch_rollback\(/)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    unexpected = files -- Map.keys(@rollback_entry_callers)
+
+    assert unexpected == [],
+           "these modules call OutcomeTracker.record_batch_rollback, the only entry that may " <>
+             "write rollback_requested: #{inspect(unexpected)}. Add the module to " <>
+             "@rollback_entry_callers in test/trusted_callers_test.exs with the reason."
+
+    assert "lib/safety/batch_rollback.ex" in files
   end
 
   test "persist_outcome/6, which writes a row without the guard, is private to OutcomeTracker" do
