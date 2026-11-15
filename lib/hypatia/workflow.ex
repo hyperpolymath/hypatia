@@ -261,36 +261,116 @@ defmodule Hypatia.Workflow do
 
   The shell's rules, not YAML's: a quote opens anywhere outside quotes and
   carries across lines; a `#` opens a comment only where a word starts
-  (line start, or after a blank or `; & | ( ) < >`); a backslash escapes the
+  (line start, or after a blank, `; & | ( < >`, or a subshell's `)`); a backslash escapes the
   next byte outside single quotes.
   """
   def shell_mask(script, opts \\ []) when is_binary(script),
-    do: mask(script, nil, true, false, Keyword.get(opts, :quotes, false), [])
+    do: mask(script, nil, true, false, Keyword.get(opts, :quotes, false), [], [])
 
-  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
+  # `)` is decided by what it closes (outside quotes): a subshell's `)` ends
+  # the word, so a `#` after it opens a comment; the `)` of `$(…)` does not,
+  # so `$(name)#suffix` is one word (Codex and CodeRabbit on #1129). `parens`
+  # is the stack of open `(`: :subst for `$(`, :sub for a bare `(`. A `)`
+  # with nothing open ends the word. The word `case` pushes :case_head, `in` makes it
+  # :case and `esac` pops it; while :case is on top, a `)` ends a pattern, not the enclosing
+  # `$(…)`, so it ends the word and pops nothing (Codex on #1129).
+  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?<, ?>]
+  # What may follow the words `case` and `esac`.
+  @word_ends [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(, ?), ?<, ?>]
 
-  defp mask(<<>>, _q, _ws?, _cmt?, _qs?, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
-  defp mask(<<?\n, r::binary>>, q, _, _, qs?, acc), do: mask(r, q, true, false, qs?, [?\n | acc])
-  defp mask(<<_, r::binary>>, q, ws?, true, qs?, acc), do: mask(r, q, ws?, true, qs?, [?\s | acc])
+  defp mask(<<>>, _q, _ws?, _cmt?, _qs?, _parens, acc),
+    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
 
-  defp mask(<<?#, r::binary>>, nil, true, _, qs?, acc),
-    do: mask(r, nil, true, true, qs?, [?\s | acc])
+  defp mask(<<?\n, r::binary>>, q, _, _, qs?, ps, acc),
+    do: mask(r, q, true, false, qs?, ps, [?\n | acc])
 
-  defp mask(<<c, r::binary>>, nil, _, _, qs?, acc) when c in [?', ?"],
-    do: mask(r, c, false, false, qs?, [c | acc])
+  defp mask(<<_, r::binary>>, q, ws?, true, qs?, ps, acc),
+    do: mask(r, q, ws?, true, qs?, ps, [?\s | acc])
 
-  defp mask(<<c, r::binary>>, c, _, _, qs?, acc), do: mask(r, nil, false, false, qs?, [c | acc])
+  defp mask(<<?#, r::binary>>, nil, true, _, qs?, ps, acc),
+    do: mask(r, nil, true, true, qs?, ps, [?\s | acc])
 
-  defp mask(<<?\\, c, r::binary>>, q, _, _, qs?, acc) when q != ?' do
+  defp mask(<<c, r::binary>>, nil, _, _, qs?, ps, acc) when c in [?', ?"],
+    do: mask(r, c, false, false, qs?, ps, [c | acc])
+
+  defp mask(<<c, r::binary>>, c, _, _, qs?, ps, acc),
+    do: mask(r, nil, false, false, qs?, ps, [c | acc])
+
+  defp mask(<<?\\, c, r::binary>>, q, _, _, qs?, ps, acc) when q != ?' do
     kept = if q != nil and qs?, do: [blank(c), ?\s], else: [c, ?\\]
-    mask(r, q, false, false, qs?, kept ++ acc)
+    mask(r, q, false, false, qs?, ps, kept ++ acc)
   end
 
-  defp mask(<<c, r::binary>>, nil, _, _, qs?, acc),
-    do: mask(r, nil, c in @word_breaks, false, qs?, [c | acc])
+  # `case` opens a `case` only where a command starts.
+  defp mask(<<"case", c, r::binary>>, nil, true, _, qs?, ps, acc) when c in @word_ends do
+    if command_start?(acc),
+      do: mask(<<c, r::binary>>, nil, false, false, qs?, [:case_head | ps], ["case" | acc]),
+      else: mask(<<"ase", c, r::binary>>, nil, false, false, qs?, ps, [?c | acc])
+  end
 
-  defp mask(<<c, r::binary>>, q, _, _, qs?, acc),
-    do: mask(r, q, false, false, qs?, [if(qs?, do: blank(c), else: c) | acc])
+  # Between `case` and `in` (the subject) no reserved word counts; `in` turns
+  # the head into the body, where `esac` closes it (Codex on #1143).
+  defp mask(<<"in", c, r::binary>>, nil, true, _, qs?, [:case_head | ps], acc)
+       when c in @word_ends,
+       do: mask(<<c, r::binary>>, nil, false, false, qs?, [:case | ps], ["in" | acc])
+
+  defp mask(<<"esac", c, r::binary>>, nil, true, _, qs?, [:case | ps], acc)
+       when c in @word_ends,
+       do: mask(<<c, r::binary>>, nil, false, false, qs?, ps, ["esac" | acc])
+
+  defp mask(<<"esac">>, nil, true, _, qs?, [:case | ps], acc),
+    do: mask(<<>>, nil, false, false, qs?, ps, ["esac" | acc])
+
+  defp mask(<<?$, ?(, r::binary>>, nil, _, _, qs?, ps, acc),
+    do: mask(r, nil, true, false, qs?, [:subst | ps], [?(, ?$ | acc])
+
+  defp mask(<<?(, r::binary>>, nil, _, _, qs?, ps, acc),
+    do: mask(r, nil, true, false, qs?, [:sub | ps], [?( | acc])
+
+  defp mask(<<?), r::binary>>, nil, _, _, qs?, ps, acc) do
+    case ps do
+      [top | _] when top in [:case, :case_head] -> mask(r, nil, true, false, qs?, ps, [?) | acc])
+      [:subst | rest] -> mask(r, nil, false, false, qs?, rest, [?) | acc])
+      [_ | rest] -> mask(r, nil, true, false, qs?, rest, [?) | acc])
+      [] -> mask(r, nil, true, false, qs?, [], [?) | acc])
+    end
+  end
+
+  defp mask(<<c, r::binary>>, nil, _, _, qs?, ps, acc),
+    do: mask(r, nil, c in @word_breaks, false, qs?, ps, [c | acc])
+
+  defp mask(<<c, r::binary>>, q, _, _, qs?, ps, acc),
+    do: mask(r, q, false, false, qs?, ps, [if(qs?, do: blank(c), else: c) | acc])
+
+  # After only blanks since a newline, `;`, `&`, `|`, `(`, the start, or a
+  # reserved word that a command follows (`then`, `do`, `else`, ...; Codex
+  # on #1143).
+  @command_words ~w(then do else elif if while until ! { time coproc)
+
+  defp command_start?(acc) do
+    case Enum.drop_while(acc, &(&1 in [?\s, ?\t])) do
+      [] -> true
+      # A separator escaped with a backslash is a literal (Codex on #1143).
+      [c, ?\\ | _] when c in [?\n, ?;, ?&, ?|, ?(] -> false
+      [c | _] when c in [?\n, ?;, ?&, ?|, ?(] -> true
+      rest -> previous_word(rest) in @command_words and word_start_before?(rest)
+    end
+  end
+
+  # The word that ends the (reversed) accumulator, and whether a command
+  # could start before it.
+  defp previous_word(rest) do
+    rest
+    |> Enum.take_while(&(is_integer(&1) and &1 not in [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(]))
+    |> Enum.reverse()
+    |> List.to_string()
+  end
+
+  defp word_start_before?(rest) do
+    rest
+    |> Enum.drop_while(&(is_integer(&1) and &1 not in [?\s, ?\t, ?\n, ?;, ?&, ?|, ?(]))
+    |> command_start?()
+  end
 
   defp blank(?\n), do: ?\n
   defp blank(_), do: ?\s

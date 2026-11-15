@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-22: A fix is checked against its own finding
+:wo-id: E0-22
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 160
+:wo-branch: fix/e0-22-fix-check-by-finding
+:wo-depends: none
+
+== Goal
+
+A fix counts as failed only when its own finding is still present. Another
+finding of the same category in the repository does not make it fail.
+
+== Authority
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 4. This work order comes before any measurement of success
+rates for each pattern: a rate that rests on the check of today also
+measures how often a category occurs twice.
+
+== Facts measured
+
+Commit `b660d08`, read on 2026-11-14.
+
+* `lib/outcome_tracker.ex`, `do_verify_fix/3` (line 202) runs the scanner on
+  the repository and sets `still_found` when any weak point has the same
+  category (lines 211 to 214). The argument `pattern_id` is used in the log
+  line only.
+* `record_and_verify/5` (line 320) records the result as a qualified outcome.
+* Inferred, no test: a good fix in a repository with 2 findings of 1
+  category is recorded as a failure.
+* No test covers `do_verify_fix/3`.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Read what a weak point of the scanner carries (file, line, rule,
+  description). Write that list in the pull request body.
+. Write the tests first, with a stub scanner on `PATH` that prints a fixed
+  result. The test with 2 findings of 1 category must fail today.
+. Compare the finding by the most exact fields that both sides have. Name
+  the fields in the pull request body.
+
+== Acceptance
+
+* A test shows: the fixed finding is gone and another finding of the same
+  category stays, and the result is `verified`.
+* A test shows: the fixed finding is still there, and the result is a failure.
+* A test shows: the scanner fails, and no outcome is recorded as verified.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+
+== Stop and ask
+
+* The weak point has no field that tells 2 findings of 1 category apart.
+  Then the fix depends on `E0-20`: say so and stop.
+* The cost reaches the cap before the acceptance checks pass.

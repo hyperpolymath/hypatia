@@ -22,7 +22,27 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       --repo-path   /path/to/local/clone      (defaults to
                                                $HYPATIA_REPOS_DIR/<repo>)
       --no-verify                             (record without re-scanning)
+      --verdict     verified|no_op|incomplete|unverified|failed
+                                              (the postcondition verdict of
+                                               the fleet; see below)
       --format      text|json                 (default: text)
+
+  `--verdict` is the postcondition judgement that the fleet made for the fix.
+  It can lower trust. It never raises trust by itself. Only these pairs are accepted;
+  any other pair, an invalid verdict, `--outcome false_positive` with a verdict,
+  and an option that this task does not know exit 1 and write no row:
+
+      --verdict    --outcome  behaviour
+      verified     success    the rescan of Hypatia decides "verification"
+      no_op        success    no rescan; "verification" is "no_op"
+      unverified   success    no rescan; "verification" is "unverified"
+      incomplete   failure    no rescan; "verification" is "incomplete"
+      failed       failure    no rescan; "verification" is "failed"
+
+  Each row that the call writes carries `"verdict"`. Without `--verdict` the
+  row has no `"verdict"` key. Only `verified` with `success`, and `incomplete`
+  or `failed` with `failure`, can count as evidence: see
+  `Hypatia.OutcomeTracker.qualified_outcome_counts/1`.
 
   Exit codes:
       0   outcome recorded, verification verified-clean OR not attempted
@@ -51,12 +71,29 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     category: :string,
     repo_path: :string,
     no_verify: :boolean,
+    verdict: :string,
     format: :string
   ]
 
+  # The postcondition verdicts of the fleet, each with the one outcome that it
+  # can accompany.
+  @verdict_outcomes %{
+    "verified" => "success",
+    "no_op" => "success",
+    "unverified" => "success",
+    "incomplete" => "failure",
+    "failed" => "failure"
+  }
+
   @impl Mix.Task
   def run(argv) do
-    {opts, _, _} = OptionParser.parse(argv, switches: @switches)
+    {opts, _, invalid} = OptionParser.parse(argv, strict: @switches)
+
+    if invalid != [] do
+      names = Enum.map_join(invalid, ", ", fn {name, _value} -> name end)
+      Mix.shell().error("unknown or invalid option(s): #{names}")
+      exit({:shutdown, 1})
+    end
 
     required = [:recipe, :repo, :file, :outcome]
     missing = Enum.filter(required, &(Keyword.get(opts, &1) in [nil, ""]))
@@ -82,6 +119,8 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
           exit({:shutdown, 1})
       end
 
+    verdict = validate_verdict!(Keyword.get(opts, :verdict), Keyword.fetch!(opts, :outcome))
+
     recipe = Keyword.fetch!(opts, :recipe)
     repo = Keyword.fetch!(opts, :repo)
     file = Keyword.fetch!(opts, :file)
@@ -95,28 +134,55 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       |> maybe_put(:repo_path, Keyword.get(opts, :repo_path))
 
     {record, verification} =
-      if verify? do
-        {:ok, record, v} =
-          Hypatia.OutcomeTracker.record_outcome_for_fix(
-            recipe,
-            repo,
-            file,
-            outcome_atom,
-            call_opts
-          )
+      cond do
+        verdict in [nil, "verified"] and verify? ->
+          call_opts =
+            if verdict,
+              do: Keyword.put(call_opts, :metadata, %{"verdict" => verdict}),
+              else: call_opts
 
-        {record, v}
-      else
-        {:ok, record} =
-          Hypatia.OutcomeTracker.record_outcome(recipe, repo, file, outcome_atom, %{
-            "verification" => "unverified"
-          })
+          {:ok, record, v} =
+            Hypatia.OutcomeTracker.record_outcome_for_fix(
+              recipe,
+              repo,
+              file,
+              outcome_atom,
+              call_opts
+            )
 
-        {record, :not_verified}
+          {record, v}
+
+        verdict in [nil, "verified"] ->
+          # No rescan was asked for, so there is no verification, whatever the
+          # verdict says.
+          {:ok, record} =
+            Hypatia.OutcomeTracker.record_outcome(
+              recipe,
+              repo,
+              file,
+              outcome_atom,
+              put_verdict(%{"verification" => "unverified"}, verdict)
+            )
+
+          {record, :not_verified}
+
+        true ->
+          # no_op, unverified, incomplete and failed: the fleet already
+          # judged the postcondition. Record it without a rescan.
+          {:ok, record} =
+            Hypatia.OutcomeTracker.record_outcome(
+              recipe,
+              repo,
+              file,
+              outcome_atom,
+              %{"verification" => verdict, "verdict" => verdict}
+            )
+
+          {record, :not_verified}
       end
 
     case Keyword.get(opts, :format, "text") do
-      "json" -> emit_json(record, verification)
+      "json" -> emit_json(record, verification, verdict)
       _ -> emit_text(record, verification)
     end
 
@@ -124,6 +190,38 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       exit({:shutdown, 2})
     end
   end
+
+  defp validate_verdict!(nil, _outcome), do: nil
+
+  defp validate_verdict!(verdict, outcome) do
+    expected = Map.get(@verdict_outcomes, verdict)
+
+    cond do
+      expected == nil ->
+        Mix.shell().error(
+          "invalid --verdict '#{verdict}' (use #{Enum.join(Map.keys(@verdict_outcomes) |> Enum.sort(), "|")})"
+        )
+
+        exit({:shutdown, 1})
+
+      outcome == "false_positive" ->
+        Mix.shell().error("--verdict cannot be combined with --outcome false_positive")
+        exit({:shutdown, 1})
+
+      expected != outcome ->
+        Mix.shell().error(
+          "--verdict #{verdict} goes with --outcome #{expected}, not --outcome #{outcome}"
+        )
+
+        exit({:shutdown, 1})
+
+      true ->
+        verdict
+    end
+  end
+
+  defp put_verdict(metadata, nil), do: metadata
+  defp put_verdict(metadata, verdict), do: Map.put(metadata, "verdict", verdict)
 
   defp maybe_put(opts, _key, nil), do: opts
   defp maybe_put(opts, _key, ""), do: opts
@@ -136,8 +234,12 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     )
   end
 
-  defp emit_json(record, verification) do
-    payload = Map.put(record, "verification_result", Atom.to_string(verification))
+  defp emit_json(record, verification, verdict) do
+    payload =
+      record
+      |> Map.put("verification_result", Atom.to_string(verification))
+      |> put_verdict(verdict)
+
     IO.puts(Jason.encode!(payload))
   end
 end

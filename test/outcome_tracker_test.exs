@@ -62,7 +62,12 @@ defmodule Hypatia.OutcomeTrackerTest do
 
       assert {:ok, record} =
                OutcomeTracker.record_fleet_outcome(
-                 "recipe-fleet-replay-test", "replay-repo", ".", :failure, source_id, "failed"
+                 "recipe-fleet-replay-test",
+                 "replay-repo",
+                 ".",
+                 :failure,
+                 source_id,
+                 "failed"
                )
 
       assert record["fleet_import_id"] == source_id
@@ -150,25 +155,49 @@ defmodule Hypatia.OutcomeTrackerTest do
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
-      assert Hypatia.LearningScheduler.classify_fleet_record(row) == :skip
+      # A row that is not evidence is kept as an audit row (E0-03).
+      assert Hypatia.LearningScheduler.classify_fleet_record(row) ==
+               {:audit, "recipe-a", "example", ".", :success, "unqualified"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 2, "after_hits" => 0})
              ) == {:ok, "recipe-a", "example", ".", :success, "verified"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "verified", "before_hits" => 0, "after_hits" => 0})
-             ) == :skip
+             ) == {:audit, "recipe-a", "example", ".", :success, "unqualified"}
+
+      assert Hypatia.LearningScheduler.classify_fleet_record(Map.put(row, "verdict", "no_op")) ==
+               {:audit, "recipe-a", "example", ".", :success, "no_op"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.put(row, "verdict", "no_op")
-             ) == :skip
+               Map.put(row, "verdict", "unverified")
+             ) == {:audit, "recipe-a", "example", ".", :success, "unverified"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
                Map.merge(row, %{"verdict" => "failed", "exit_code" => 1, "outcome" => "failure"})
              ) == {:ok, "recipe-a", "example", ".", :failure, "failed"}
+
       assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2, "outcome" => "failure"})
+               Map.merge(row, %{
+                 "verdict" => "incomplete",
+                 "after_hits" => 2,
+                 "outcome" => "failure"
+               })
              ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+
+      # The fleet writes the legacy outcome "success" beside "incomplete".
       assert Hypatia.LearningScheduler.classify_fleet_record(
-               Map.merge(row, %{"verdict" => "verified", "before_hits" => 1, "after_hits" => 0,
-                                 "bot" => "hypatia"})
+               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2})
+             ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{
+                 "verdict" => "verified",
+                 "before_hits" => 1,
+                 "after_hits" => 0,
+                 "bot" => "hypatia"
+               })
              ) == :skip
     end
   end
@@ -177,11 +206,375 @@ defmodule Hypatia.OutcomeTrackerTest do
     test "returns insufficient_data for recipe with few outcomes" do
       assert OutcomeTracker.confidence_trend("recipe-nonexistent") == :insufficient_data
     end
+
+    # E0-03 review finding: a fleet audit row (stored, but not evidence) has
+    # the outcome "success" when the fleet writes the legacy value. The trend
+    # must not read it as a success, and it must not push evidence out of the
+    # window of the last 10 rows.
+    test "fleet audit rows do not make a recipe look like it is improving" do
+      recipe = "recipe-trend-audit-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "a#{n}.txt",
+                   :success,
+                   "#{recipe}-audit-#{n}",
+                   "no_op"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :insufficient_data
+    end
+
+    test "fleet audit rows do not displace qualified failures from the window" do
+      recipe = "recipe-trend-window-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "f#{n}.txt",
+                   :failure,
+                   "#{recipe}-failed-#{n}",
+                   "failed"
+                 )
+      end
+
+      for n <- 1..12 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "u#{n}.txt",
+                   :success,
+                   "#{recipe}-audit-#{n}",
+                   "unverified"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :declining
+    end
+
+    test "qualified rows still give the trend" do
+      recipe = "recipe-trend-qualified-#{System.system_time(:nanosecond)}"
+
+      for n <- 1..3 do
+        assert {:ok, _} =
+                 OutcomeTracker.record_fleet_outcome(
+                   recipe,
+                   "owner/repo",
+                   "v#{n}.txt",
+                   :success,
+                   "#{recipe}-verified-#{n}",
+                   "verified"
+                 )
+      end
+
+      assert OutcomeTracker.confidence_trend(recipe) == :improving
+    end
   end
 
   describe "update_recipe_confidence/1" do
     test "returns no_outcomes for recipe with no recorded outcomes" do
       assert OutcomeTracker.update_recipe_confidence("recipe-nonexistent") == :no_outcomes
+    end
+  end
+
+  # ── E0-04: verification comes from a rescan, not from the caller ────
+
+  describe "verification is set by a rescan, not by the caller" do
+    # Each test writes only below a temporary data directory. A fake
+    # `panic-attack` on PATH stands in for the rescan, so the result of the
+    # rescan is chosen by the test.
+    setup do
+      keys = [:verisimdb_data_path, :annealing_state_path, :fleet_path]
+      original = for key <- keys, do: {key, Application.fetch_env(:hypatia, key)}
+      old_path = System.get_env("PATH")
+      old_mode = System.get_env("FAKE_PA_MODE")
+      old_repos = System.get_env("HYPATIA_REPOS_DIR")
+
+      root =
+        System.tmp_dir!()
+        |> Path.join("hypatia_e0_04_#{:erlang.unique_integer([:positive])}")
+
+      bin = Path.join(root, "bin")
+      File.mkdir_p!(bin)
+      script = Path.join(bin, "panic-attack")
+
+      File.write!(script, """
+      #!/bin/sh
+      case "$FAKE_PA_MODE" in
+        clean) echo '{"weak_points":[]}' ;;
+        present) echo '{"weak_points":[{"category":"cat-x"}]}' ;;
+        *) exit 1 ;;
+      esac
+      """)
+
+      File.chmod!(script, 0o755)
+
+      Application.put_env(:hypatia, :verisimdb_data_path, Path.join(root, "data"))
+      Application.put_env(:hypatia, :annealing_state_path, Path.join(root, "annealing"))
+      Application.put_env(:hypatia, :fleet_path, Path.join(root, "fleet"))
+      System.put_env("PATH", bin <> ":" <> (old_path || ""))
+      System.put_env("HYPATIA_REPOS_DIR", root)
+      System.put_env("FAKE_PA_MODE", "clean")
+
+      on_exit(fn ->
+        for {key, value} <- original do
+          case value do
+            {:ok, previous} -> Application.put_env(:hypatia, key, previous)
+            :error -> Application.delete_env(:hypatia, key)
+          end
+        end
+
+        System.put_env("PATH", old_path || "")
+
+        for {name, old} <- [{"FAKE_PA_MODE", old_mode}, {"HYPATIA_REPOS_DIR", old_repos}] do
+          if old, do: System.put_env(name, old), else: System.delete_env(name)
+        end
+
+        File.rm_rf!(root)
+      end)
+
+      %{root: root}
+    end
+
+    defp stored(root) do
+      dir = Path.join([root, "data", "outcomes"])
+
+      case File.ls(dir) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+          |> Enum.flat_map(fn f ->
+            dir |> Path.join(f) |> File.read!() |> String.split("\n", trim: true)
+          end)
+          |> Enum.map(&Jason.decode!/1)
+
+        {:error, _} ->
+          []
+      end
+    end
+
+    test "an unknown recipe with a clean scan is not verified", %{root: root} do
+      # The recipe is not in the registry, so no category can be derived. A
+      # scan cannot show that a weak point of no named category is gone.
+      assert {:ok, record, result} =
+               OutcomeTracker.record_outcome_for_fix(
+                 "recipe-e0-04-unknown",
+                 "owner/repo",
+                 "a.txt",
+                 :success
+               )
+
+      refute result == :verified
+      assert result == :not_verified
+      assert record["verification"] == "scan_skipped"
+
+      assert [row] = stored(root)
+
+      assert OutcomeTracker.qualified_outcome_counts([row]) ==
+               %{successes: 0, failures: 0, false_positives: 0, ignored: 1}
+    end
+
+    test "an empty category is not verified, whatever the scan returns", %{root: root} do
+      for mode <- ["clean", "present", "fail"], category <- [nil, ""] do
+        System.put_env("FAKE_PA_MODE", mode)
+
+        opts = if category, do: [verify: true, category: category], else: [verify: true]
+
+        assert {:ok, record, :not_verified} =
+                 OutcomeTracker.record_and_verify(
+                   "recipe-e0-04-empty-#{mode}",
+                   "owner/repo",
+                   "a.txt",
+                   :success,
+                   opts
+                 )
+
+        assert record["verification"] == "scan_skipped"
+      end
+
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a named category is still verified by a clean scan and refuted by a present one",
+         %{root: root} do
+      opts = [verify: true, category: "cat-x", repo_path: root]
+
+      assert {:ok, %{"verification" => "verified"}, :verified} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-a",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 opts
+               )
+
+      System.put_env("FAKE_PA_MODE", "present")
+
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-b",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 opts
+               )
+    end
+
+    test "an absent scanner gives scan_failed and no credit, not a crash", %{root: root} do
+      File.rm!(Path.join([root, "bin", "panic-attack"]))
+
+      assert {:ok, record, :scan_unavailable} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-absent",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 verify: true,
+                 category: "cat-x",
+                 repo_path: root
+               )
+
+      assert record["verification"] == "scan_failed"
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a caller's verification of verified does not survive record_outcome/5", %{root: root} do
+      assert {:ok, record} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-forged",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 %{
+                   "verification" => "verified"
+                 }
+               )
+
+      refute record["verification"] == "verified"
+      assert record["verification"] == "unverified"
+      # The claim is kept, so the audit trail shows it.
+      assert record["claimed_verification"] == "verified"
+
+      assert [row] = stored(root)
+      refute row["verification"] == "verified"
+      assert OutcomeTracker.qualified_outcome_counts([row]).successes == 0
+    end
+
+    # Review finding: the guard compared one exact representation. A map with
+    # an atom key, or an atom value, reached the log as "verified" anyway,
+    # because the JSON encoder writes atoms as strings.
+    test "the guard holds whatever the type of the key or the value", %{root: root} do
+      variants = [
+        %{verification: "verified"},
+        %{"verification" => :verified},
+        %{verification: :verified}
+      ]
+
+      for metadata <- variants do
+        assert {:ok, record} =
+                 OutcomeTracker.record_outcome(
+                   "recipe-e0-04-types",
+                   "owner/repo",
+                   "a.txt",
+                   :success,
+                   metadata
+                 )
+
+        refute record["verification"] == "verified"
+      end
+
+      rows = stored(root)
+      assert length(rows) == 3
+      assert Enum.all?(rows, &(&1["verification"] == "unverified"))
+      assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
+    end
+
+    test "a stored row has one verification field, not two", %{root: root} do
+      assert {:ok, _} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-dup",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 %{
+                   verification: "unverified"
+                 }
+               )
+
+      [file] = Path.wildcard(Path.join([root, "data", "outcomes", "*.jsonl"]))
+      [line] = file |> File.read!() |> String.split("\n", trim: true)
+      assert length(String.split(line, ~s("verification"))) == 2
+    end
+
+    test "two keys that name the same field are refused, and nothing is written", %{root: root} do
+      assert_raise ArgumentError, fn ->
+        OutcomeTracker.record_outcome("recipe-e0-04-clash", "owner/repo", "a.txt", :success, %{
+          :verification => "verified",
+          "verification" => "unverified"
+        })
+      end
+
+      assert stored(root) == []
+    end
+
+    test "an audit map or a :metadata option with an atom key cannot stamp verified", %{
+      root: root
+    } do
+      assert {:ok, audit} =
+               OutcomeTracker.record_fleet_outcome(
+                 "recipe-e0-04-audit",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 "source-id-types",
+                 "unqualified",
+                 %{verification: "verified", origin: "elsewhere", fleet_import_id: "forged"}
+               )
+
+      assert audit["verification"] == "unqualified"
+      assert audit["origin"] == "gitbot-fleet"
+      assert audit["fleet_import_id"] == "source-id-types"
+
+      assert {:ok, via_metadata, _} =
+               OutcomeTracker.record_and_verify(
+                 "recipe-e0-04-meta",
+                 "owner/repo",
+                 "a.txt",
+                 :success,
+                 metadata: %{verification: "verified"}
+               )
+
+      refute via_metadata["verification"] == "verified"
+
+      rows = stored(root)
+      assert length(rows) == 2
+      assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
+    end
+
+    test "a caller's other fields and negative verifications are kept", %{root: root} do
+      assert {:ok, record} =
+               OutcomeTracker.record_outcome(
+                 "recipe-e0-04-neg",
+                 "owner/repo",
+                 "a.txt",
+                 :failure,
+                 %{
+                   "verification" => "failed",
+                   "note" => "kept"
+                 }
+               )
+
+      assert record["verification"] == "failed"
+      assert record["note"] == "kept"
+      refute Map.has_key?(record, "claimed_verification")
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).failures == 1
     end
   end
 end

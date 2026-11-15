@@ -24,7 +24,10 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert String.contains?(old_root, "/_build/test/verisim-data")
     keys = [:verisimdb_data_path, :annealing_state_path, :fleet_path]
     original = Map.new(keys, fn key -> {key, Application.fetch_env(:hypatia, key)} end)
-    root = Path.join(System.tmp_dir!(), "hypatia-store-cycle-#{System.unique_integer([:positive])}")
+
+    root =
+      Path.join(System.tmp_dir!(), "hypatia-store-cycle-#{System.unique_integer([:positive])}")
+
     first = Path.join(root, "first")
     second = Path.join(root, "second")
     fleet = Path.join(root, "fleet")
@@ -172,7 +175,8 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert LearningScheduler.report_annealing_state() == stage_report(1, 0, 0)
   end
 
-  test "confidence persists one qualified evidence snapshot without touching the other store", ctx do
+  test "confidence persists one qualified evidence snapshot without touching the other store",
+       ctx do
     recipe = "recipe-confidence-stable"
     paths = confidence_fixture(ctx, recipe)
     second_before = store_tree_bytes(ctx.second)
@@ -375,6 +379,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     expected_second = [
       %{recipe_id: "recipe-second-series", count: 10, series: List.duplicate(1.0, 10)}
     ]
+
     assert TrainingPipeline.build_esn_training_data() == expected_first
 
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
@@ -433,7 +438,8 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert restored_targets == [0.0]
   end
 
-  test "registry synchronization refuses an observed root change without overwriting either store", ctx do
+  test "registry synchronization refuses an observed root change without overwriting either store",
+       ctx do
     write_substitution(ctx.first, "control")
     write_substitution(ctx.second, "eliminate")
     assert {:ok, _} = PatternRegistry.sync_from_scans([scan("first-original", "Low")])
@@ -451,6 +457,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
 
     assert {:error, {:pattern_store_changed, first, second}} =
              PatternRegistry.sync_from_scans(scans)
+
     assert {first, second} == {ctx.first, ctx.second}
     assert directory_bytes(Path.join(ctx.first, "patterns")) == first_before
     assert directory_bytes(Path.join(ctx.second, "patterns")) == second_before
@@ -460,18 +467,25 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert {:ok, _} = PatternRegistry.sync_from_scans([scan("original", "Low")])
     path = Path.join([ctx.first, "patterns", "registry.json"])
     before = File.read!(path)
+
     malformed =
-      put_in(scan("unencodable", "High"), [:scan, "weak_points", Access.at(0), "description"],
-        fn -> :not_json end)
+      put_in(
+        scan("unencodable", "High"),
+        [:scan, "weak_points", Access.at(0), "description"],
+        fn -> :not_json end
+      )
 
     assert {:error, {:registry_encoding_failed, _}} =
              PatternRegistry.sync_from_scans([malformed])
+
     assert File.read!(path) == before
 
     File.rm!(path)
     File.mkdir!(path)
+
     assert {:error, {:registry_write_failed, _}} =
              PatternRegistry.sync_from_scans([scan("unwritable", "High")])
+
     assert File.dir?(path)
     assert File.ls!(path) == []
     refute File.exists?(Path.join([ctx.second, "patterns", "registry.json"]))
@@ -487,6 +501,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
         "failure_reason",
         "merge_conflict"
       )
+
     legacy = outcome("recipe-legacy-corpus", "failure", "unverified")
     write_rows(ctx.first, [first, legacy])
     write_rows(ctx.second, [second, second, legacy])
@@ -512,6 +527,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
       ExUnit.CaptureLog.capture_log(fn ->
         trained =
           TrainingPipeline.train_esn(esn, rebalance_strategy: :c, rebalance_opts: [seed: 17])
+
         assert trained.trained
       end)
 
@@ -546,22 +562,32 @@ defmodule Hypatia.LearningRuntimeStoreTest do
 
     for {store, marker} <- [{ctx.first, "first"}, {ctx.second, "second"}, {ctx.first, "first"}] do
       Application.put_env(:hypatia, :verisimdb_data_path, store)
-      assert [%{repo: "fixture", scan: %{"marker" => ^marker}}] = VerisimConnector.fetch_all_scans()
+
+      assert [%{repo: "fixture", scan: %{"marker" => ^marker}}] =
+               VerisimConnector.fetch_all_scans()
+
       assert VerisimConnector.fetch_all_scans_fallback() == VerisimConnector.fetch_all_scans()
       assert {:ok, registry} = VerisimConnector.fetch_pattern_registry()
       assert registry["patterns"]["fixture-pattern"]["marker"] == marker
       assert {:ok, ^registry} = VerisimConnector.fetch_pattern_registry_fallback()
+
       assert [%{"id" => "recipe-fixture", "marker" => ^marker}] =
                VerisimConnector.fetch_all_recipes()
+
       assert VerisimConnector.fetch_all_recipes_fallback() == VerisimConnector.fetch_all_recipes()
       assert [%{"marker" => ^marker}] = VerisimConnector.fetch_substitutions()
+
       assert VerisimConnector.fetch_substitutions_fallback() ==
                VerisimConnector.fetch_substitutions()
+
       assert {:ok, %{"marker" => ^marker}} = VerisimConnector.fetch_index()
       assert VerisimConnector.fetch_index_fallback() == VerisimConnector.fetch_index()
+
       assert [%{"recipe_id" => "recipe-fixture", "marker" => ^marker}] =
                VerisimConnector.fetch_all_outcomes()
-      assert VerisimConnector.fetch_all_outcomes_fallback() == VerisimConnector.fetch_all_outcomes()
+
+      assert VerisimConnector.fetch_all_outcomes_fallback() ==
+               VerisimConnector.fetch_all_outcomes()
     end
   end
 
@@ -588,7 +614,9 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert state.query_count == 2
     assert map_size(state.cache) == 2
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.first)
-    assert {:reply, {:ok, [^first]}, _state} = Client.handle_call({:query, query, []}, from, state)
+
+    assert {:reply, {:ok, [^first]}, _state} =
+             Client.handle_call({:query, query, []}, from, state)
   end
 
   test "explicit file roots govern store, federation and all hexad lookup paths", ctx do
@@ -607,7 +635,10 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     for source <- sources do
       assert {:ok, [default]} = FileExecutor.execute(ast(source))
       assert default["marker"] == "second"
-      assert {:ok, [overridden]} = FileExecutor.execute(ast(source), data_path_override: ctx.first)
+
+      assert {:ok, [overridden]} =
+               FileExecutor.execute(ast(source), data_path_override: ctx.first)
+
       assert overridden["marker"] == "first"
     end
 
@@ -620,7 +651,9 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     end
 
     write_json(Path.join([ctx.first, "scans", "fixture.json"]), %{"primary_language" => "rust"})
+
     write_json(Path.join([ctx.second, "scans", "fixture.json"]), %{"primary_language" => "elixir"})
+
     query = ast({:federation, "/outcomes/*", "language_aware"})
     assert {:ok, [first]} = FileExecutor.execute(query)
     assert first["_language_family"] == "systems"
@@ -635,7 +668,10 @@ defmodule Hypatia.LearningRuntimeStoreTest do
 
   test "neural persistence follows runtime stores while trust is rebuilt from source", ctx do
     write_json(Path.join([ctx.first, "recipes", "recipe-first.json"]), %{"id" => "recipe-first"})
-    write_json(Path.join([ctx.second, "recipes", "recipe-second.json"]), %{"id" => "recipe-second"})
+
+    write_json(Path.join([ctx.second, "recipes", "recipe-second.json"]), %{
+      "id" => "recipe-second"
+    })
 
     first_state = neural_state("first")
     assert :ok = Persistence.save_all(first_state)
@@ -773,6 +809,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
 
   defp write_backend_fixture(root, marker) do
     write_json(Path.join([root, "scans", "fixture.json"]), %{"marker" => marker})
+
     write_json(Path.join([root, "recipes", "recipe-fixture.json"]), %{
       "id" => "recipe-fixture",
       "marker" => marker
@@ -797,7 +834,9 @@ defmodule Hypatia.LearningRuntimeStoreTest do
   defp neural_state(marker) do
     networks =
       Map.new(Persistence.default_networks(), fn {name, module} ->
-        pid = start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+        pid =
+          start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+
         {name, pid}
       end)
 

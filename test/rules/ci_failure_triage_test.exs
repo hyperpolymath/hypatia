@@ -22,7 +22,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"rate-limit-then-tests-red.txt", "api_rate_limit", :rerun},
     {"merge-ref-race.txt", "merge_ref_race", :report},
     {"invalid-lockfile-pin.txt", "actions_lock_invalid_pin", :fix},
-    {"cancelled-deposit.txt", "runner_cancelled", :none},
+    {"cancelled-deposit.txt", "runner_cancelled", :rerun},
     {"app-id-empty.txt", "secret_or_variable_missing", :owner},
     {"app-key-openssh.txt", "app_key_wrong_format", :owner},
     {"rsr-score-segfault.txt", "toolchain_segfault", :owner},
@@ -70,7 +70,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-131888629871-cargo-audit.txt", "dependency_advisory", :report},
     {"coderabbit-review-limit.txt", "review_rate_limited", :none},
     {"codex-credits.txt", "review_quota_exhausted", :none},
-    {"deed-cancelled.txt", "runner_cancelled", :none},
+    {"deed-cancelled.txt", "runner_cancelled", :rerun},
     # Real excerpts from hypatia's failed runs, 2026-11-12/13 (run id in the name).
     {"real-43367835718-dead-pat.txt", "token_invalid", :owner},
     {"real-43358533401-graphql-502.txt", "api_server_error", :rerun},
@@ -79,7 +79,7 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     {"real-43357534889-rollup.txt", "rollup_cascade", :upstream},
     # hypatia#1091: the CI Status rollup on a superseded head, red only
     # because a newer push cancelled the job it waits on.
-    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :none},
+    {"real-43601615541-rollup-cancelled.txt", "runner_cancelled", :rerun},
     {"real-43416333174-orchestrate-raise.txt", "runtime_exception", :report},
     {"real-43150955344-rustfmt.txt", "format_diff", :fix},
     {"real-43357534889-container-build.txt", "compile_error", :report}
@@ -557,6 +557,44 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert Enum.all?(T.rules(), &(&1.action == :rerun or &1.retries == 0))
     end
 
+    test "runner_cancelled is one guarded rerun (owner ruling 2026-11-15)" do
+      r = Enum.find(T.rules(), &(&1.name == "runner_cancelled"))
+      assert %{action: :rerun, retries: 1, guard: :head_current, escalation: :none} = r
+    end
+
+    test "every other rule is unguarded, and no unguarded rule reruns a cancellation" do
+      for r <- T.rules(), r.name != "runner_cancelled", do: assert(r.guard == :none)
+    end
+
+    test "a cancelled run whose head is still current is re-run once, then is noise" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      assert %{action: :rerun, persistent: false} = T.decide(p, 0, %{head_current: true})
+
+      assert %{action: :none, persistent: true, route: "noise"} =
+               T.decide(p, 1, %{head_current: true})
+    end
+
+    test "a superseded cancelled run (newer push or newer run) is never re-run" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      d = T.decide(p, 0, %{head_current: false})
+      assert %{action: :none, route: "noise", persistent: false, guard_refused: :head_current} = d
+    end
+
+    test "a guarded rerun with no context refuses rather than reruns" do
+      p = T.classify("", %{conclusion: "cancelled"}).primary
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0)
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0, %{})
+      assert %{action: :none, guard_refused: :head_current} = T.decide(p, 0, nil)
+      assert %{action: :none} = T.decide(p, 0, %{head_current: "true"})
+      assert %{action: :none} = T.decide(p, 0, %{head_current: nil})
+    end
+
+    test "the guard does not touch unguarded reruns" do
+      %{primary: p} = T.classify(File.read!(Path.join(@dir, "rate-limit-setup-bun.txt")))
+      assert %{action: :rerun} = T.decide(p, 0)
+      refute Map.has_key?(T.decide(p, 0), :guard_refused)
+    end
+
     test "a fix or owner decision never becomes a rerun" do
       %{primary: p} = T.classify(File.read!(Path.join(@dir, "invalid-lockfile-pin.txt")))
       assert T.decide(p, 0).action == :fix
@@ -860,6 +898,99 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
       assert {:error, _} = Hypatia.Kyaml.parse(wf)
       found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "sk.yml", wf))
       assert [%{file: "sk.yml", key: "checkout ref"}] = Enum.filter(found, &(&1.file == "sk.yml"))
+    end
+
+    # Codex on #1110, after merge.
+    test "a # straight after a command substitution is part of the word" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: grid --label=$(name)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs.yml", wf))
+      assert [%{file: "cs.yml", line: 4}] = Enum.filter(found, &(&1.file == "cs.yml"))
+    end
+
+    # CodeRabbit on #1129.
+    test "a flag commented out after a subshell is not a pin" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: (cd x)# grid --hypatia-ref #{@old}\n"
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ss.yml", wf)) == []
+    end
+
+    # Codex on #1129, after merge.
+    test "a case arm inside $(...) ends the word, so its # is a comment" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ca.yml", wf)) == []
+    end
+
+    test "the substitution still closes after esac" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case y in y) echo;; esac)#x --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce.yml", wf))
+      assert [%{file: "ce.yml"}] = Enum.filter(found, &(&1.file == "ce.yml"))
+    end
+
+    test "a case after then or do opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(if true; then case yes in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac; fi)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr.yml", wf)) == []
+    end
+
+    test "esac as the case subject does not close the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case esac in yes)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "cs2.yml", wf)) == []
+    end
+
+    test "esac with a redirection attached still closes the case" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in x) echo yes;; esac>/dev/null)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cr2.yml", wf))
+      assert [%{file: "cr2.yml"}] = Enum.filter(found, &(&1.file == "cr2.yml"))
+    end
+
+    test "a case after time opens a case too" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(time case x in x)# grid --hypatia-ref #{@old}\n" <>
+          "          echo; esac)\n"
+
+      assert T.check_hypatia_pin_drift(Map.put(template_set(@new), "ct.yml", wf)) == []
+    end
+
+    test "an escaped ; does not make case a command" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: v=$(echo \\; case x in x)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ce2.yml", wf))
+      assert [%{file: "ce2.yml"}] = Enum.filter(found, &(&1.file == "ce2.yml"))
+    end
+
+    test "in( with no blank still enters the case body" do
+      wf =
+        "jobs:\n  a:\n    steps:\n      - run: |\n" <>
+          "          v=$(case x in(x) echo yes;; esac)#suffix --hypatia-ref #{@old}\n"
+
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "ci.yml", wf))
+      assert [%{file: "ci.yml"}] = Enum.filter(found, &(&1.file == "ci.yml"))
+    end
+
+    test "the word case as an argument does not open a case" do
+      wf = "jobs:\n  a:\n    steps:\n      - run: v=$(echo case)#x --hypatia-ref #{@old}\n"
+      found = T.check_hypatia_pin_drift(Map.put(template_set(@new), "cw.yml", wf))
+      assert [%{file: "cw.yml"}] = Enum.filter(found, &(&1.file == "cw.yml"))
     end
 
     test "a variable HYPATIA_SHA is not a pin" do

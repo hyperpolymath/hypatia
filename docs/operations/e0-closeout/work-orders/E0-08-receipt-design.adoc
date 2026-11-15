@@ -43,6 +43,34 @@ Commit `4d7f059`, read on 2026-11-14.
 * Estate rules: JSON is I-JSON in JCS form, and a new identifier follows
   ADR-008 (see `.claude/CLAUDE.md` of `metadatastician/standards`).
 
+== Theory inputs
+
+Read on 2026-11-14 at echo-types `dedda75` and residual-evidence-types
+`6f94640`. Each file has `--safe --without-K --cubical-compatible`. No prover
+was run for this work order. Use these results as design rules. A use in
+Hypatia is a transcription, and its match to the Agda is assumed, not proved.
+
+* The receipt names each row of evidence by a stable id. It does not name a
+  count: a count cannot give back its evidence (echo-types
+  `EchoFiniteResidue.agda`, lines 36 and 47).
+* The receipt is an index into the log that is kept. It is not a record that
+  can undo an update by itself.
+* `missing_evidence` is a set of gaps. A later revision fills a gap and never
+  overwrites a field that is present (`EchoPartialSection.agda`, line 162,
+  `fill-guarded`). A withdrawal removes information, so it is not a fill: it
+  needs its own record.
+* By the owner ruling of 2026-11-14 on
+  `docs/design/2026-11-14-merge-honesty.adoc`, the receipt also names the
+  pattern and the kind of match (`exact`, `category`, `fuzzy`). See `E0-18`.
+* From the second theory recon, read on 2026-11-14: an integrity code over
+  the receipt covers each field of the receipt. januskey (`b503488`,
+  `attestation.rs`) covers the id, the time, the type, the actor and the
+  previous hash, and not the payload. Do not repeat that gap.
+* A field that says why a run stopped is a channel: the outcome of a run
+  can show a secret (secret-types `6ded4df`, `OutcomeVisibility.agda`,
+  `termination-sensitive-fails`, line 47; proved in Agda, Rocq and Lean).
+  So a `reason` field is one of a closed set of values, never free text.
+
 == Steps
 
 . Measure the facts again. Stop if one no longer holds.

@@ -1,0 +1,3 @@
+;; SPDX-License-Identifier: MPL-2.0
+; A7 J14 fixture: a descriptile name with a contractile head
+(contractile-deed :schema-version "1.0.0")

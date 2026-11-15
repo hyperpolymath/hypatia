@@ -115,7 +115,7 @@ defmodule Hypatia.Rules.ResearchExtensionsEquivalenceTest do
       File.write!(Path.join(dir, "x_chora.deed"), """
       ;; SPDX-License-Identifier: CC-BY-SA-4.0
       (repo-deed :schema-version "1.0.0" :canonical-name "x"
-        :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+        :repo-uuid #u8"chora-registry:github.com/o/x" :beholding-chora #u8"chora:estate/github.com/o"
         #{deed})
       """)
     end

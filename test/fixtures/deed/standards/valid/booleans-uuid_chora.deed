@@ -1,0 +1,2 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed :schema-version "1.0.0" (status :present #t :ended #f :note "legal escapes: \n and \t and \\ and \"q\""))

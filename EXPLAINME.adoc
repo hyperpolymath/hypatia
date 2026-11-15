@@ -186,8 +186,8 @@ ____
 
 How this is implemented::
 link:Justfile[] (with `contractile.just`), link:lib/hypatia/cli.ex[],
-link:lib/mix/tasks/[]; link:mise.toml[] pins Erlang 27.3.4.4 and Elixir
-1.17.3. link:lib/application.ex[] supervises 24 children (two more when
+link:lib/mix/tasks/[]; link:mise.toml[] pins Erlang 27.3.4.19 and Elixir
+1.19.4. link:lib/application.ex[] supervises 24 children (two more when
 configured); link:lib/hypatia/web/router.ex[] serves `/`, `/metrics`, `/api`,
 and `protect/2` in link:lib/hypatia/web/api_router.ex[] applies the bearer
 and loopback policy. The recipe count is `just --summary | wc -w`; the six

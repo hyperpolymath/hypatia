@@ -1,0 +1,3 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(praxis-deed :schema-version "1.0.0" :canonical-name "x"
+  (rule :id "p-a" !))

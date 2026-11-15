@@ -92,6 +92,20 @@ defmodule Hypatia.Watcher.AnomalyDetector do
     GenServer.call(__MODULE__, :window, 5_000)
   end
 
+  @doc """
+  The claimed and the qualified success count of the rolling window.
+
+  `claimed` counts the events whose outcome is `"success"` (the same events
+  that `window/0` shows as `true`). `qualified` counts only those that also
+  carry the verification value `"verified"`, by the rule of
+  `Hypatia.OutcomeTracker.qualified_outcome_counts/1`. An event with no
+  verification value is a claim and no evidence. `window` is the number of
+  events read, so a reader can see what the two counts are out of.
+  """
+  def claimed_and_qualified(server \\ __MODULE__) do
+    GenServer.call(server, :claimed_and_qualified, 5_000)
+  end
+
   # ─── GenServer ─────────────────────────────────────────────────────────
 
   @impl true
@@ -102,6 +116,7 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
     state = %{
       outcomes: [],
+      qualified: [],
       last_alert_at: %{}
     }
 
@@ -115,7 +130,18 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
     outcomes = [success? | state.outcomes] |> Enum.take(@window_size)
 
-    {:noreply, %{state | outcomes: outcomes}}
+    # The event may carry the verification value. A missing value is no
+    # evidence, and the qualified rule decides: no file is read here.
+    verification = Map.get(metadata, :verification) || Map.get(metadata, "verification")
+
+    qualified? =
+      Hypatia.OutcomeTracker.qualified_outcome_counts([
+        %{"outcome" => outcome, "verification" => verification}
+      ]).successes == 1
+
+    qualified = [qualified? | Map.get(state, :qualified, [])] |> Enum.take(@window_size)
+
+    {:noreply, %{state | outcomes: outcomes, qualified: qualified}}
   end
 
   def handle_info({:hypatia_event, _event, _meas, _meta, _ts}, state) do
@@ -136,6 +162,16 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
   def handle_call(:window, _from, state) do
     {:reply, state.outcomes, state}
+  end
+
+  def handle_call(:claimed_and_qualified, _from, state) do
+    reply = %{
+      claimed: Enum.count(state.outcomes, & &1),
+      qualified: state |> Map.get(:qualified, []) |> Enum.count(& &1),
+      window: length(state.outcomes)
+    }
+
+    {:reply, reply, state}
   end
 
   # ─── Evaluation ────────────────────────────────────────────────────────
@@ -288,7 +324,8 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
   @doc false
   def source_esn_signal(report) do
-    if Hypatia.Neural.SourceStore.ready_report?(report) and get_in(report, [:esn, :trained]) == true do
+    if Hypatia.Neural.SourceStore.ready_report?(report) and
+         get_in(report, [:esn, :trained]) == true do
       drift = get_in(report, [:esn, :drift]) || :unavailable
       {drift, drift in [:rising_drift, :falling_drift]}
     else

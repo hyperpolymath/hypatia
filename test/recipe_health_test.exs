@@ -36,15 +36,23 @@ defmodule Hypatia.RecipeHealthTest do
     {:ok, recipe_id: @test_recipe_prefix <> unique}
   end
 
+  # A "verified" row is stamped only by a rescan or by the qualified fleet
+  # import, never by a caller of `record_outcome/5` (E0-04). The fleet import
+  # is the trusted path that a fixture can use.
+  defp record_verified(recipe_id, repo, file) do
+    source_id = "#{recipe_id}|#{repo}|#{file}|#{System.unique_integer([:positive])}"
+
+    {:ok, _record} =
+      OutcomeTracker.record_fleet_outcome(recipe_id, repo, file, :success, source_id, "verified")
+  end
+
   describe "verification_rate/2" do
     test "returns :no_outcomes for a recipe that has no records", %{recipe_id: recipe_id} do
       assert {:ok, :no_outcomes} = OutcomeTracker.verification_rate(recipe_id)
     end
 
     test "returns :insufficient_data below the threshold", %{recipe_id: recipe_id} do
-      OutcomeTracker.record_outcome(recipe_id, "test-repo", "a.ex", :success, %{
-        "verification" => "verified"
-      })
+      record_verified(recipe_id, "test-repo", "a.ex")
 
       assert {:ok, %{rate: :insufficient_data, verifiable: 1, total: 1}} =
                OutcomeTracker.verification_rate(recipe_id, 5)
@@ -53,9 +61,7 @@ defmodule Hypatia.RecipeHealthTest do
     test "computes rate from verified/still_present ratio", %{recipe_id: recipe_id} do
       # 4 verified + 1 still_present = 5 verifiable, rate = 0.8
       for i <- 1..4 do
-        OutcomeTracker.record_outcome(recipe_id, "r", "f#{i}", :success, %{
-          "verification" => "verified"
-        })
+        record_verified(recipe_id, "r", "f#{i}")
       end
 
       OutcomeTracker.record_outcome(recipe_id, "r", "f5", :success, %{
@@ -72,9 +78,7 @@ defmodule Hypatia.RecipeHealthTest do
       # 5 verified + 100 scan_failed + 100 unverified -> rate is 1.0, not
       # diluted by environments where panic-attack wasn't available.
       for i <- 1..5 do
-        OutcomeTracker.record_outcome(recipe_id, "r", "v#{i}", :success, %{
-          "verification" => "verified"
-        })
+        record_verified(recipe_id, "r", "v#{i}")
       end
 
       for i <- 1..3 do
@@ -95,9 +99,7 @@ defmodule Hypatia.RecipeHealthTest do
   describe "recipe_health/1" do
     test "returns at least the recipe we just recorded outcomes for", %{recipe_id: recipe_id} do
       for i <- 1..6 do
-        OutcomeTracker.record_outcome(recipe_id, "r", "f#{i}", :success, %{
-          "verification" => "verified"
-        })
+        record_verified(recipe_id, "r", "f#{i}")
       end
 
       rows = OutcomeTracker.recipe_health(min_attempts: 5)
@@ -112,9 +114,7 @@ defmodule Hypatia.RecipeHealthTest do
 
     test "tags quarantine_candidate when verification rate is below 0.30", %{recipe_id: recipe_id} do
       # 1 verified + 9 still_present = 10 verifiable, rate = 0.1
-      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
-        "verification" => "verified"
-      })
+      record_verified(recipe_id, "r", "v1")
 
       for i <- 1..9 do
         OutcomeTracker.record_outcome(recipe_id, "r", "sp#{i}", :success, %{
@@ -132,9 +132,7 @@ defmodule Hypatia.RecipeHealthTest do
       recipe_id: recipe_id
     } do
       # 1 verified + 9 still_present = 10 verifiable, rate = 0.10
-      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
-        "verification" => "verified"
-      })
+      record_verified(recipe_id, "r", "v1")
 
       for i <- 1..9 do
         OutcomeTracker.record_outcome(recipe_id, "r", "sp#{i}", :success, %{
@@ -166,9 +164,7 @@ defmodule Hypatia.RecipeHealthTest do
       recipe_id: recipe_id
     } do
       # Set up data that WOULD quarantine, then disable via env.
-      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
-        "verification" => "verified"
-      })
+      record_verified(recipe_id, "r", "v1")
 
       for i <- 1..9 do
         OutcomeTracker.record_outcome(recipe_id, "r", "sp#{i}", :success, %{
@@ -187,9 +183,7 @@ defmodule Hypatia.RecipeHealthTest do
       # 3 verified + 7 still_present = 10 verifiable, rate = 0.3
       # → just at the quarantine threshold (0.30), so degraded (< 0.70).
       for i <- 1..3 do
-        OutcomeTracker.record_outcome(recipe_id, "r", "v#{i}", :success, %{
-          "verification" => "verified"
-        })
+        record_verified(recipe_id, "r", "v#{i}")
       end
 
       for i <- 1..7 do
