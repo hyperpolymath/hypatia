@@ -380,13 +380,15 @@ defmodule Hypatia.CrossRepoLearning do
       # Weighted average of source repo confidences, discounted by policy
       {weighted_sum, total_weight, sources} =
         Enum.reduce(transferable, {0.0, 0.0, []}, fn {repo, successes, total}, {ws, tw, srcs} ->
-          # PRESENT RULE (pinned, not endorsed): the confidence of a source repo
-          # is its raw rate, with no prior. One source with 3 verified
-          # successes and 0 failures transfers 1.0. Pinned by the test
-          # "case 1: a source repo with 3 verified successes and 0 failures
-          # transfers 1.0" in test/cross_repo_learning_test.exs. Changing it is
-          # an owner decision (see the ruling packet of the E0-14 pull request).
-          raw_conf = successes / max(total, 1)
+          # RULE (owner ruling 9A, E0-28): the confidence of a source repo is the
+          # rate smoothed with the prior that local rows use
+          # (`OutcomeTracker.bayesian_update/3`, a prior of 0.5), so the same
+          # evidence rule holds for local and transferred rows. One source with 3
+          # verified successes and 0 failures transfers about 0.615, not 1.0.
+          # Pinned by the test "case 1: a source repo with 3 verified successes and
+          # 0 failures transfers the smoothed rate" in
+          # test/cross_repo_learning_test.exs.
+          raw_conf = Hypatia.OutcomeTracker.bayesian_update(0.5, successes, total - successes)
           discount = drift_discount(policy, repo, target_repo)
           # More outcomes = more weight
           weight = total * discount
@@ -526,12 +528,14 @@ defmodule Hypatia.CrossRepoLearning do
     end)
     |> Enum.flat_map(fn {recipe_id, outcomes} ->
       repos = outcomes |> Enum.map(&Map.get(&1, "repo")) |> Enum.uniq()
-      # PRESENT RULE (pinned, not endorsed): every qualified row whose outcome
-      # is not "success" is a failure here, so a qualified false_positive
-      # raises the failure rate. Pinned by the test "case 2: a qualified false
-      # positive is a failure in the recipe anomaly rate" in
-      # test/cross_repo_learning_test.exs. Changing it is an owner decision.
+      # RULE (owner ruling 9A, E0-28): every qualified row whose outcome is not
+      # "success" is a failure here, so a qualified false_positive raises the
+      # failure rate, and the anomaly also reports the share of its rows that are
+      # false positives, so a reader can tell the two kinds of failure apart.
+      # Pinned by the test "case 2: a qualified false positive is a failure in the
+      # recipe anomaly rate" in test/cross_repo_learning_test.exs.
       failures = Enum.count(outcomes, &(Map.get(&1, "outcome") != "success"))
+      false_positives = Enum.count(outcomes, &(Map.get(&1, "outcome") == "false_positive"))
       total = length(outcomes)
       failure_rate = if total > 0, do: failures / total, else: 0.0
 
@@ -542,6 +546,7 @@ defmodule Hypatia.CrossRepoLearning do
             type: :recipe_degradation,
             recipe_id: recipe_id,
             failure_rate: Float.round(failure_rate, 3),
+            false_positive_share: Float.round(false_positives / total, 3),
             affected_repos: length(repos),
             total_outcomes: total,
             repos: Enum.take(repos, 10),
@@ -566,12 +571,12 @@ defmodule Hypatia.CrossRepoLearning do
     |> Enum.reject(fn {family, _} -> family == :unknown end)
     |> Enum.flat_map(fn {family, outcomes} ->
       repos = outcomes |> Enum.map(&Map.get(&1, "repo")) |> Enum.uniq()
-      # PRESENT RULE (pinned, not endorsed): as for the recipe anomaly, a
-      # qualified false_positive counts as a failure. Pinned by the test
-      # "case 2: a qualified false positive is a failure in the language-family
-      # rate" in test/cross_repo_learning_test.exs. Changing it is an owner
-      # decision.
+      # RULE (owner ruling 9A, E0-28): as for the recipe anomaly, a qualified
+      # false_positive counts as a failure, and the share of false positives is
+      # reported. Pinned by the test "case 2: a qualified false positive is a
+      # failure in the language-family rate" in test/cross_repo_learning_test.exs.
       failures = Enum.count(outcomes, &(Map.get(&1, "outcome") != "success"))
+      false_positives = Enum.count(outcomes, &(Map.get(&1, "outcome") == "false_positive"))
       total = length(outcomes)
       failure_rate = if total > 0, do: failures / total, else: 0.0
 
@@ -582,6 +587,7 @@ defmodule Hypatia.CrossRepoLearning do
             type: :language_family_anomaly,
             language_family: family,
             failure_rate: Float.round(failure_rate, 3),
+            false_positive_share: Float.round(false_positives / total, 3),
             affected_repos: length(repos),
             total_outcomes: total,
             severity: if(failure_rate >= 0.5, do: :critical, else: :warning),
