@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-27: Only BatchRollback can record a rollback_requested row
+:wo-id: E0-27
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 5
+:wo-max-turns: 120
+:wo-branch: fix/e0-27-rollback-integrity
+:wo-depends: none
+
+== Goal
+
+A caller of the public `OutcomeTracker.record_outcome/5` cannot write a
+`rollback_requested` row. Only `BatchRollback.rollback/2` can, through its own
+entry. A made-up rollback is no longer counted as a false positive.
+
+== Authority
+
+Owner ruling of 2026-11-15, selector 7A: "Accept `rollback_requested` only from
+`BatchRollback`." Recorded in `docs/design/e0-receipt.adoc`, section 9a.
+Related: https://github.com/hyperpolymath/hypatia/issues/984[issue 984],
+acceptance A3 and A7, and the second reading in `docs/design/e0-receipt.adoc`,
+section 10.
+
+== Facts measured
+
+Commit `331aaf08`, measured on 2026-11-15 on a clean tree.
+
+* Read: `lib/safety/batch_rollback.ex`, `rollback/2` (line 49) writes each
+  outcome of a batch with `OutcomeTracker.record_outcome/5`, the outcome
+  `:false_positive` and the metadata `"verification" => "rollback_requested"`,
+  `"caused_by" => "batch_rollback"`, `"batch_id" => batch_id`. It is the only
+  place in `lib/` that writes `rollback_requested`.
+* Read: `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 637): a
+  `false_positive` row counts when its verification is `rollback_requested`, its
+  `caused_by` is `batch_rollback` and its `batch_id` is a non-empty string.
+* Read: `OutcomeTracker.record_outcome/5` (line 45) rewrites a caller's `verified`
+  (`untrusted_verification/1`, line 90) and nothing else.
+* Ran: a probe on `main` calling `record_outcome("p", "o/r", "f", :false_positive,
+  %{"verification" => "rollback_requested", "caused_by" => "batch_rollback",
+  "batch_id" => "b1"})` stored the row and the gate counted 1 false positive.
+* Ran: `mix test test/trusted_callers_test.exs` passes. It lists the callers that
+  may use the trusted fleet entry; this work order adds a second trusted entry.
+* No test calls `BatchRollback.rollback/2`.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/outcome_tracker_test.exs`: the public
+  `record_outcome/5` with `rollback_requested` (string, atom, atom key) stores
+  `"unverified"` and keeps the claim as `"claimed_verification"`, and the gate
+  ignores the row; the new entry (step 4) stores a row that the gate counts as one
+  false positive, and rejects an empty or missing `batch_id`. See them fail.
+. Make the public path rewrite `rollback_requested` as it rewrites `verified`.
+  Reuse the canonical-field logic of `E0-04`; do not add a second rule.
+. Add `OutcomeTracker.record_batch_rollback/4` (recipe, repo, file, batch id). It
+  is the trusted entry: it writes the row with the three metadata fields and
+  refuses a batch id that is not a non-empty string.
+. Change `BatchRollback.rollback/2` to call it.
+. Extend `test/trusted_callers_test.exs`: only `lib/safety/batch_rollback.ex`
+  (and the definition) may call `record_batch_rollback(`.
+. Extend the Agda model: in `verification/proofs/agda/E0Model.agda`, make
+  `sanitize` also rewrite `rollbackRequested`, and prove that the public row is
+  never credited through it. Check the five Agda files with the strict profile.
+
+== Acceptance
+
+* The new tests pass and the public-path ones failed before step 3. Give both outputs.
+* `mix test test/outcome_tracker_test.exs test/trusted_callers_test.exs` passes.
+  `mix test` has 0 failures (the known intermittent `SourceStoreLifecycleTest`
+  failure is reported, not hidden).
+* `agda --safe --without-K --cubical-compatible --double-check` accepts each file
+  of `verification/proofs/agda/E0*.agda`. The mirror test
+  (`test/e0_agda_mirror_test.exs`) passes without regenerating the table.
+* No file that was formatted before the change is unformatted after it.
+* The change touches only `lib/outcome_tracker.ex`, `lib/safety/batch_rollback.ex`,
+  `verification/proofs/agda/E0Model.agda` and test files.
+
+== Stop and ask
+
+* A caller other than `BatchRollback` needs to write a rollback row.
+* The Agda change needs a change of the gate (`classify`), not only of `sanitize`.
+* The cost reaches the cap before the acceptance checks pass.
+
+Out of scope: a caller can still write `failed`, `incomplete` and `still_present`
+rows through the public entry. They only lower trust, and the owner's ruling is
+about `rollback_requested`.

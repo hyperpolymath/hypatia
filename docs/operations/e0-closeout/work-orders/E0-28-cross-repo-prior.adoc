@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-28: Cross-repo transfer is smoothed and anomalies report false positives
+:wo-id: E0-28
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 160
+:wo-branch: fix/e0-28-cross-repo-prior
+:wo-depends: none
+
+== Goal
+
+A source repository's confidence is transferred with the same prior as a local
+row, so 3 clean rows no longer transfer 1.0. An anomaly says which share of its
+rows are qualified false positives. A qualified false positive still counts as a
+failure in the rate.
+
+== Authority
+
+Owner ruling of 2026-11-15, selector 9A, on the ruling packet of `E0-14`
+(pull request 1144): "Smooth the transferred rate with a prior, and count a
+qualified false positive as a failure and report its share." Recorded in
+`docs/design/e0-receipt.adoc`, section 9a. Related:
+https://github.com/hyperpolymath/hypatia/issues/984[issue 984], acceptance A6.
+
+== Facts measured
+
+Commit `331aaf08`, measured on 2026-11-15 on a clean tree.
+
+* Read: `lib/cross_repo_learning.ex`, `compute_transferred_confidence/3`
+  (raw rate at line 389): `raw_conf = successes / max(total, 1)`, with no prior.
+  One source with 3 verified successes and 0 failures transfers 1.0. The
+  comment above it says the rule is pinned, not endorsed.
+* Read: `lib/outcome_tracker.ex`, `bayesian_update/3` (line 681): a prior mean with
+  `@prior_strength` 10 (line 20), the rule that local rows use. With a prior of 0.5,
+  3 successes and 0 failures give 8/13, about 0.615.
+* Read: `detect_recipe_anomalies/1` (line 522) and `detect_language_anomalies/1`
+  (line 559) count each qualified row whose outcome is not `"success"` as a
+  failure, and put `failure_rate` (rounded to 3 places) in the anomaly map.
+* Read: the E0-14 tests in `test/cross_repo_learning_test.exs`, in
+  `describe "pinned present behaviour (E0-14)"`, pin the raw 1.0 and the
+  failure rate 0.4 of 3 successes and 2 false positives.
+* Ran: `mix test test/cross_repo_learning_test.exs` passes.
+* `repo_confidence/3` and `detect_ecosystem_anomalies/0` have no caller in `lib/`
+  outside `lib/cross_repo_learning.ex` (a `grep`).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/cross_repo_learning_test.exs`: (a) a source
+  with 3 verified successes and 0 failures transfers
+  `OutcomeTracker.bayesian_update(0.5, 3, 0)`, and a target with no local rows
+  takes that value, annealed; (b) a source with 10 verified successes and 0
+  failures transfers less than 1.0 and more than the 3-row source; (c) the two
+  anomaly cases of E0-14 keep `failure_rate` 0.4 and add `false_positive_share`
+  0.4 (2 of 5), and a case with failures and no false positives has share 0.0.
+  See them fail.
+. In `compute_transferred_confidence/3`, replace the raw rate with
+  `OutcomeTracker.bayesian_update(0.5, successes, total - successes)`. Use the same
+  function as local rows. Do not write a second prior. Keep the minimum count and the weights.
+. In both anomaly functions add `false_positive_share`: the qualified rows whose
+  outcome is `"false_positive"` over the rows, rounded to 3 places. Do not change
+  `failure_rate`.
+. Update the comments that E0-14 put at the three sites: they now state the new
+  rule and name the new tests. Update the 3 E0-14 tests that pinned the raw rate.
+. Update the ruling packet note in the pull request body: the options of
+  `E0-14` and which one this work order implements.
+
+== Acceptance
+
+* The new tests pass, and (a) to (c) failed before steps 3 and 4. Give both outputs.
+* `mix test test/cross_repo_learning_test.exs` passes. `mix test` has 0 failures
+  (the known intermittent `SourceStoreLifecycleTest` failure is reported).
+* A mutation check: put the raw rate back, and test (a) fails.
+* No file that was formatted before the change is unformatted after it.
+* The change touches only `lib/cross_repo_learning.ex` and
+  `test/cross_repo_learning_test.exs`.
+
+== Stop and ask
+
+* A test needs a change in `OutcomeTracker` (the prior is reused, not changed).
+* The smoothing changes a confidence that a dispatch tier reads. No caller in
+  `lib/` was found today; if one exists, say so.
+* The cost reaches the cap before the acceptance checks pass.
