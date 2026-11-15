@@ -318,8 +318,14 @@ defmodule Hypatia.Receipt do
   end
 
   @doc """
-  Write the receipt of a stored row, once. A second call for the same `event_id`
-  writes nothing and returns `:ok` (a replay writes no second receipt).
+  Write the receipt of a stored row, once. It refuses, and writes nothing, in the two
+  cases that the Idris2 model of `src/Hypatia/ABI/Receipt.idr` refuses (E0-29, owner
+  rulings 1A and 2A):
+
+    * `{:error, :duplicate_event_id}`: the `event_id` already has a receipt (P1; the
+      model's `Left DuplicateEventId`). A replay writes no second receipt, and says so.
+    * `{:error, :verified_without_evidence}`: the receipt is `verified` and has no
+      observation or no row digest (P2; see `check/1`).
 
   `row` is the row as the log holds it. For a row of the local outcome log the row
   is looked up by its `event_id` (`{:error, :row_not_in_log}` if it is not there:
@@ -329,15 +335,52 @@ defmodule Hypatia.Receipt do
   @spec write(String.t(), map(), keyword()) :: :ok | {:error, term()}
   def write(data_root, row, opts \\ []) when is_binary(data_root) and is_map(row) do
     with {:ok, event_id} <- fetch_event_id(row),
-         false <- exists?(data_root, event_id),
+         :ok <- not_yet_written(data_root, event_id),
          {:ok, ctx} <- context(data_root, row, opts),
          receipt = build(row, ctx),
+         :ok <- check(receipt),
          {:ok, line} <- encode(receipt) do
       append(data_root, line)
-    else
-      true -> :ok
-      {:error, _reason} = error -> error
     end
+  end
+
+  defp not_yet_written(data_root, event_id) do
+    if exists?(data_root, event_id), do: {:error, :duplicate_event_id}, else: :ok
+  end
+
+  @doc """
+  A receipt cannot claim more than its evidence (P2 of the design). A `verified`
+  receipt must have at least one observation and a row digest; the Nickel contract of
+  `schema/receipt.ncl` and the model's `verifiedOk` say the same. `build/2` builds
+  whatever the row gives; this is what refuses it before it is written.
+  """
+  @spec check(map()) :: :ok | {:error, :verified_without_evidence}
+  def check(%{"qualification" => "verified"} = receipt) do
+    observations = Map.get(receipt, "observations")
+    digest = get_in(receipt, ["proof_or_test_ref", "row_sha256"])
+
+    if is_map(observations) and map_size(observations) > 0 and is_binary(digest) and
+         Regex.match?(~r/\A[0-9a-f]{64}\z/, digest),
+       do: :ok,
+       else: {:error, :verified_without_evidence}
+  end
+
+  def check(receipt) when is_map(receipt), do: :ok
+
+  @doc false
+  # Say what happened to a receipt that was not written. A refusal is final for that
+  # receipt (the row is stored and the log says why); any other failure is pending and
+  # is written when the recipe is next recomputed.
+  def report_failure(event_id, reason)
+      when reason in [:duplicate_event_id, :verified_without_evidence] do
+    Logger.warning(
+      "receipt_refused event_id=#{event_id} reason=#{inspect(reason)}: the row is stored; " <>
+        "no receipt is written for it"
+    )
+  end
+
+  def report_failure(event_id, reason) do
+    Logger.warning("receipt_pending event_id=#{event_id} reason=#{inspect(reason)}")
   end
 
   defp fetch_event_id(row) do
@@ -476,7 +519,7 @@ defmodule Hypatia.Receipt do
               {written + 1, failed}
 
             {:error, reason} ->
-              Logger.warning("receipt_pending event_id=#{id} reason=#{inspect(reason)}")
+              report_failure(id, reason)
               {written, failed + 1}
           end
       end

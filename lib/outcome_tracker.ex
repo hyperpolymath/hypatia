@@ -376,9 +376,7 @@ defmodule Hypatia.OutcomeTracker do
         :ok
 
       {:error, reason} ->
-        Logger.warning(
-          "receipt_pending event_id=#{Map.get(record, "event_id")} reason=#{inspect(reason)}"
-        )
+        Hypatia.Receipt.report_failure(Map.get(record, "event_id"), reason)
     end
   rescue
     error ->

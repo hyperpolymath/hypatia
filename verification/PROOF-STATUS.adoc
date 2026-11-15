@@ -352,13 +352,13 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |proven
 |Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
 |`+src/Hypatia/ABI/Receipt.idr+`: `+appendRefusesDuplicate+`, `+appendFresh+`, `+appendKeepsUnique+`, `+decElem+`, `+decNat+`
-|Over the Idris2 types. An event_id is a natural number with a structural decidable equality; the real ids are ADR-008 strings. The run time is held to the append by test/receipt_model_mirror_test.exs, not proved: Receipt.write writes nothing and returns ok where the model answers Left DuplicateEventId (the ledger is unchanged in both). Concurrent writers and the file system are outside the model
+|Over the Idris2 types. An event_id is a natural number with a structural decidable equality; the real ids are ADR-008 strings. The run time is held to the append by test/receipt_model_mirror_test.exs, not proved: Receipt.write returns {:error, :duplicate_event_id} and writes nothing, as the model answers Left DuplicateEventId (E0-29, owner ruling 1A). Concurrent writers and the file system are outside the model
 
 |P2: the verdict of a receipt is the answer of the gate for its qualification and claimed outcome, or a withdrawal that names a parent; a verified receipt has a row digest and at least one observation; a receipt that credits a success is evidenced; the gate never answers withdrawn and credits a success only for a verified, claimed success
 |proven
 |Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
 |`+src/Hypatia/ABI/Receipt.idr+`: `+verdictIsGate+`, `+verifiedHasEvidence+`, `+noVerifiedWithoutObservations+`, `+creditedSuccessIsEvidenced+`, `+withdrawnHasParent+`, `+gateNeverWithdrawn+`, `+gateSuccessInverse+`
-|Over the Idris2 types. The model cannot build a verified receipt without an observation, but Receipt.build/2 does not refuse one: the Nickel contract of schema/receipt.ncl does, and the production entry points never make one (the mirror test runs every fleet classification and the rescan path; it pins the build/2 difference as a known difference). Whether the real gate computes the table is checked by the mirror test and by tests/accept/ReceiptP2GateTable.idr, not proved
+|Over the Idris2 types. The model cannot build a verified receipt without an observation. Receipt.build/2 is not a smart constructor and still builds one; Receipt.check/1 refuses it and Receipt.write refuses to write it (E0-29, owner ruling 2A), as does the Nickel contract of schema/receipt.ncl. The production entry points never make one (the mirror test runs every fleet classification and the rescan path). Whether the real gate computes the table is checked by the mirror test and by tests/accept/ReceiptP2GateTable.idr, not proved
 
 |The gate table of the receipt model has the 24 entries that verdict_for gives in schema/receipt.ncl, which is the one-row case of OutcomeTracker.qualified_outcome_counts/1
 |proven

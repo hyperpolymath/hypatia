@@ -124,6 +124,7 @@ function name is the stable locator. Measure again before you edit.
 |E0-26 |The rescan judges a fix by its category and its file |S |sonnet |$8 |none
 |E0-27 |Only BatchRollback can record a rollback_requested row |S |sonnet |$5 |none
 |E0-28 |Cross-repo transfer is smoothed and anomalies report false positives |M |sonnet |$8 |none
+|E0-29 |The receipt writer refuses what the model refuses |S |sonnet |$8 |none
 |===
 
 The caps of `E0-01` to `E0-17` add up to $151. The estimate for that
