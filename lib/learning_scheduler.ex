@@ -820,6 +820,24 @@ defmodule Hypatia.LearningScheduler do
   defp audit_outcome("failure"), do: :failure
   defp audit_outcome(_other), do: :unknown
 
+  # What the receipt of a fleet row needs (E0-09): the audit fields of the source row
+  # and where the evidence sits: its line number, the digest of its exact bytes and
+  # the bot that wrote it. The row is stored with them, so the receipt can be
+  # written again identically.
+  defp fleet_receipt_context(record, line, line_number) do
+    bot =
+      case Map.get(record, "bot") do
+        b when is_binary(b) -> b
+        _ -> "unknown"
+      end
+
+    Map.merge(fleet_audit_fields(record), %{
+      "source_line" => Integer.to_string(line_number),
+      "source_row_sha256" => :crypto.hash(:sha256, line) |> Base.encode16(case: :lower),
+      "source_bot" => bot
+    })
+  end
+
   # The audit fields of a source row that a stored fleet row keeps.
   defp fleet_audit_fields(record) when is_map(record) do
     Map.take(record, ["verdict", "exit_code", "before_hits", "after_hits"])
@@ -935,7 +953,7 @@ defmodule Hypatia.LearningScheduler do
                          outcome,
                          id,
                          verification,
-                         fleet_audit_fields(record)
+                         fleet_receipt_context(record, line, line_number)
                        ) do
                     # An audit row is stored and acknowledged, and it is not
                     # counted as a processed outcome.
