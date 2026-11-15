@@ -49,9 +49,17 @@ defmodule Hypatia.Rules.CiFailureTriage do
     * `:upstream` a rollup job that only reports other jobs' failures. Triage
                  those jobs instead.
 
-  `decide/2` applies the loop limit. A transient rule whose budget is spent
-  becomes `:owner` with `persistent: true`, so a rerun loop always ends: the
-  attempt count only rises, and every budget is at most 2.
+  `decide/3` applies the loop limit. A transient rule whose budget is spent
+  becomes its `escalation` with `persistent: true`, so a rerun loop always ends:
+  the attempt count only rises, and every budget is at most 1.
+
+  A rule may also carry a `guard` (default `:none`). `:head_current`
+  (`runner_cancelled`) allows the rerun only when the caller's context says
+  `head_current: true`: the run's head_sha is still the head of its ref and no
+  newer run of the workflow exists for it. Anything else, including a missing
+  context, refuses: the decision becomes `:none` (noise) with
+  `guard_refused: :head_current`. `classify/2` reports a rule's own action;
+  only `decide/3` makes it a decision.
 
   ## What a fix may never do
 
@@ -101,14 +109,24 @@ defmodule Hypatia.Rules.CiFailureTriage do
       unless: [
         ~r/^\s*(?:\d{4}-\d{2}-\d{2}T\S+\s+)?##\[error\][^\n]*(?:did not succeed \(result: failure\)|did not complete successfully \(result=failure\))/m
       ],
-      action: :none,
-      retries: 0,
+      # One rerun, guarded (owner ruling 2026-11-15, "one, guarded"; the cap is
+      # proven-cicd-and-workflows proven/policy/retry.tsv, which this mirrors).
+      # A run cancelled because a newer push or a concurrency group superseded
+      # it must never be re-run: the rerun would re-enter the group and cancel
+      # the run for the current head. `decide/3` therefore allows the rerun
+      # only when the caller states `head_current: true` (the run's head_sha is
+      # still the head of its ref, and no newer run of the workflow exists for
+      # the ref); otherwise, and when the caller does not say, it is noise.
+      action: :rerun,
+      retries: 1,
+      guard: :head_current,
       fix: nil,
       escalation: :none,
       reason:
         "The run was cancelled (a newer push, concurrency, or a person). A cancelled " <>
-          "job is not a failure of the change. If a later job turned red because " <>
-          "an upstream job was cancelled, that job runs with `if: always()`: see WF029."
+          "job is not a failure of the change. It is re-run once only while its head " <>
+          "is still current; a superseded run is never re-run. If a later job turned " <>
+          "red because an upstream job was cancelled, that job runs with `if: always()`: see WF029."
     },
     %{
       # CASE-043: estate gates that read GitHub state (rulesets, the workflow
@@ -852,6 +870,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
     |> Enum.map(fn r ->
       r
       |> Map.drop([:patterns, :context, :unless])
+      |> Map.put_new(:guard, :none)
       |> Map.put(:id, id(r.name))
       |> Map.put(:route, route(r.action))
     end)
@@ -877,7 +896,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
   conclusion, e.g. "cancelled"), `:pr_state` (`:open`, `:merged`, `:closed`).
 
   Returns `%{primary: finding | nil, matches: [finding]}`. A finding carries
-  `rule`, `layer`, `action`, `retries`, `fix`, `escalation`, `reason`,
+  `rule`, `layer`, `action`, `retries`, `guard`, `fix`, `escalation`, `reason`,
   `evidence` (the first matching line) and `line`.
   """
   def classify(log, ctx \\ %{}) when is_binary(log) do
@@ -899,25 +918,49 @@ defmodule Hypatia.Rules.CiFailureTriage do
   end
 
   @doc """
-  Applies the loop limit. `attempts` is how many reruns this
-  `{repo, workflow, sha, rule}` has already had. Returns the finding with its
-  final `action`, and `persistent: true` once a transient budget is spent.
+  Applies the loop limit and the rerun guard. `attempts` is how many reruns
+  this `{repo, workflow, sha, rule}` has already had. `ctx` (optional) carries
+  what the guard needs: `head_current: true` when the run's head_sha is still
+  the head of its ref and no newer run of the workflow exists for it. Returns
+  the finding with its final `action`, and `persistent: true` once a transient
+  budget is spent. A guarded rerun without `head_current: true` becomes `:none`
+  with `guard_refused` naming the guard: a missing context refuses.
   """
-  def decide(nil, _attempts), do: nil
+  def decide(finding, attempts, ctx \\ %{})
+
+  def decide(nil, _attempts, _ctx), do: nil
 
   # A negative count would read as budget left; refuse rather than allow
   # extra reruns.
-  def decide(_finding, attempts) when is_integer(attempts) and attempts < 0,
+  def decide(_finding, attempts, _ctx) when is_integer(attempts) and attempts < 0,
     do: raise(ArgumentError, "attempts must be 0 or more, got #{attempts}")
 
-  def decide(%{action: :rerun, retries: budget} = finding, attempts)
+  # The guard is checked in the body, not in a `when`: a guard expression that
+  # raised would read as false and fall through to the rerun clauses below.
+  def decide(%{action: :rerun, guard: :head_current} = finding, attempts, ctx) do
+    if head_current?(ctx) do
+      decide(Map.put(finding, :guard, :satisfied), attempts, ctx)
+    else
+      %{finding | action: :none}
+      |> Map.put(:route, route(:none))
+      |> Map.put(:persistent, false)
+      |> Map.put(:guard_refused, :head_current)
+    end
+  end
+
+  def decide(%{action: :rerun, retries: budget} = finding, attempts, _ctx)
       when is_integer(attempts) and attempts >= budget do
     %{finding | action: finding.escalation}
     |> Map.put(:route, route(finding.escalation))
     |> Map.put(:persistent, true)
   end
 
-  def decide(finding, _attempts), do: Map.put(finding, :persistent, false)
+  def decide(finding, _attempts, _ctx), do: Map.put(finding, :persistent, false)
+
+  # Only an explicit `true` satisfies the guard; a missing key, nil, a string
+  # or a non-map context refuses.
+  defp head_current?(%{head_current: true}), do: true
+  defp head_current?(_ctx), do: false
 
   @doc """
   Required checks that never reported ("Expected — Waiting for status to be
@@ -1396,6 +1439,7 @@ defmodule Hypatia.Rules.CiFailureTriage do
       layer: rule.layer,
       action: rule.action,
       retries: rule.retries,
+      guard: Map.get(rule, :guard, :none),
       fix: rule.fix,
       escalation: rule.escalation,
       reason: rule.reason,

@@ -10,12 +10,18 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
 
       mix hypatia.ci_triage log JOB.log [--exit-code N] [--conclusion C]
                                         [--pr-state open|merged|closed] [--attempts N]
+                                        [--head-current]
       mix hypatia.ci_triage gate --required A --required B --reported B --reported C
       mix hypatia.ci_triage pins WORKFLOW.yml... [hypatia-rule-order.json]
       mix hypatia.ci_triage rules
 
   Prints one JSON object per finding (JSONL). For `log`, the first line is the
   primary finding after the loop limit (`--attempts` reruns so far).
+
+  `--head-current` states that the run's head_sha is still the head of its ref
+  and that no newer run of the workflow exists for it. A guarded rerun
+  (`runner_cancelled`) is allowed only with it; without it a cancelled run is
+  noise, so a run superseded by a newer push is never re-run.
 
   ## Exit codes
 
@@ -34,6 +40,7 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
     conclusion: :string,
     pr_state: :string,
     attempts: :integer,
+    head_current: :boolean,
     required: :keep,
     reported: :keep
   ]
@@ -77,7 +84,7 @@ defmodule Mix.Tasks.Hypatia.CiTriage do
     # A negative count would read as budget left and allow extra reruns.
     if attempts < 0, do: die("--attempts must be 0 or more, got #{attempts}")
 
-    case T.decide(primary, attempts) do
+    case T.decide(primary, attempts, %{head_current: Keyword.get(opts, :head_current, false)}) do
       nil ->
         :ok
 
