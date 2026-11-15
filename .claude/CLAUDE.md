@@ -64,6 +64,12 @@ cargo build     # Build Rust workspace
 cargo test      # Test Rust workspace
 ```
 
+The toolchain is Elixir 1.19.4 on Erlang/OTP 27.3.4.19 (`mise.toml`; the `setup-beam` steps in
+`ci.yml`, `tests.yml` and `merge-orchestrate.yml`). Format under that version: the formatter's
+output differs between minors (1.17 drops the parentheses 1.19 keeps in `(a and b) && c`), and
+the `elixir-format` job in `ci.yml` runs `mix format --check-formatted` on 1.19.4, as does
+`just fmt-check`.
+
 `mix test` excludes 246 tests over 5 tags (the last line of `mix test` counts them all; its
 `Excluding tags` line names the tags). The `:verisim_data` tests among them are **not** run in CI
 and do **not** pass — see Known Gaps 3 before quoting a green suite.

@@ -10,6 +10,9 @@ defmodule Hypatia.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      # Scanner input, not tests: Elixir 1.19 warns about any file under test/
+      # that matches neither filter, and these .ex fixtures are deliberately unsafe.
+      test_ignore_filters: [&String.starts_with?(&1, "test/soundness/fixtures/")],
       deps: deps(),
       escript: escript()
     ]
