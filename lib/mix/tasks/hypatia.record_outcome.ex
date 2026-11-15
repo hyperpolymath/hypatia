@@ -16,7 +16,13 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
           --outcome success
 
   Optional:
-      --pattern-id  PA-013-pin-deps           (defaults to recipe id)
+      --pattern-id  PA-013-pin-deps           (the pattern of the dispatch; written
+                                               on the row. The rescan uses the
+                                               recipe id when it is omitted, and
+                                               then the row has no pattern id)
+      --match-kind  exact|category|fuzzy      (the kind of match that chose the
+                                               recipe; written on the row. Omitted,
+                                               the row says "unknown")
       --category    DependencyPinning         (auto-derived from recipe
                                                if omitted)
       --repo-path   /path/to/local/clone      (defaults to
