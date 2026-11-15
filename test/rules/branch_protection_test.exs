@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
-defmodule Hypatia.Rules.BranchProtectionTest do
+defmodule Hypatia.Rules.BranchProtectionRulesTest do
   use ExUnit.Case, async: true
 
   alias Hypatia.Rules.BranchProtection, as: BP
