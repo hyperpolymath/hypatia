@@ -61,6 +61,12 @@ defmodule Hypatia.Rules.CiFailureTriage do
   `guard_refused: :head_current`. `classify/2` reports a rule's own action;
   only `decide/3` makes it a decision.
 
+  `head_current` is the caller's assertion: nothing here computes it. An
+  executor must derive it from the API (the run's head_sha equals the ref's
+  current head, and no newer run of that workflow exists for the ref), never
+  take it on trust. A race remains: the head can move between that check and
+  the rerun. The window is small and the cap of one rerun bounds the damage.
+
   ## What a fix may never do
 
   A decision from these rules never bypasses a gate. It never drops or
