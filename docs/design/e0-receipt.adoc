@@ -6,7 +6,7 @@
 
 [cols="1,3"]
 |===
-|Status |PROPOSED. Nothing here is ruled. The owner rules on the 8 decisions in <<decisions>>. No code, schema or test changes with this document.
+|Status |RULED by the owner on 2026-11-15. See <<rulings>>. `E0-09` may start. No code, schema or test changes with this document.
 |Date |2026-11-14
 |Work order |`E0-08` (`docs/operations/e0-closeout/work-orders/E0-08-receipt-design.adoc`). `E0-09`, `E0-10`, `E0-11`, `E0-12` build on the rulings.
 |Authority |https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 10 ("Receipt") and acceptance A7.
@@ -204,13 +204,17 @@ the content of the row: "Do not use a hash of the JSON contents as an attempt ID
 separate attempts can have identical content" (issue 984, step 6). Two attempts
 with the same input get two ids, and the replay of one event keeps its id.
 
+Hypatia mints the id of a local row with its own Elixir implementation of profile
+T (ruling R5-A, <<rulings>>). It makes no `System.cmd` call and has no tool that can
+be missing. A test checks the layout that ADR-008 fixes: version nibble 8, variant
+`10`, the 48-bit Unix millisecond timestamp first, ids that increase within one
+process, and the lowercase `8-4-4-4-12` text.
+
 The estate tool is `uuid-v8 t` (the Rust command in `tools/uuid-v8/` of
 `metadatastician/standards`, "Records and events"), or `scripts/uuid-v8.js` with Bun.
-Whether the gitbot-fleet runner has either of them is not known from this
-repository. That is a question for `E0-12`, not a gap in ADR-008: the format and
-the profile are given. Hypatia mints the id of a local row with the same tool, by
-`System.cmd` with an argument list and no shell, unless an Elixir generator exists
-in the estate.
+The producer of a fleet row, the gitbot-fleet runner, is a shell script and needs one
+of them. Whether the runner has either is not known from this repository. That is a
+question for `E0-12`, not a gap in ADR-008: the format and the profile are given.
 
 == 5. The 3 entry points, the start record and the failure rule
 
@@ -258,15 +262,18 @@ is never written before its row: it would claim evidence that does not exist.
 
 * If (1) fails, nothing else runs. The source is not acknowledged. This is the rule
   that `E0-06` pins for the import.
-* If (2) fails, the event is committed and the derived updates do not run. The
-  caller gets an error. For the import it is `{:error, {:receipt_failed, line, reason}}`,
-  and the source signature does not advance, as for `write_failed`. The next run
-  finds a qualified row with no receipt (see below) and writes it.
+* If (2) fails, the event is committed. The caller still gets `{:ok, record}` (ruling
+  R3-A, <<rulings>>): the row exists, and an error would crash the callers that match
+  `{:ok, record} =` and hide a committed event from them. The failure is loud in the
+  log (`receipt_pending`, with the `event_id` and the reason), the derived updates
+  still run, and the next learning cycle writes the missing receipt (see below). For
+  the import the source is acknowledged, because the row is committed.
 * If (3) fails, the event and its receipt exist. The recomputation is a function of
   the log, so the next learning cycle repeats it. The scheduler already retries a
   recipe from the durable log.
 * *Repair.* At the start of a learning cycle, for each recipe that the cycle
-  recomputes, every qualified row that has an `event_id` and no receipt gets one
+  recomputes, every row that the gate reads (a qualified row and, by ruling R1-A, an
+  audit row) that has an `event_id` and no receipt gets one
   (a lookup by `event_id`, so it cannot write twice). A receipt whose `event_id`
   has no row in the log is not repaired: it is reported as corrupt, loudly.
 * A row with no `event_id` (every row written before `E0-11` and `E0-12`) gets no
@@ -301,7 +308,7 @@ Each decision lists its options. The option labelled "Recommended" is the one th
 |===
 |Option |Consequence |Label
 
-|A. One receipt for each learning update: the credit of one qualified event to the learners
+|A. One receipt for each learning update: the credit of one qualified event to the learners; by ruling R1-A also the keeping of one audit row (`verdict` `audit_only`)
 |Each receipt names one event and the exact row that it rests on. A recomputation that reads 400 rows makes 0 receipts, because it is derived.
 |Recommended. Most correct in the long term.
 
@@ -341,8 +348,8 @@ Each decision lists its options. The option labelled "Recommended" is the one th
 |===
 |Option |Consequence |Label
 
-|A. ADR-008 v8 profile T, minted by the producer before the fix runs (`uuid-v8 t`). Hypatia mints it for a local row. The field declares the profile.
-|Two attempts with the same input have two ids. Needs the tool on the fleet runner (a question for `E0-12`).
+|A. ADR-008 v8 profile T, minted by the producer before the fix runs (`uuid-v8 t` on the fleet runner). Hypatia mints it for a local row with its own Elixir implementation (ruling R5-A). The field declares the profile.
+|Two attempts with the same input have two ids. A fleet runner needs the tool (a question for `E0-12`); Hypatia needs no tool.
 |Recommended. Most correct in the long term.
 
 |B. Profile C, derived from the content of the row
@@ -486,6 +493,61 @@ confidence.
   decision D3 gives the answer for new rows.
 * The cost of the repair scan on a large log: it is bounded by the recipes that a
   cycle recomputes, and no figure was measured.
+
+[[rulings]]
+== 9a. Rulings (owner, 2026-11-15)
+
+The owner answered the questions of the review by selectors. What each answer
+means for `E0-09` and the work orders after it:
+
+[cols="1,3,4",options="header"]
+|===
+|Id |Ruling |Consequence
+
+|D1, D4, D5, D6, D7, D8
+|Accepted as recommended.
+|Section 7 stands as written, with the changes below.
+
+|D2
+|The option that writes the receipt in `persist_outcome/6` and at the neural call (option B of D2 in section 7; "4A" in the selector).
+|`E0-09` reads "2 places", not "3". The text of `E0-09` is changed with this ruling.
+
+|R1
+|Audit rows get a receipt, `verdict` `audit_only`.
+|D1 reads "one receipt for each event that the gate reads". The repair rule of 5.3 reads audit rows too.
+
+|R3
+|A failed receipt write after the row is committed returns `{:ok, record}`, logs `receipt_pending`, and the next cycle repairs it.
+|Section 5.3 is changed. The callers that match `{:ok, record} =` are not changed.
+
+|R5 (D3)
+|Hypatia mints a local row's `event_id` with an Elixir implementation of profile T.
+|No `System.cmd`, no missing tool (R4 does not arise for Hypatia). A new small module with a layout test belongs to `E0-09`. The fleet runner still needs `uuid-v8` or Bun (`E0-12`).
+
+|R2, R6, R7, R8
+|Not asked separately. They are requirements, not choices, and are carried into `E0-09`, `E0-11` and `E0-07` as written in section 10.
+|R2: the receipt goes to the captured store of the row. R6: the echo row carries the row's `event_id`. R7: a per-recipe high-water mark or an accepted cost. R8: a withdrawal of a row with no id is refused.
+
+|E0-07
+|Wait until local rows have ids from `E0-09`.
+|`E0-07` is not started. It builds on the ids that this design gives.
+
+|Forged negative evidence
+|Accept `rollback_requested` only from `BatchRollback`.
+|A new, separate work. The public `record_outcome/5` will rewrite a caller's `rollback_requested` as it rewrites `verified`.
+
+|`E0-04`, design point 3
+|The scanner names the file of a weak point in the field `locus`. (`location` is for a panic-attack run on a multi-site network.)
+|Comparing the category and the file in the rescan is possible. A new, separate work.
+
+|`E0-14`
+|Smooth the transferred rate with a prior, and count a qualified false positive as a failure and report its share.
+|A new, separate work (the packet of `E0-14` named the options).
+
+|`E0-03`, import volume
+|Accept the import of the historical unqualified rows as audit rows.
+|No change. A setting for how many past checks to compare, and a summary of what is new, better, worse or eliminated, was asked for in the same answer and is a separate feature, not part of this design.
+|===
 
 == 10. Review notes (second reading, 2026-11-15)
 
