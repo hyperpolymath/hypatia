@@ -418,6 +418,42 @@ jobs:
       # the exact-path, shrink-only .logtalk-allowlist. Proven by
       # mutant (plant a .lgt + a report_format: logtalk setting -> red;
       # revert -> green). See docs/rules/logtalk-migration.adoc.
+      # The receipt contract (schema/receipt.ncl) is checked by Nickel. Without it the
+      # contract tests skip, so this lane must have it, and must fail if they skip.
+      # The release publishes no checksum: the hash below is the one measured for
+      # 1.11.0 on 2026-11-15, so it detects a changed asset, not a bad original.
+      - name: Install checksum-pinned Nickel (receipt contract)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hypatia-nickel"
+          curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+            https://github.com/nickel-lang/nickel/releases/download/1.11.0/nickel-x86_64-linux \
+            --output "$RUNNER_TEMP/hypatia-nickel/nickel"
+          echo "d40cd32b8374636fda8939a8e479616c7a1db57acb5ef5a9621e242ed8f5a361  $RUNNER_TEMP/hypatia-nickel/nickel" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/hypatia-nickel/nickel"
+          echo "$RUNNER_TEMP/hypatia-nickel" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/hypatia-nickel/nickel" --version
+
+      - name: E0 receipt, event-id, matcher and neural regression tests
+        run: |
+          set -euo pipefail
+          mix test \
+            test/event_id_test.exs \
+            test/receipt_test.exs \
+            test/receipt_model_mirror_test.exs \
+            test/trusted_callers_test.exs \
+            test/mix_tasks/record_outcome_test.exs \
+            test/learning_scheduler_test.exs \
+            test/match_label_test.exs \
+            test/recipe_fuzzy_rank_test.exs \
+            test/novelty_fail_closed_test.exs \
+            test/placeholder_network_test.exs 2>&1 | tee "$RUNNER_TEMP/e0-receipt-tests.log"
+          # A skipped test here means that Nickel was not found: the contract was not checked.
+          if tail -n 3 "$RUNNER_TEMP/e0-receipt-tests.log" | grep -Eq '[0-9]+ skipped'; then
+            echo "::error::a receipt test was skipped: the Nickel contract was NOT checked"
+            exit 1
+          fi
+
       - name: No active Logtalk (ADR-001 guard)
         run: bash scripts/check-no-active-logtalk.sh
 
