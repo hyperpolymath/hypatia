@@ -153,7 +153,18 @@ defmodule Hypatia.RecipeMatcher do
     |> List.first()
   end
 
-  defp fuzzy_match_recipe(pattern, language) do
+  defp fuzzy_match_recipe(pattern, language), do: fuzzy_match_in(all_recipes(), pattern, language)
+
+  @doc false
+  # The fuzzy match over a given list of recipes. `all_recipes/0` is the list in
+  # production; a test gives its own, in any order.
+  #
+  # A recipe matches when a keyword of its pattern ids is a WHOLE WORD of the
+  # description. The recipe with the most distinct keyword hits wins; confidence
+  # decides only between equal hit counts, and the recipe id between equal
+  # confidences, so the result does not depend on the order of the files
+  # (E0-21; design of 2026-11-14 on merge honesty, decision 4).
+  def fuzzy_match_in(recipes, pattern, language) do
     pa_rule = Map.get(pattern, "pa_rule", "")
     description = Map.get(pattern, "description", "") |> String.downcase()
     effective_language = effective_language_for(pattern, language)
@@ -162,8 +173,8 @@ defmodule Hypatia.RecipeMatcher do
     if pa_rule == "" do
       nil
     else
-      all_recipes()
-      |> Enum.filter(fn recipe ->
+      recipes
+      |> Enum.flat_map(fn recipe ->
         lang_ok = langs_match?(Map.get(recipe, "languages", []), effective_language)
 
         recipe_pattern_ids = Map.get(recipe, "pattern_ids", [])
@@ -174,26 +185,42 @@ defmodule Hypatia.RecipeMatcher do
           end)
 
         if lang_ok and pa_match do
-          # Check keyword overlap between recipe pattern_ids and finding description
+          # Keyword overlap between recipe pattern_ids and finding description
           recipe_keywords =
             recipe_pattern_ids
             |> Enum.flat_map(fn rpid ->
               rpid |> String.replace(~r/^PA\d+-/, "") |> String.split("-")
             end)
             |> Enum.reject(&(&1 == ""))
+            |> Enum.uniq()
 
-          keyword_hit_count =
-            Enum.count(recipe_keywords, fn kw ->
-              String.contains?(description, kw)
-            end)
-
-          keyword_hit_count > 0
+          case Enum.count(recipe_keywords, &whole_word?(description, &1)) do
+            0 -> []
+            hits -> [{recipe, hits}]
+          end
         else
-          false
+          []
         end
       end)
-      |> Enum.sort_by(fn r -> Map.get(r, "confidence", 0) end, :desc)
-      |> List.first()
+      |> Enum.sort_by(fn {recipe, hits} ->
+        {-hits, -rank_confidence(recipe), to_string(Map.get(recipe, "id", ""))}
+      end)
+      |> case do
+        [{recipe, _hits} | _] -> recipe
+        [] -> nil
+      end
+    end
+  end
+
+  # A keyword is a whole word when no letter or digit sits against either end of it.
+  defp whole_word?(text, keyword) do
+    Regex.match?(~r/(?<![a-z0-9])#{Regex.escape(keyword)}(?![a-z0-9])/, text)
+  end
+
+  defp rank_confidence(recipe) do
+    case Map.get(recipe, "confidence", 0) do
+      c when is_number(c) -> c
+      _ -> 0
     end
   end
 
