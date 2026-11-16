@@ -1168,15 +1168,11 @@ defmodule Hypatia.CLI do
     |> Enum.map(&Hypatia.Verdict.annotate/1)
   end
 
-  # ─── Opt-in rule modules ─────────────────────────────────────────────
-  #
-  # These 4 families had detectors and tests but no scan caller. They run
-  # only when named in `--rules` (see @opt_in_rule_modules) until canary
-  # scans have cleared their false positives; the estate gate's
-  # `block-on-high` would otherwise turn every new finding into a red CI.
   @doc false
   # A secret-scanning finding in the scan's shared shape. The located line is
-  # kept when there is one, so the verdict span and SARIF point at the secret.
+  # kept when there is one, so the verdict span and SARIF point at the secret,
+  # and so is `detail`: the alert number, its URL and, when the finding is
+  # repository-level, why no file location was available.
   def normalize_secret_alert(f) do
     %{
       rule_module: "secret_scanning_alerts",
@@ -1186,9 +1182,15 @@ defmodule Hypatia.CLI do
       reason: f.reason,
       action: to_string(f.action)
     }
-    |> Map.merge(Map.take(f, [:line]))
+    |> Map.merge(Map.take(f, [:line, :detail]))
   end
 
+  # ─── Opt-in rule modules ─────────────────────────────────────────────
+  #
+  # These 4 families had detectors and tests but no scan caller. They run
+  # only when named in `--rules` (see @opt_in_rule_modules) until canary
+  # scans have cleared their false positives; the estate gate's
+  # `block-on-high` would otherwise turn every new finding into a red CI.
   defp opt_in_findings(repo_path, rules) do
     Enum.flat_map(@opt_in_rule_modules, fn mod ->
       if mod in rules, do: run_opt_in(mod, repo_path), else: []

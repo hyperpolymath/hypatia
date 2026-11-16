@@ -61,6 +61,8 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
   @repo_level_file "."
   # Locations read per alert (one page, no pagination: the first file wins).
   @max_locations_per_alert 100
+  # Pages of locations read before the alert is reported at repository level.
+  @max_location_pages 10
 
   # ─── SSA001: Open secret-scanning alerts ───────────────────────────────
 
@@ -409,14 +411,34 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
     do: alert["state"] == "resolved" and alert["resolution"] not in @accepted_resolutions
 
   @doc false
-  # The token goes with the request, so the URL must be on the API host.
+  # Reads pages of locations until one names a file, following the `next`
+  # link (the first commit location can sit behind many wiki or comment
+  # locations), up to @max_location_pages pages. The token goes with every
+  # request, so every URL must be on the API host.
   def fetch_location(url, request) when is_binary(url) do
-    if String.starts_with?(url, @github_api_base <> "/") do
-      separator = if String.contains?(url, "?"), do: "&", else: "?"
+    separator = if String.contains?(url, "?"), do: "&", else: "?"
+    find_location(url <> separator <> "per_page=#{@max_locations_per_alert}", request, 1)
+  end
 
-      with {:ok, output} <- request.(url <> separator <> "per_page=#{@max_locations_per_alert}"),
-           {:ok, locations, _next} <- parse_page(output) do
-        location_from(locations)
+  def fetch_location(_url, _request), do: %{"error" => "the alert has no locations_url"}
+
+  defp find_location(_url, _request, page) when page > @max_location_pages do
+    %{
+      "error" =>
+        "no location names a file in the repository in the first " <>
+          "#{@max_location_pages * @max_locations_per_alert} locations"
+    }
+  end
+
+  defp find_location(url, request, page) do
+    if String.starts_with?(url, @github_api_base <> "/") do
+      with {:ok, output} <- request.(url),
+           {:ok, locations, next} <- parse_page(output) do
+        case location_from(locations) do
+          %{"path" => _} = found -> found
+          not_found when next == nil -> not_found
+          _ -> find_location(next, request, page + 1)
+        end
       else
         {:error, reason} -> %{"error" => reason}
       end
@@ -425,21 +447,24 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
     end
   end
 
-  def fetch_location(_url, _request), do: %{"error" => "the alert has no locations_url"}
-
   @doc false
   # The first `commit` location with a file path: only a commit location
   # names a file of the scanned repository. A `wiki_commit` location also
   # has a path, but in the separate `<repo>.wiki.git`; issue bodies,
-  # pull-request comments and discussions name no file.
+  # pull-request comments and discussions name no file. GitHub writes the
+  # path from the repository root with a leading slash (`/config/app.env`);
+  # the finding's `file` is repository-relative, like every other rule's.
   def location_from(locations) do
     Enum.find_value(
       locations,
       %{"error" => "no location names a file in the repository"},
       fn
         %{"type" => "commit", "details" => %{"path" => path} = details}
-        when is_binary(path) and path != "" ->
-          %{"path" => path, "start_line" => details["start_line"]}
+        when is_binary(path) ->
+          case String.trim_leading(path, "/") do
+            "" -> nil
+            rel -> %{"path" => rel, "start_line" => details["start_line"]}
+          end
 
         _ ->
           nil

@@ -484,6 +484,80 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
       assert Hypatia.Verdict.token(normalized).span ==
                %{file: "config/prod.env", start_line: 12, end_line: 12}
     end
+
+    test "GitHub's leading-slash path becomes repository-relative" do
+      assert SecretScanningAlerts.location_from([
+               %{"type" => "commit", "details" => %{"path" => "/example/secrets.txt"}}
+             ]) == %{"path" => "example/secrets.txt", "start_line" => nil}
+
+      assert %{"error" => _} =
+               SecretScanningAlerts.location_from([
+                 %{"type" => "commit", "details" => %{"path" => "/"}}
+               ])
+    end
+
+    test "a commit location on a later page is found" do
+      first = "https://api.github.com/repos/acme/demo/l/1?per_page=100"
+      second = "https://api.github.com/repositories/1/l/1?page=2"
+
+      request = fn
+        ^first ->
+          {:ok,
+           "HTTP/2 200\r\nlink: <#{second}>; rel=\"next\"\r\n\r\n" <>
+             ~s([{"type":"wiki_commit","details":{"path":"Home.md"}}]) <> "\n200"}
+
+        ^second ->
+          {:ok,
+           "HTTP/2 200\r\n\r\n" <>
+             ~s([{"type":"commit","details":{"path":"/src/a.env","start_line":2}}]) <> "\n200"}
+      end
+
+      assert SecretScanningAlerts.fetch_location(
+               "https://api.github.com/repos/acme/demo/l/1",
+               request
+             ) == %{"path" => "src/a.env", "start_line" => 2}
+    end
+
+    test "a later page off the API host is refused" do
+      first = "https://api.github.com/repos/acme/demo/l/1?per_page=100"
+
+      request = fn
+        ^first ->
+          {:ok,
+           "HTTP/2 200\r\nlink: <https://evil.example.com/steal>; rel=\"next\"\r\n\r\n" <>
+             ~s([{"type":"issue_body","details":{}}]) <> "\n200"}
+
+        _ ->
+          flunk("must not request off the API host")
+      end
+
+      assert %{"error" => "refusing to follow a locations URL off " <> _} =
+               SecretScanningAlerts.fetch_location(
+                 "https://api.github.com/repos/acme/demo/l/1",
+                 request
+               )
+    end
+
+    test "the main scan path keeps why a finding has no file" do
+      [finding] =
+        SecretScanningAlerts.open_alert_findings([
+          %{
+            "number" => 7,
+            "state" => "open",
+            "secret_type" => "slack_api_token",
+            "hypatia_location" => %{"error" => "no location names a file in the repository"}
+          }
+        ])
+
+      normalized = Hypatia.CLI.normalize_secret_alert(finding)
+      assert normalized.file == "."
+      assert normalized.detail.alert_number == 7
+
+      assert normalized.detail.location ==
+               %{status: "unavailable", reason: "no location names a file in the repository"}
+
+      assert {:ok, _} = Jason.encode(normalized)
+    end
   end
 
   describe "scan_from_path/1" do
