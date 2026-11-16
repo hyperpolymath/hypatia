@@ -1018,17 +1018,7 @@ defmodule Hypatia.CLI do
       if :secret_scanning_alerts in rules do
         case Hypatia.Rules.SecretScanningAlerts.scan_from_path(repo_path) do
           {:ok, %{findings: findings}} ->
-            normalized =
-              Enum.map(findings, fn f ->
-                %{
-                  rule_module: "secret_scanning_alerts",
-                  severity: to_string(f.severity),
-                  type: f.rule,
-                  file: Map.get(f, :file, ""),
-                  reason: f.reason,
-                  action: to_string(f.action)
-                }
-              end)
+            normalized = Enum.map(findings, &normalize_secret_alert/1)
 
             results ++ normalized
 
@@ -1176,6 +1166,23 @@ defmodule Hypatia.CLI do
     # no rule module can emit a finding without `support`, `evidence` and a
     # derived `level` (schema/findings.ncl; Hypatia.Verdict).
     |> Enum.map(&Hypatia.Verdict.annotate/1)
+  end
+
+  @doc false
+  # A secret-scanning finding in the scan's shared shape. The located line is
+  # kept when there is one, so the verdict span and SARIF point at the secret,
+  # and so is `detail`: the alert number, its URL and, when the finding is
+  # repository-level, why no file location was available.
+  def normalize_secret_alert(f) do
+    %{
+      rule_module: "secret_scanning_alerts",
+      severity: to_string(f.severity),
+      type: f.rule,
+      file: Map.get(f, :file, ""),
+      reason: f.reason,
+      action: to_string(f.action)
+    }
+    |> Map.merge(Map.take(f, [:line, :detail]))
   end
 
   # ─── Opt-in rule modules ─────────────────────────────────────────────

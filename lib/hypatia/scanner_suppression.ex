@@ -201,6 +201,21 @@ defmodule Hypatia.ScannerSuppression do
     end
   end
 
+  # Secret-scanning alerts come from GitHub, not from this scan's content
+  # patterns: each is a credential GitHub found committed to the repository.
+  # Their `file` is the secret's real location, which may be vendored or
+  # generated (`node_modules/`, `dist/`, `test/`). The universal excludes and
+  # default exemptions exist to quiet local pattern noise in such paths, and
+  # must not hide a leaked credential. Only a `.hypatia-ignore` entry that
+  # names this module explicitly suppresses one; GitHub's own dismissal
+  # vocabulary (`revoked`, `used_in_tests`, ...) is the usual way to accept
+  # an alert.
+  def suppressed?(file, "secret_scanning_alerts" = rule_module, rule_type, opts) do
+    repo_path = Keyword.get(opts, :repo_path, nil)
+    explicit = Map.take(user_exemptions(repo_path), [rule_module])
+    match_exemptions?(relative(file, repo_path), explicit, rule_module, rule_type)
+  end
+
   def suppressed?(file, rule_module, rule_type, opts) do
     repo_path = Keyword.get(opts, :repo_path, nil)
     rel = relative(file, repo_path)
