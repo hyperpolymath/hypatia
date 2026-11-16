@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: MPL-2.0
 = Where Hypatia.Kyaml differs from kyq, and why
 
-`Hypatia.Kyaml` differs from kyq's reference parser (`conformance/src/kyaml.js`
-at `4d1071df04d93e089500d58d0b6ba37bfcc75248`) only where kyq has a bug. Each one has a
-fix for kyq, with conformance fixtures; kyq's suite passes 377 of 377 with it.
-Delete a row when kyq carries the fix, and move `KYQ_REF` in
-`.github/workflows/ci.yml` past it. The differential test lists the one
-divergence its corpus run can meet (`@known_divergences`); the corpus test
-lists the fixture it reads differently (`@accepted_divergences`).
+== Current contract: no accepted divergences
+
+`KYQ_REF` and the vendored corpus now use published kyq commit
+`ca6f427e4c8ee936197517875deb99af0fde90d3` (contract 0.3.0, PR #22).
+PR #20 supplied the first five reconstructed fixes; #22 supplied the rest.
+The differential test permits no parser disagreement. Trailing commas are
+valid in the canonical corpus, so its former exception is removed too.
+Bridge-only I-JSON refusals remain distinct from parser errors; they are not
+KYAML divergences.
+
+On 16 November 2026, before changing the consumer pin, the current Hypatia
+parser and that published kyq revision agreed on 489 files: kyq's fixtures,
+Hypatia's workflows and the YAML test-suite streams pinned at
+`6ad3d2c62885d82fc349026c136ef560838fdf3d`. The independent test-suite validity
+and value check also passed. These receipts cover the tested corpus, not all
+possible YAML. CI repeats the comparison without an exception list.
+
+== Historical differences at the previous pin
+
+The table records defects at kyq
+`4d1071df04d93e089500d58d0b6ba37bfcc75248` and the corrections now adopted.
+It is retained as the explanation for the regression cases, not as an active
+allowlist. The old 377-test claim described an unpublished local series;
+the published replacement is the authority now.
 
 [cols="2,3,2",options="header"]
 |===
@@ -140,12 +157,7 @@ The port also carried one bug kyq does not have: a float literal that
 overflows with a negative exponent (`999…9e-1`, 400 digits) read as 0.0, where
 kyq gives Infinity. It now gives `:infinity` too.
 
-None of these occurs in the estate's block-style workflows, so the
-pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is eleven commits on
-`metadatastician/kyq` branch
-`fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
-code-point columns, the trailing comma, control characters, the thirteen
-rules, the test-suite rules, the printable set, YAML white space with the key
-limit, markers and continued properties, and a bare property's value), still
-to be opened there.
+The unavailable eleven-commit `fix/bom-and-block-scalar-comment` series was
+reconstructed in metadatastician/kyq PRs #20 and #22. Consumer qualification
+uses their published merge revision and independently rerun comparisons;
+the historical local branch is no longer a prerequisite for this adoption.

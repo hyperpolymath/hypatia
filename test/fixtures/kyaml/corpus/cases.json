@@ -64,6 +64,11 @@
       "documents": 1
     },
     {
+      "file": "valid/next-line-flow-and-block.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
       "file": "invalid/bare-cr-after-astral.yaml",
       "expect": "invalid",
       "code": "INVALID_NEWLINE",
@@ -77,6 +82,14 @@
       "code": "BOM_MIDSTREAM",
       "line": 2,
       "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/alias-decorated-next-line.yaml",
+      "expect": "invalid",
+      "code": "ALIAS_DECORATED",
+      "line": 2,
+      "column": 4,
       "path": ""
     },
     {
@@ -184,12 +197,9 @@
       "path": "metadata/name"
     },
     {
-      "file": "invalid/flow-trailing-comma.yaml",
-      "expect": "invalid",
-      "code": "FLOW_TRAILING_COMMA",
-      "line": 1,
-      "column": 17,
-      "path": ""
+      "file": "valid/flow-trailing-comma.yaml",
+      "expect": "valid",
+      "documents": 1
     },
     {
       "file": "invalid/huge-integer.yaml",
@@ -334,6 +344,14 @@
       "line": 1,
       "column": 7,
       "path": "args"
+    },
+    {
+      "file": "invalid/indicator-key.yaml",
+      "expect": "invalid",
+      "code": "PLAIN_INDICATOR",
+      "line": 2,
+      "column": 1,
+      "path": ""
     }
   ]
 }
