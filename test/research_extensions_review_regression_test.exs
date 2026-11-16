@@ -105,6 +105,11 @@ defmodule Hypatia.Rules.ResearchExtensionsReviewRegressionTest do
     end
   end
 
+  test "a dotted Docker image without an explicit registry is not an endpoint" do
+    steps = "- uses: docker://my.action:1\n  env:\n    K: ${{ secrets.TOKEN }}\n"
+    assert findings(steps) == []
+  end
+
   test "job environment overrides remove the workflow's shadowed secret" do
     assert findings("- run: echo ready", [],
              workflow_env: "TOKEN: ${{ secrets.OLD }}",

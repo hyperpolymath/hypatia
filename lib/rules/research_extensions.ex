@@ -777,7 +777,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # A URL's scheme (in any case, as clients read it), host, and port: digits,
   # or an expression (`:${{ vars.PORT }}`), whose value is known only at run time.
   # The schemes are the web's, and the databases' and brokers' a job reaches.
-  @url_host ~r<\b(https?|wss?|ssh|s?ftp|ftps|git|docker|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
+  # Docker names a registry only when a slash follows its host and optional port.
+  @url_host ~r<\b(docker(?=://#{@host}(?::\d{1,5})?/)|https?|wss?|ssh|s?ftp|ftps|git|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
   # A `user@host:path` remote. The path is not blank (`a@example.com: failed`
   # is prose) and not a port (`user:pass@host:5432/db` is a URL's userinfo),
   # though it may start with a digit (`git@gitlab.com:123team/x.git`).
