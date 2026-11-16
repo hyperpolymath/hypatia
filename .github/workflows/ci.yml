@@ -355,6 +355,7 @@ jobs:
             test/rules/rsr_conformance_test.exs \
             test/rules/audit_prevention_test.exs \
             test/security_errors_test.exs \
+            test/batch_security_scan_category_test.exs \
             test/research_extensions_test.exs \
             test/research_extensions_equivalence_test.exs \
             test/workflow_test.exs \

@@ -104,8 +104,9 @@ from fixes to rules ❌ *GitHub integration* - No CI/CD calling hypatia
 ✅ *Code-safety rules* - Rust / (legacy ReScript) / CORS / auth
 patterns (now `+lib/rules/code_safety.ex+`) ✅ *hypatia-cli.sh* -
 Command-line scanner (ripgrep-based) ✅ *fleet-coordinator.sh* - Bot
-execution & coordination ✅ *Learning engine* - Records fix outcomes
-and promotes fix types when `+promote_patterns+` is called (now
+execution & coordination ✅ *Learning engine* - Records fix outcomes;
+`+promote_patterns+` marks qualifying fix types as promoted in the
+module's own state, which nothing outside it acts on yet (now
 `+lib/rules/learning.ex+`) ✅ *GitHub Actions
 template* - CI/CD integration
 

@@ -766,7 +766,7 @@ builtins only); the job's `derive` step fails the run when this row has no
 passing receipt. The file was renamed and its comments and source-side
 identifiers reworded on 2026-11-16 (the theorems and tables are unchanged);
 its source SHA-256 is now
-df7728c268397de379cee7274dcfd05c4609fc09e48fea1e00271a0ded4e26aa, which
+ac4eefef156eb8850c112badded34bd177eb05eb52574e73c43231321cb419c8, which
 the next Verify Proofs run is the first to check in CI. This grades the
 finite model only. PWG-3 is not a discharge: the Rocq and Lean legs are
 still owed (PROOF-POLICY §8.4).
