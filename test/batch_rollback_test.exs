@@ -4,7 +4,7 @@
 # E0-27: BatchRollback.rollback/2 records the outcomes that it marks through the
 # trusted entry OutcomeTracker.record_batch_rollback/4, because the public
 # record_outcome/5 no longer accepts a rollback_requested row.
-defmodule Hypatia.Safety.BatchRollbackTest do
+defmodule Hypatia.Safety.BatchRollbackTrustedEntryTest do
   use ExUnit.Case, async: false
 
   alias Hypatia.OutcomeTracker
