@@ -581,14 +581,16 @@ jobs:
   # Combined Status Check
   # ============================================================================
   ci-status:
-    name: CI Status
+    name: CI/gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    permissions: {}
     needs:
       - rust-check
       - rust-fmt
       - rust-test
       - rust-test-coverage
+      - detect-haskell
       - haskell-build
       - haskell-lint
       - k9iser-validate
@@ -599,28 +601,30 @@ jobs:
     steps:
       - name: Check all jobs status
         env:
-          # The KYAML and Elixir format gates count only when they ran to
-          # success: a cancelled or skipped run proved nothing, so it fails the
-          # rollup too.
-          KYAML_CONFORMANCE: ${{ needs.kyaml-conformance.result }}
-          ELIXIR_FORMAT: ${{ needs.elixir-format.result }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          if [[ "$KYAML_CONFORMANCE" != "success" ]]; then
-            echo "::error::kyaml-conformance did not succeed (result: $KYAML_CONFORMANCE)"
-            exit 1
-          fi
-          if [[ "$ELIXIR_FORMAT" != "success" ]]; then
-            echo "::error::elixir-format did not succeed (result: $ELIXIR_FORMAT)"
-            exit 1
-          fi
-          if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \
-             [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
-             [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
-             [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
-             [[ "${{ needs.k9iser-validate.result }}" == "failure" ]] || \
-             [[ "${{ needs.elixir-compile.result }}" == "failure" ]]; then
-            echo "One or more jobs failed"
-            exit 1
-          fi
-          echo "All CI jobs passed successfully"
+          set -euo pipefail
+          mandatory=(rust-check rust-fmt rust-test rust-test-coverage detect-haskell
+                     k9iser-validate elixir-compile elixir-format kyaml-conformance)
+          for job in "${mandatory[@]}"; do
+            result=$(jq -r --arg job "$job" '.[$job].result // "missing"' <<< "$NEEDS_JSON")
+            if [[ "$result" != success ]]; then
+              echo "::error::$job did not succeed (result: $result)"
+              exit 1
+            fi
+          done
+          # Only the explicitly absent Haskell tree permits skipped jobs.
+          present=$(jq -r '.["detect-haskell"].outputs.present // "missing"' <<< "$NEEDS_JSON")
+          case "$present" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) echo '::error::Haskell presence was not established'; exit 1 ;;
+          esac
+          for job in haskell-build haskell-lint; do
+            result=$(jq -r --arg job "$job" '.[$job].result // "missing"' <<< "$NEEDS_JSON")
+            if [[ "$result" != "$expected" ]]; then
+              echo "::error::$job expected $expected (result: $result)"
+              exit 1
+            fi
+          done
+          echo "CI/gate passed: ${#mandatory[@]} mandatory jobs succeeded; Haskell jobs: $expected."
