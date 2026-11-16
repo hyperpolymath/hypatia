@@ -6,7 +6,7 @@
 
 ....
 ┌─────────────────────────────────────────────────────────────────┐
-│                     AUTONOMOUS LEARNING LOOP                    │
+│                          LEARNING LOOP                          │
 └─────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -104,8 +104,9 @@ from fixes to rules ❌ *GitHub integration* - No CI/CD calling hypatia
 ✅ *Code-safety rules* - Rust / (legacy ReScript) / CORS / auth
 patterns (now `+lib/rules/code_safety.ex+`) ✅ *hypatia-cli.sh* -
 Command-line scanner (ripgrep-based) ✅ *fleet-coordinator.sh* - Bot
-execution & coordination ✅ *Learning engine* - Auto-generates rules
-from patterns (now `+lib/rules/learning.ex+`) ✅ *GitHub Actions
+execution & coordination ✅ *Learning engine* - Records fix outcomes
+and promotes fix types when `+promote_patterns+` is called (now
+`+lib/rules/learning.ex+`) ✅ *GitHub Actions
 template* - CI/CD integration
 
 === How To Use
@@ -188,7 +189,7 @@ more than 30% of its fixes marked false positive | not promoted
 5+ fixes, success >= 0.75, false positives <= 30%| promoted
 ....
 
-==== Auto-Generated Rule Example
+==== Rule Promotion and New Recipes
 
 `+lib/rules/learning.ex+` promotes a fix type only when
 `+promote_patterns+` is called; nothing in `+lib/+` calls it on a
@@ -286,7 +287,8 @@ Scan of svalinn (2026-01-25):
 === Architecture Benefits
 
 [arabic]
-. *Autonomous* - Learns and improves without manual intervention
+. *Feedback-driven* - Fix outcomes update confidence; rule promotion
+runs when `+promote_patterns+` is called
 . *Incremental* - Starts with basic rules, grows organically
 . *Evidence-based* - Rules generated from actual observations
 . *Self-correcting* - Failed fixes reduce pattern confidence
@@ -303,8 +305,9 @@ After: - ✅ GitHub Actions watch alarm (CI/CD) - ✅ hypatia-cli detects
 smoke (scanner) - ✅ fleet-coordinator dispatches trucks (bot execution)
 - ✅ robot-repo-automaton puts out fire (auto-fix) - ✅ learning_engine
 improves detection (fewer false alarms) - ✅ System gets smarter with
-every fire (autonomous learning)
+every fire (fix outcomes feed confidence)
 
 '''''
 
-*The system is now fully operational and autonomous.*
+*The pipeline is wired end to end. Rule promotion is not automatic: it
+runs when `+promote_patterns+` is called.*
