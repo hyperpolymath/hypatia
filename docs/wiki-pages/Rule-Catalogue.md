@@ -13,6 +13,7 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 | `baseline_health` | BH001 BH002 BH003 BH004 BH005 BH006 BH007 BH008 | Detects degraded `main`-branch baseline conditions that allow silent rot. |
 | `branch_protection` | BP001 BP002 BP003 BP004 BP005 BP006 BP007 BP008 BP009 | Branch-protection hygiene rules drawn from the CIS GitHub Benchmark, |
 | `build_system_rules` | — | Build-tool configuration anti-patterns that block estate CI but slip past |
+| `ci_failure_triage` | — | Symbolic triage of a failed CI run: which layer failed, what to do, and |
 | `cicd_rules` | — | Primary Elixir CI/CD policy rules. |
 | `code_safety` | — | Primary Elixir rules for code safety. |
 | `code_scanning_alerts` | CSA001 CSA002 CSA003 CSA004 CSA005 CSA006 | GitHub Code Scanning alert querying (CodeQL + third-party SARIF). |
@@ -24,6 +25,7 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 | `green_web` | — | Green Web Foundation certification checks for hyperpolymath repositories. |
 | `honest_completion` | — | Honest completion audit -- cross-references claimed completion percentages |
 | `implementation_inside_canon` | — | Executable evaluator for the standards-authored HYP-S009 rule. |
+| `js_call_scan` | — | A small JavaScript-aware reader for one question: does a call to a |
 | `learning` | — | Learning engine rules. |
 | `migration_rules` | — | Primary Elixir ReScript migration rules. |
 | `moved_repositories` | — | Versioned records of confirmed repository moves relevant to reusable workflows. |
@@ -45,8 +47,9 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 | `standards_repo` | — | The names of the estate standards repository. |
 | `strategy_drift` | — | N4: Detects strategy-shift events and flags previously-failed attempts |
 | `structural_drift` | SD001 SD002 SD003 SD004 SD005 SD006 SD007 SD008 SD009 SD010 SD011 SD013 SD014 SD021 SD022 SD023 SD024 | Structural drift detection rules. |
+| `structured_format` | — | SF001: advisory detection of an Elixir regex that reconstructs workflow |
 | `supply_chain` | SC001 SC002 SC003 SC004 SC005 SC006 SC007 SC008 SC009 SC010 SC011 SC012 SC013 | Supply-chain integrity rules drawn from OSSF Scorecard, SLSA, OWASP |
-| `workflow_audit` | ERR-WF-013 ERR-WF-014 WF-025 WF013 WF014 WF015 WF016 WF017 WF018 WF019 WF020 WF021 WF022 WF023 WF024 WF025 WF026 WF027 WF028 | CI/CD workflow audit rules. |
+| `workflow_audit` | ERR-WF-013 ERR-WF-014 WF-025 WF013 WF014 WF015 WF016 WF017 WF018 WF019 WF020 WF021 WF022 WF023 WF024 WF025 WF026 WF027 WF028 WF029 WF030 WF031 WF032 WF033 | CI/CD workflow audit rules. |
 | `workflow_hardening` | WH001 WH002 WH003 WH004 WH005 WH006 WH007 WH008 WH009 WH010 WH011 WH012 WH013 WH014 | Static detection of dangerous GitHub Actions workflow patterns. |
 
 ## ID families

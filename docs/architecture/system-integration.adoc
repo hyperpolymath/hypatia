@@ -66,15 +66,15 @@
          │  • Frequencies   │  │  fixes based on  │
          │  • Fix outcomes  │  │  known patterns  │
          │                  │  │                  │
-         │  After 5 obs.:   │  │  Records:        │
-         │  → Propose rule  │  │  • Success rate  │
+         │  On promote:     │  │  Records:        │
+         │  >= 5 fixes and  │  │  • Success rate  │
          │                  │  │  • Failure rate  │
-         │  After 10 obs +  │  │                  │
-         │  3 successes:    │  │  ← Feeds back    │
-         │  → Auto-approve  │  │                  │
-         │  → Add to        │  │                  │
-         │     learned      │  │                  │
-         │     rules        │  │                  │
+         │  >= 75% success, │  │                  │
+         │  FP <= 30%:      │  │  ← Feeds back    │
+         │  → promoted      │  │                  │
+         │  (manual call:   │  │                  │
+         │  promote_patterns│  │                  │
+         │  ; no timer)     │  │                  │
          └──────┬───────────┘  └─────┬────────────┘
                 │                    │
                 │ New rules          │ Fix results
@@ -180,18 +180,21 @@ cd gitbot-fleet
 ==== Threshold Phase
 
 ....
-Observations | Action
--------------|-----------------------------------
-1-4          | Just observe and count
-5            | Generate rule proposal → manual review
-10 + 3 fixes | Auto-approve → add to the learned rules
+At a promote_patterns call, for one fix type     | Action
+-------------------------------------------------|---------------------
+fewer than 5 recorded fixes                      | not promoted
+success rate below 0.75                          | not promoted
+more than 30% of its fixes marked false positive | not promoted
+5+ fixes, success >= 0.75, false positives <= 30%| promoted
 ....
 
 ==== Auto-Generated Rule Example
 
-After seeing `+useUnsafePointer()+` 10 times, the learning pipeline in
-`+lib/rules/learning.ex+` auto-generates a rule module at confidence
-0.50 and promotes it via the Bayesian update loop once fixes succeed.
+`+lib/rules/learning.ex+` promotes a fix type only when
+`+promote_patterns+` is called; nothing in `+lib/+` calls it on a
+timer. Rules for uncovered categories come from `+recipe_generator.ex+`
+at confidence 0.50, and the Bayesian loop in `+outcome_tracker.ex+`
+updates that confidence as fixes succeed or fail.
 The Elixir rule for this pattern family lives in
 `+lib/rules/code_safety.ex+`. The rules engine is 100% Elixir
 (`+lib/rules/*.ex+`); see `+docs/rules/security-rule-provenance.adoc+`

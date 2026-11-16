@@ -1002,14 +1002,6 @@ curl -u root:password http://localhost:8529/_api/query/slow
 kubectl top pods -n hypatia
 ----
 
-. Review heap usage:
-+
-[source,bash]
-----
-kubectl exec -it deployment/hypatia-engine -- \
-  swipl -g "statistics(heap, H), format('Heap: ~w~n', [H]), halt"
-----
-
 == Reference
 
 * <<api-reference.adoc#,API Reference>>
