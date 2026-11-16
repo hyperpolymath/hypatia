@@ -12,6 +12,49 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== WH013 reads the canonical workflow model; `Hypatia.WorkflowYaml` is gone (2026-11-16)
+
+WH013 now reads `Hypatia.Workflow`, as RE001, RE002 and WH014 do. With that,
+nothing reads `Hypatia.WorkflowYaml`, the line reader the hardening rules
+shared, and it is deleted. Each change below has a test in
+`test/workflow_hardening_test.exs` ("WH013 reads the parsed workflow model
+(#971)") that fails on the line reader:
+
+* **A grant is a `permissions:` value.** `permissions: {contents: write}`,
+  the form WH013's own fix text recommends, now counts as a grant. Text that
+  only looks like one, such as a `run:` script that writes `contents: write`
+  into a file, no longer does.
+* **Writes, masks and credentials are read from values and keys, not
+  lines.** A YAML comment naming `git push origin main` is not a write. A
+  `GH_TOKEN:` line that a script writes into a file is not the job's
+  credential. A workflow-level `env:` written after `jobs:` is inherited like
+  one written before it.
+* **Flow-style jobs are judged per job.** The line reader could not split
+  `jobs: { … }`, so it judged the whole file as one body: never credentialed,
+  and never masked by a step's `continue-on-error`.
+* **An unreadable workflow is reported, not guessed at.** As RE001 and WH014
+  do, a workflow the reader refuses gets a `:warn` finding at the error's
+  line if its text names a write. Otherwise it is skipped.
+
+The tests also gain six WH014 cases (KYAML, flow `with:`, folded and quoted
+run scripts, `defaults` placement, expression working directories and
+unreadable files). They pass on the WH014 above.
+
+RE003, RE005 and `WorkflowAudit.check_sha_pinned_toolchain_without_input/1`
+still read lines. Their KYAML view, `ResearchExtensions.flow_to_block/1`,
+moves back into that module unchanged, so their findings, and the line
+numbers the toolchain fixer rewrites by, do not move. Moving them onto the
+model stays under #971.
+
+Measured on 2026-11-16 with Elixir 1.19.4 on OTP 27.3.4.19, comparing main
+(6f3f16f) with this change on snapshots of hyperpolymath/hypatia,
+rsr-template-repo, choreographic-types and mathesis, and
+metadatastician/standards and kyq. Every workflow rule (WorkflowAudit,
+WorkflowHardening and ResearchExtensions) gives the same findings before and
+after. WH013 does not fire on these trees, so the comparison was repeated on
+perturbed copies that make it fire (every `contents: write` narrowed to
+`read`, 12 WH013 findings), again with the same findings.
+
 ==== WH014 reads the canonical workflow model (2026-11-16)
 
 The masked-report/SARIF-upload rule reads jobs, steps, inputs and working
