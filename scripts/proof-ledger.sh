@@ -192,9 +192,16 @@ check() {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "::error::proof-ledger: check needs a git checkout, to confirm each file is committed"; return 1
   fi
+  # One read of the index for the whole check: path -> mode.
+  local -A index_mode=()
+  local entry meta path
+  while IFS= read -r -d '' entry; do
+    meta=${entry%%$'\t'*}; path=${entry#*$'\t'}
+    index_mode["$path"]=${meta%% *}
+  done < <(git ls-files -s -z)
   local file name mode
   while IFS=$'\t' read -r id file name; do
-    mode=$(git ls-files -s -z -- ":(literal)$file" 2>/dev/null | tr '\0' '\n' | awk -v f="$file" -F'\t' '$2 == f { split($1, m, " "); print m[1] }' || true)
+    mode=${index_mode["$file"]:-}
     if [ -z "$mode" ]; then
       echo "::error::proof-ledger: $id names $file, which is not a file committed to this repository"; fails=$((fails + 1)); continue
     fi
