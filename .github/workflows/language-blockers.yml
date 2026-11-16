@@ -65,6 +65,21 @@ jobs:
           fi
           echo "✅ No TypeScript/ReScript sources"
 
+      - name: Retired rule-language sources are banned
+        run: |
+          set -euo pipefail
+          # Hypatia's rules are Elixir (lib/rules, ADR-001). A tracked .lgt
+          # or .logtalk source fails the run: the retired rule engine stays out.
+          hits=$(git ls-files '*.lgt' '*.logtalk' || true)
+          n=$(printf '%s' "$hits" | grep -c . || true)
+          echo "retired rule-language sources in tree: ${n}"
+          if [ "$n" -gt 0 ]; then
+            echo "::error::Retired rule-language sources are banned; rules are Elixir (lib/rules, ADR-001). Found:"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "✅ No retired rule-language sources"
+
       - name: Banned runtimes are not provisioned in mise.toml
         run: |
           set -euo pipefail
