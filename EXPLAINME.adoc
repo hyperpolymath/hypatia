@@ -295,5 +295,5 @@ Census, from `scripts/proof-ledger.sh check`:
 33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
 ----
 
-Of the three theory rows, `audit-prevention-correspondence` is `PWG-3`;
+Of the three theory rows, `alert-table-correspondence` is `PWG-3`;
 `pagerank-convergence` and `esn-echo-state` are ungraded and `open`.

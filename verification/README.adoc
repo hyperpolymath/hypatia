@@ -9,7 +9,7 @@ Idris2, Lean 4, TLA+ and Agda proof sources for Hypatia's type-level guarantees.
   normative ABI in `src/Hypatia/ABI/`
 * `proofs/lean4/`, `proofs/tlaplus/` — Lean 4 and TLA+ proofs
 * `proofs/agda/` — Agda correspondence model for the security-alert
-  rule tables (`AuditPreventionCorrespondence.agda`; `PWG-3` receipt in
+  rule tables (`AlertTableCorrespondence.agda`; `PWG-3` receipt in
   `PROOF-STATUS.adoc`), and the models of the E0 qualification gate
   (`E0Model.agda`, `E0Import.agda`, `E0Agreement.agda`, `E0ImportInstance.agda`,
   and the generated `E0ModelTables.agda`)
@@ -32,7 +32,7 @@ K). A missing `agda` binary is an open proof obligation, never a skip:
 [source,bash]
 ----
 cd verification/proofs/agda
-agda --safe --without-K --cubical-compatible AuditPreventionCorrespondence.agda
+agda --safe --without-K --cubical-compatible AlertTableCorrespondence.agda
 ----
 
 The E0 models are checked the same way, each file in turn (they also carry

@@ -335,7 +335,7 @@ defmodule Hypatia.Rules.SecurityErrors do
   #
   # Full clause-by-clause record: docs/rules/security-rule-provenance.adoc.
   # The table correspondence is checked in
-  # verification/proofs/agda/AuditPreventionCorrespondence.agda.
+  # verification/proofs/agda/AlertTableCorrespondence.agda.
 
   @alert_categories %{
     "TokenPermissionsID" => :workflow_security,

@@ -34,7 +34,7 @@
 -- claim is made.
 -- No postulates, no unsafe options, no standard-library dependency.
 
-module AuditPreventionCorrespondence where
+module AlertTableCorrespondence where
 
 open import Agda.Builtin.Bool
 open import Agda.Builtin.Equality

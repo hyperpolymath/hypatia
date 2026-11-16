@@ -116,7 +116,7 @@ position as `Category` in another.
 Source of record: ECHIDNA's security-learning rule table (added
 2025-12-29). Target: `Hypatia.Rules.SecurityErrors`, except where
 stated. The finite correspondence of the 18 alert types is checked in
-`verification/proofs/agda/AuditPreventionCorrespondence.agda` (see
+`verification/proofs/agda/AlertTableCorrespondence.agda` (see
 `verification/PROOF-STATUS.adoc`, section 8); runtime behaviour is
 pinned by `test/security_errors_test.exs`.
 
