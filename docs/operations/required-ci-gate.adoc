@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Required CI gate
+
+The Branch-Floor ruleset requires the exact check name `CI/gate`. The
+`ci-status` job in `ci.yml` emits that name on the existing push, pull-request
+and manual triggers. It waits for every other job in that workflow and runs
+even when a dependency fails or is skipped.
+
+Nine mandatory jobs must each return success, including Rust coverage and
+Haskell-tree detection. The two Haskell jobs may be skipped only when the
+successful detector explicitly says the tree is absent. Missing, cancelled,
+failed or unexpected results fail the gate. An unavailable detector output
+cannot authorize a skip. The summary names this denominator.
+
+This aggregates the primary CI workflow; it does not replace the separate
+integration, governance, security or reviewer checks. It does not assert a
+coverage percentage. GitHub's native coverage threshold rule evaluates
+uploaded coverage and needs Code Quality plus an upload workflow; the Rust
+coverage report generation here alone does not establish that integration.
+No branch rule or coverage threshold is changed by this gate.
