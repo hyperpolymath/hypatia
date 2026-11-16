@@ -27,8 +27,8 @@ state and commitments. Companion detail:
   model checking, which is `tested-only`, not a proof). What each artefact
   proves, and how strongly, is the proof ledger
   (`verification/proof-ledger.jsonl`, rendered in
-  `verification/PROOF-STATUS.adoc#proof-ledger`): 33 proven of 53;
-  0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Four of the
+  `verification/PROOF-STATUS.adoc#proof-ledger`): 34 proven of 55;
+  0 proven-with-postulates, 12 tested-only, 2 argued, 7 open. Four of the
   Lean proofs rested on the Lean kernel axioms `propext` and `Quot.sound`,
   which a source scan does not see and `Lean.collectAxioms` does; they moved
   to Idris2 on 2026-11-09, which has no such axioms. *Zero escape hatches outside

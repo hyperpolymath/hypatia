@@ -97,8 +97,8 @@ ____
   safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
   limiting), one Agda model of the security-alert rule tables, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
-  the code, not the Elixir runtime itself. Proof ledger: 33 proven of 53; 0 proven-with-postulates,
-  11 tested-only, 2 argued, 7 open
+  the code, not the Elixir runtime itself. Proof ledger: 34 proven of 55; 0 proven-with-postulates,
+  12 tested-only, 2 argued, 7 open
 ____
 
 How this is implemented::
@@ -292,7 +292,7 @@ Census, from `scripts/proof-ledger.sh check`:
 
 [source,text]
 ----
-33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
+34 proven of 55; 0 proven-with-postulates, 12 tested-only, 2 argued, 7 open.
 ----
 
 Of the three theory rows, `alert-table-correspondence` is `PWG-3`;

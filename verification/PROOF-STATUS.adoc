@@ -60,7 +60,7 @@ receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or
 a stale underclaim.
 Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
-*Census:* 33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
+*Census:* 34 proven of 55; 0 proven-with-postulates, 12 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
 [cols="3,1,2,2,2",options="header"]
 |===
@@ -131,6 +131,12 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/VerisimdbConnector.idr+`: `+cleanFindingCompleteness+`, `+cleanFindingSoundness+`, `+factPreservesData+`, `+parseSeverityTotal+`
 |Over the Idris2 records; lib/verisim_connector.ex is not shown to follow them
+
+|An actions.lock is closed exactly when its dangling list is empty; that list is sound and complete, closure is decidable, and each of the four corpus rows transcribed into the model evaluates to the dangling list stated for it (standards#963). That those rows and lists match the fixtures and expected.tsv is the tested-only row actions-lock-closure-corpus
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ActionsLockClosure.idr+`: `+closedIffNoDangling+`, `+danglingSound+`, `+danglingComplete+`, `+decClosed+`, `+rowClosedV00x+`, `+rowClosedCaseVariant+`, `+rowDanglingNested+`, `+rowDanglingWorkflowRef+`
+|Over the Idris2 model; lib/rules/actions_lock.ex and standards scripts/close-lock.sh agree with it on the corpus only (row actions-lock-closure-corpus), and the owner/repo fold happens before the model
 
 |Quarantine triggers, release and routing blockage behave as specified (P5)
 |proven
@@ -294,6 +300,12 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+test/security_errors_test.exs+`: `+SecurityErrors+`
 |Example-based; the transcription into the Agda table is not itself checked. Bounds: ExUnit cases over the transcribed alert types
 
+|ActionsLock.parse/1 reproduces every expected.tsv row of the shared closure corpus, and the Idris2 model transcribes every fixture and states every row
+|tested-only
+|ExUnit (mix test)
+|`+test/rules/actions_lock_closure_corpus_test.exs+`: `+ActionsLockClosureCorpusTest+`
+|The corpus only; standards close-lock-test.sh replays the same byte-identical corpus against close-lock.sh. Bounds: 5 corpus locks, 6 refs, lockfile versions v0.0.2 and v0.0.3
+
 |Damped PageRank iteration converges to a unique stationary vector
 |open, ungraded
 |-
@@ -410,18 +422,20 @@ and fail 3.2.2, for every a2ml state (`+duplicateDeclaresNothing+`,
 `+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
 `+listlessFailsCriterion+`). Fallback: no clause, the a2ml reading
 (`+fallbackNoDeed+`, `+fallbackNoClause+`,
-`+fallbackCriterionNoClause+`). Consistency: 3.2.2 passes iff
-`+scorecardProfilePresent+` whenever the deed decides
-(`+deedDecidedAgrees+`, the bffd76a fix) or the a2ml is not present-but-
-declaring-nothing (`+a2mlDecidedAgrees+`); they disagree in exactly that
-case (`+disagreementIsExactly+`) |PROVEN — Verify Proofs run 42634000625, idris2 --check job 129217248108, at commit 34c7bc7cff0cf54b1b5707a497d9f8abf826e844 (Idris2 v0.7.0, ABI package build)
+`+fallbackCriterionNoClause+`). Consistency: 3.2.2 is the verdict of the
+capability reader (`+verdictOf+`), so it passes iff
+`+scorecardProfilePresent+` for every source (`+verdictAgrees+`,
+`+profilePresentAgrees+`; the bffd76a fix is the instance
+`+deedDecidedAgrees+`); the case that diverged before the 3.2.2 fix now
+fails (`+emptyA2mlFails+`) |PROVEN — Verify Proofs run 43939522672, idris2 --check job 133552988403, at commit 99a40d6ab758d084f352e0bd2d43ba643041ee06 (Idris2 v0.7.0, ABI package build). The earlier receipt (run 42634000625 at 34c7bc7c) covered the pre-fix model
 
 |`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
 the profile-reader cases of test/rules/rsr_conformance_test.exs stated
 against the model and accepted by evaluation (`+deedEraDeclares+`,
 `+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
 `+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
-`+a2mlOnly+`, `+dupAgrees+`) |TESTED — accepted in the same job
+`+a2mlOnly+`, `+dupAgrees+`, `+emptyA2mlFailsHere+`, `+emptyA2mlNotPresent+`,
+`+emptyA2mlAgrees+`, `+a2mlListPasses+`) |TESTED — accepted in the same job
 
 |`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
 rejection: a duplicated clause counted as a present profile is refused at
@@ -439,6 +453,11 @@ rejection: a list-less clause falling back to the a2ml is refused at
 a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
 — refused at `invalid` in the same job
 
+|`+tests/reject/EmptyA2mlPassesProfileCriterion.idr+` |Idris2 |Expected
+rejection: 3.2.2 passing with no deed and an a2ml that yields no
+capabilities list (the pre-fix behaviour) is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job ("Mismatch between: Pass and Fail.")
+
 |Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
 functions behave as the Elixir functions their header names. Argued by
 review; no kernel checked it, and the Elixir is not extracted from the
@@ -446,15 +465,9 @@ model |ASSUMED
 
 |Runtime behaviour, lib/rules/rsr_conformance.ex |Elixir |Deed era,
 deed beside a2ml, duplicated, list-less and nested clauses, and 3.2.2 on a
-duplicated or list-less clause: test/rules/rsr_conformance_test.exs
-(sampled cases) |TESTED
-
-|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |3.2.2 and the scorecard's
-profile_present can never disagree. False of the code as it stands: with
-no deed clause, 3.2.2 checks only that rsr-profile.a2ml exists, while the
-scorecard needs it to yield a capabilities list, so an a2ml that does not
-parse or carries no list passes 3.2.2 with no profile present
-(`+residualDivergence+`) |OPEN
+duplicated or list-less clause, and 3.2.2 on an a2ml with and without a
+capabilities list: test/rules/rsr_conformance_test.exs (sampled cases)
+|TESTED
 |===
 
 ==== secret-alerts line contract (HYP-01, 2026-11-09)
@@ -509,7 +522,10 @@ standards#963). `+scripts/close-lock.sh --check+` in hyperpolymath/standards
 is a second implementation. The two share a five-row corpus,
 `+test/fixtures/actions_lock/closure/+`, which is byte-identical to standards'
 `+scripts/tests/fixtures/actions-lock-closure/+`. This is an engineering
-proof, so it carries §5 tokens only and no PWG.
+proof, so it carries §5 tokens only and no PWG. The canonical record is
+two rows of <<proof-ledger>>: `actions-lock-closure` (the model, proven) and
+`actions-lock-closure-corpus` (the corpus test, tested-only). This section
+explains them; where it and the ledger differ, the ledger wins.
 
 [width="100%",cols="28%,14%,42%,16%",options="header",]
 |===
@@ -797,9 +813,9 @@ inventory row above. These are properties of the model, not of the Elixir.
   `+listlessFailsCriterion+`
 * *P9.3* Fallback: `+fallbackNoDeed+`, `+fallbackNoClause+`,
   `+fallbackCriterionNoClause+`
-* *P9.4* Consistency of 3.2.2 with the scorecard: `+deedDecidedAgrees+`,
-  `+a2mlDecidedAgrees+`; the exact residual: `+disagreementIsExactly+`,
-  `+residualDivergence+`
+* *P9.4* Consistency of 3.2.2 with the scorecard, for every source:
+  `+verdictAgrees+`, `+profilePresentAgrees+`, `+deedDecidedAgrees+`; the
+  formerly divergent case now fails: `+emptyA2mlFails+`
 
 === Dangerous Pattern Audit
 
