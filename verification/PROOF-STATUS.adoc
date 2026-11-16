@@ -792,6 +792,8 @@ inventory row above. These are properties of the model, not of the Elixir.
 
 === Coverage
 
+[cols="2,3,3"]
+|===
 |API type safety |`+Types.idr+`, `+GraphQL.idr+`, `+REST.idr+`,
 `+GRPC.idr+`, `+FFI.idr+` |Full
 
