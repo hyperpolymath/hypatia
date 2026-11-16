@@ -34,7 +34,7 @@
     "5 neural networks (Graph of Trust, MoE, LSM, ESN, RNN) in coordinator GenServer"
     "VQL as the query interface to verisimdb-data — no raw SQL or direct file reads"
     "JSONL dispatch manifests for fleet execution layer"
-    "Pure-Elixir rule engine in lib/rules/*.ex for error catalog and pattern detection — no Logtalk/SWI-Prolog (ADR-001)"
+    "Pure-Elixir rule engine in lib/rules/*.ex for error catalog and pattern detection (ADR-001)"
     "Idris2 ABI for Types, GraphQL, gRPC, REST with dependent type proofs"
     "Zig FFI with 7 exported functions for C ABI bridge"
   )

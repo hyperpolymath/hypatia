@@ -125,7 +125,7 @@ cicd_rules/banned_language_file:resolve.py
 # self-flagging.
 # code_safety/ncl_docker_not_podman:.machine_readable/self-validating/hypatia-metadata.k9.ncl
 
-# ─── 2026-11-01 Logtalk migration coordination packets ─────────────────
+# ─── 2026-11-01 sibling coordination packets ───────────────────────────
 #
 # These two packets quote epistemic-types' OWN `src/EpistemicTypes/`
 # paths and Agda checker command verbatim, because the sibling issue is

@@ -11,7 +11,7 @@ ISSUE_COUNT=0
 
 echo "=== Hypatia POC Scanner ==="
 echo "Target: $TARGET_REPO"
-echo "Scanning for security patterns from code-safety-lessons.lgt"
+echo "Scanning for security patterns from lib/rules/code_safety.ex"
 echo ""
 
 # Color codes
@@ -242,9 +242,9 @@ else
     echo -e "${RED}✗ Security issues require attention${NC}"
     echo ""
     echo "These patterns map to hypatia rules:"
-    echo "  - code-safety-lessons.lgt: has_unsafe_crash, has_unsafe_panic"
-    echo "  - code-safety-lessons.lgt: has_cors_misconfiguration"
-    echo "  - code-safety-lessons.lgt: has_auth_bypass, has_privilege_escalation"
+    echo "  - unsafe crash / panic patterns (lib/rules/code_safety.ex)"
+    echo "  - CORS misconfiguration (lib/rules/code_safety.ex)"
+    echo "  - auth bypass / privilege escalation (lib/rules/code_safety.ex)"
     echo ""
     echo "Run the hypatia CLI for detailed analysis and fix suggestions."
     exit 1
