@@ -1018,17 +1018,7 @@ defmodule Hypatia.CLI do
       if :secret_scanning_alerts in rules do
         case Hypatia.Rules.SecretScanningAlerts.scan_from_path(repo_path) do
           {:ok, %{findings: findings}} ->
-            normalized =
-              Enum.map(findings, fn f ->
-                %{
-                  rule_module: "secret_scanning_alerts",
-                  severity: to_string(f.severity),
-                  type: f.rule,
-                  file: Map.get(f, :file, ""),
-                  reason: f.reason,
-                  action: to_string(f.action)
-                }
-              end)
+            normalized = Enum.map(findings, &normalize_secret_alert/1)
 
             results ++ normalized
 
@@ -1184,6 +1174,21 @@ defmodule Hypatia.CLI do
   # only when named in `--rules` (see @opt_in_rule_modules) until canary
   # scans have cleared their false positives; the estate gate's
   # `block-on-high` would otherwise turn every new finding into a red CI.
+  @doc false
+  # A secret-scanning finding in the scan's shared shape. The located line is
+  # kept when there is one, so the verdict span and SARIF point at the secret.
+  def normalize_secret_alert(f) do
+    %{
+      rule_module: "secret_scanning_alerts",
+      severity: to_string(f.severity),
+      type: f.rule,
+      file: Map.get(f, :file, ""),
+      reason: f.reason,
+      action: to_string(f.action)
+    }
+    |> Map.merge(Map.take(f, [:line]))
+  end
+
   defp opt_in_findings(repo_path, rules) do
     Enum.flat_map(@opt_in_rule_modules, fn mod ->
       if mod in rules, do: run_opt_in(mod, repo_path), else: []

@@ -311,7 +311,7 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
 
       request = fn url ->
         Agent.update(asked, &[url | &1])
-        {:ok, body(~s([{"details":{"path":"f.txt","start_line":1}}]))}
+        {:ok, body(~s([{"type":"commit","details":{"path":"f.txt","start_line":1}}]))}
       end
 
       alerts =
@@ -408,6 +408,81 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
         |> Hypatia.Verdict.token()
 
       assert token.span == %{file: "config/prod.env", start_line: 12, end_line: 12}
+    end
+  end
+
+  describe "review follow-ups (#1184)" do
+    test "a wiki_commit location is not a file of the scanned repository" do
+      locations = [
+        %{"type" => "wiki_commit", "details" => %{"path" => "Home.md", "start_line" => 3}},
+        %{"type" => "commit", "details" => %{"path" => "src/app.env", "start_line" => 9}}
+      ]
+
+      assert SecretScanningAlerts.location_from(locations) ==
+               %{"path" => "src/app.env", "start_line" => 9}
+
+      assert %{"error" => _} =
+               SecretScanningAlerts.location_from([
+                 %{"type" => "wiki_commit", "details" => %{"path" => "Home.md"}}
+               ])
+    end
+
+    test "a rule that reports no file looks up no locations" do
+      request = fn _ -> flunk("no location may be requested") end
+
+      alerts = [
+        %{"number" => 1, "state" => "open", "locations_url" => "https://api.github.com/x/1"}
+      ]
+
+      assert [alert] = SecretScanningAlerts.attach_locations(alerts, request, fn _ -> false end)
+      refute Map.has_key?(alert, "hypatia_location")
+    end
+
+    test "path exclusions do not hide a leaked credential" do
+      repo = Path.join(System.tmp_dir!(), "ssa-suppress-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      # A generic (any-rule) exclusion of node_modules must not reach secret alerts.
+      File.write!(Path.join(repo, ".hypatia-ignore"), "node_modules/\n")
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      for file <- ["node_modules/pkg/.env", "dist/app.js", "test/fixtures/key.pem", "deps/x/c.ex"] do
+        refute Hypatia.ScannerSuppression.suppressed?(
+                 file,
+                 "secret_scanning_alerts",
+                 "SSA001",
+                 repo_path: repo
+               ),
+               "#{file} must not be suppressed"
+      end
+
+      # An entry that names the module explicitly still applies.
+      File.write!(Path.join(repo, ".hypatia-ignore"), "secret_scanning_alerts/SSA001:vendor/\n")
+
+      assert Hypatia.ScannerSuppression.suppressed?(
+               "vendor/lib/key.pem",
+               "secret_scanning_alerts",
+               "SSA001",
+               repo_path: repo
+             )
+    end
+
+    test "the main scan path keeps the located line" do
+      [finding] =
+        SecretScanningAlerts.open_alert_findings([
+          %{
+            "number" => 1,
+            "state" => "open",
+            "secret_type" => "github_personal_access_token",
+            "hypatia_location" => %{"path" => "config/prod.env", "start_line" => 12}
+          }
+        ])
+
+      normalized = Hypatia.CLI.normalize_secret_alert(finding)
+      assert normalized.file == "config/prod.env"
+      assert normalized.line == 12
+
+      assert Hypatia.Verdict.token(normalized).span ==
+               %{file: "config/prod.env", start_line: 12, end_line: 12}
     end
   end
 
