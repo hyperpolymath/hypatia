@@ -155,34 +155,6 @@ RUN cargo +nightly fuzz build
 
 '''''
 
-=== Prevention Rules (historical Logtalk — superseded)
-
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP003–AP004; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
-
-[source,logtalk]
-----
-% Require cargo audit in Rust CI
-rust_rule(missing_audit, preventive,
-    "Rust repos must run cargo audit in CI",
-    [
-        file_exists("Cargo.toml"),
-        not(workflow_contains("cargo audit"))
-    ],
-    block_release).
-
-% Workspace-aware dependency check
-rust_rule(workspace_vuln, curative,
-    "Check all workspace members for vulnerabilities",
-    [
-        file_exists("Cargo.toml"),
-        contains("[workspace]"),
-        any_member_has_vuln
-    ],
-    alert_maintainer).
-----
-
-'''''
-
 === Training Classification
 
 * *Error Types:* DEPENDENCY_VULN, WORKFLOW_SECURITY, PROCESS_HYGIENE

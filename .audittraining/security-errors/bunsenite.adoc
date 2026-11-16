@@ -154,33 +154,6 @@ fuzz_target!(|data: &[u8]| {
 
 '''''
 
-=== Prevention Rules (historical Logtalk — superseded)
-
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP001–AP002; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
-
-[source,logtalk]
-----
-% Config parsers need input limits
-parser_rule(input_limits, preventive,
-    "Config parsers must have input size limits",
-    [
-        crate_type(parser),
-        not(pattern("MAX.*SIZE|size.*limit"))
-    ],
-    warn_reviewer).
-
-% WASM crates need memory limits
-wasm_rule(memory_limits, preventive,
-    "WASM crates must limit memory allocation",
-    [
-        feature("wasm"),
-        not(pattern("memory.*limit|max.*alloc"))
-    ],
-    warn_reviewer).
-----
-
-'''''
-
 === Training Classification
 
 * *Error Types:* DEPENDENCY_VULN, WORKFLOW_SECURITY, PROCESS_HYGIENE
