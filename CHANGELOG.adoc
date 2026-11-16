@@ -12,6 +12,24 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== RSR 3.2.2 is the verdict of the capability reader (2026-11-16)
+
+Criterion 3.2.2 (profile present) now passes exactly when
+`declared_capabilities/1` finds a profile, the same reader behind the
+scorecard's `profile_present`. Before, a repository with no deed
+`(rsr-profile …)` clause passed 3.2.2 whenever
+`<machine tree>/rsr-profile.a2ml` existed, even when that file did not parse
+or carried no `capabilities` list. In that case the scorecard reported no
+profile. The Idris2 model (`src/Hypatia/ABI/RsrProfile.idr`, from #1033)
+proved that this was the only case where the two disagreed. With the fix it
+proves they agree for every source (`profilePresentAgrees`), and
+`tests/reject/EmptyA2mlPassesProfileCriterion.idr` guards against the old
+behaviour returning.
+
+Effect on scores: a deedless repository whose `rsr-profile.a2ml` declares no
+capabilities now fails 3.2.2. It was already scored as having no profile, so
+gated criteria were already `:na` for it.
+
 ==== WH014 reads the canonical workflow model (2026-11-16)
 
 The masked-report/SARIF-upload rule reads jobs, steps, inputs and working
