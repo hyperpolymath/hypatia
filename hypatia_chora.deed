@@ -176,14 +176,14 @@
     (job
       :workflow ".github/workflows/estate-rescan.yml"
       :job "preflight"
-      :secrets ("HYPATIA_DISPATCH_PAT")
+      :secrets ("VERISIMDB_DATA_PUBLISH_PAT")
       :endpoints ("api.github.com:443")
       :enforcement harden-runner-block
       :reason "Creates and deletes a probe branch through the GitHub API to prove the token can write before the scan runs.")
     (job
       :workflow ".github/workflows/estate-rescan.yml"
       :job "publish"
-      :secrets ("HYPATIA_DISPATCH_PAT")
+      :secrets ("VERISIMDB_DATA_PUBLISH_PAT")
       :endpoints ("github.com:443" "api.github.com:443" "results-receiver.actions.githubusercontent.com:443" "*.blob.core.windows.net:443")
       :enforcement harden-runner-block
       :reason "Downloads the scan artifact from the artifact service and its blob storage, then pushes the results with git and gh.")
