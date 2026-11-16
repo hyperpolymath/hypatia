@@ -1,0 +1,288 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Pattern identity: a key that does not depend on wording
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-15
+:toc:
+
+Status: PROPOSED. The owner rules on it (section 8). No code changes in work order E0-20.
+
+== 1. Summary
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 3: "a new key that does
+not depend on wording, as its own design work order." This note is that work order.
+
+What I measured, on 2026-11-15:
+
+* The id of a pattern is the scanner rule plus the first 30 characters of the description. The description
+  of the scanner has the shape `<count> <thing> in <path>`. So the id **contains the count and the start of
+  the path**. In the estate registry, 824 of 1036 ids carry a count, and removing the count and the path
+  leaves about 105 defect classes. One class, `PA005 unwrap-expect-calls`, is spread over 290 ids.
+* A change of the count gives a new id. A fix that takes 103 calls to 102 would start a new pattern and leave
+  the old one, with its recipe link, behind.
+* **No recipe can match a registry id exactly.** 0 of the 42 recipe `pattern_ids` of the estate equal any of
+  its 1036 registry ids. Every match today is a `category` or a `fuzzy` match.
+
+The most correct key for the long term is one that the scanner emits: a stable id for the detector. The scanner
+does not give it today. The key that I recommend now needs no scanner change, and is a step toward it.
+
+== 2. What exists today (measured)
+
+Commit `cf1e2757` of `main`, read on 2026-11-15. Scanner: `panic-attack` at `cbf2b93` (the commit that the CI of
+this repository pins).
+
+* `lib/pattern_registry.ex`, `aggregate_fresh/2` (line 204): `pattern_id = "#{pa_rule}-#{fingerprint(description)}"`.
+* Same file, `fingerprint/1` (line 380): lower case, each run of characters outside `a-z0-9` becomes one hyphen,
+  trimmed, then the first 30 characters.
+* Same file, line 203: `pa_rule = Map.get(@pa_rule_map, category, "PA000")`. The map has 35 entries (25 `PA`
+  rules and 10 `UX`).
+* The registry keeps the first description that it saw for an id, and a count of occurrences for each repository.
+  It keeps no file, no line and no list of findings.
+
+=== 2.1 The 2 results that the work order inferred, shown
+
+These ran through the real `PatternRegistry.sync_from_scans/1` in a throw-away store (script
+`/tmp/identity_demo.exs`, run with `mix run --no-start`).
+
+[source,text]
+----
+R1: 2 findings, different files and lines, same rule, same first 30 characters of the description
+  id="PA009-potentially-unquoted-variable-" occurrences=2 category=CommandInjection
+  => 1 pattern(s) for 2 finding(s)
+
+R2: the SAME defect, reworded
+  id="PA009-possibly-unquoted-variable-in-" occurrences=1 category=CommandInjection
+  id="PA009-potentially-unquoted-variable-" occurrences=1 category=CommandInjection
+  => 2 pattern(s) for 2 finding(s)
+----
+
+Both inferred results hold. R1 is the merge that the merge-honesty note describes: a label on an outcome cannot
+tell the 2 findings apart. R2 is the split: a reworded description is a new pattern, and the old one loses its
+recipe link.
+
+Two more cases that the same script showed:
+
+[source,text]
+----
+R3: 2 different categories that Hypatia's map does not know, same description
+  id="PA000-dependency-has-a-known-vulnera" occurrences=2 category=Advisory
+  => 1 pattern(s) for 2 finding(s)
+
+R4: long common path prefix, different files
+  id="PA005-unchecked-malloc-in-verificati" occurrences=2 category=PanicPath
+  => 1 pattern(s) for 2 finding(s)
+----
+
+R3 joins `Advisory` and `BannedDep` into one pattern that says `Advisory`. R4 shows that the id depends on a path
+prefix: 2 different files under one directory are one pattern.
+
+=== 2.2 What the real registry looks like
+
+The work order asks for the count of patterns with the rule `PA000` in a store that the owner names. The owner has
+not named one, so these are the 2 that exist. The second is my choice, not a ruling.
+
+[cols="3,2,2",options="header"]
+|===
+|Measure |`data/verisim/patterns/registry.json` (this repository, 1 commit) |`hyperpolymath/verisimdb-data` `patterns/registry.json` (sha `9d94837`)
+
+|patterns |9 |1036
+|patterns with the rule `PA000` |0 |0
+|occurrences, all patterns |1972 |136466
+|===
+
+No pattern has the rule `PA000` today. That is because the registry holds only categories that the map knows. The
+map lacks 5 of the 30 categories of the scanner: `Advisory`, `BannedDep`, `LicensePolicy`, `UnboundedAllocation`
+and `UnknownSource`. The first finding of one of them becomes `PA000` (case R3).
+
+Measured on the estate registry (1036 patterns):
+
+[source,text]
+----
+fingerprint at the 30-character limit ......... 1001 of 1036
+ids with a count right after the rule ......... 824 of 1036   (PA005-103-unwrap-expect-calls-in-int)
+descriptions that contain a path or extension .. 1005 of 1036
+distinct (rule, description without count and path) ... 105   (an estimate: my own normal form)
+largest classes:  290 ids  PA005 unwrap-expect-calls        17856 occurrences
+                  111 ids  PA014 http-non-https-urls         13164
+                  108 ids  PA005 unsafe-get-calls            14268
+                   91 ids  PA009 potentially-unquoted-variable-expansions  18177
+recipe pattern_ids that equal a registry id ... 0 of 42
+----
+
+So today a "pattern" is, in practice, one rule seen with one count in one place. The registry mixes 2 things: the
+class of a defect and one instance of it.
+
+== 3. 2 different things carry the word "pattern"
+
+* A *pattern* is a class of defect across the fleet: "unwrap/expect calls". Recipes, confidence, the annealing stage
+  and the trend are about classes.
+* A *finding* is one instance: a repository, a file and a place in it. A fix, a rescan and a withdrawal are about
+  instances.
+
+Decision 3 asks for a key for the first. The fix check of `E0-22` needs the second. `E0-26` already compares the
+file of a finding, and the rest is the same file, the same class, a different place. This note keeps the 2 apart
+and says what each needs (section 7).
+
+== 4. What the scanner gives
+
+`src/types.rs` of `panic-attack` at `cbf2b93`, `WeakPoint`: `category` (30 values), `location`, `file` and `line`
+(derived from `location`), `severity`, `description` (free text), `recommended_attack`, `suppressed`,
+`test_context`. The canonical rule table (`WeakPointCategory::rule_id`, `PA001` to `PA029` and `PA001b`) is "a
+public contract: never renumber an existing category". There is no snippet, no stable id for a detector and no
+id for one instance.
+
+== 5. Candidate keys for a pattern
+
+Each key is listed with what it merges, what it splits, and 1 example of each.
+
+[cols="1,3,3,3",options="header"]
+|===
+|Key |What it is |Keeps apart / joins |Label
+
+|K0, today
+|Hypatia's rule + first 30 characters of the description.
+|Apart: a count of 103 and a count of 102 of the same defect (R2-like), the same defect in 2 directories. Joins: 2 files under one long path prefix (R4), 2 categories under `PA000` (R3).
+|Rejected: it splits by count and path, joins by prefix, and depends on wording.
+
+|K1
+|The canonical `rule_id` of the scanner, alone (`PA005`).
+|Apart: `PA005` and `PA009`. Joins: "unwrap/expect calls" and "unsafe get calls" (both `PA005`; the estate has 2 classes of 290 and 108 ids under that one rule). About 17 patterns for the estate (one for each rule it holds).
+|Rejected: too coarse. A recipe is about one defect, not a whole rule.
+
+|K2
+|`rule_id` + the kind of file (the extension class: shell, Rust, Elixir, ReScript, ...).
+|Apart: `PA009` in a `.sh` file and in a `.ex` file. Joins: "unquoted variable expansions" and "eval usage", both `PA009` in `.sh` files.
+|Rejected: still too coarse, and "file kind" needs a table that Hypatia would have to own.
+
+|K3
+|`rule_id` + a normal form of the description: lower case, with the leading count, the path after "in" and a
+trailing parenthesis removed. Example: `PA005-unwrap-expect-calls`.
+|Apart: "unwrap/expect calls" and "unsafe get calls". Joins: 290 ids of one class into 1, whatever the count or the path. About 105 patterns for the estate. It still splits a reworded defect (R2), because it reads the words.
+|Recommended now. It removes the measured harms and needs no scanner change. It does **not** meet "does not depend on wording" in the strict sense.
+
+|K4
+|`rule_id` + a stable id for the detector that the scanner emits (for example `PA005.unwrap`), with no
+description in the key.
+|Apart: 2 detectors of one rule. Joins: the same detector, whatever it says in its message. A reworded message does not split it.
+|Most correct in the long term. **It needs a field that the scanner does not give today** (the stop condition of the work order): a change in `panic-attack`, which is a separate repository and a decision for you.
+|===
+
+No candidate that reads free text can be independent of wording. K4 is the only one that is. K3 is the step that
+makes K4 cheap: its ids are the same shape (`PA005-unwrap-expect-calls`), so a K4 id can replace the second half
+later with no change in the readers.
+
+== 6. The history and the recipe link of an old pattern
+
+* *Outcome rows.* Rows have a `pattern_id` only since `E0-18`, and older rows have none. There is no history of
+  pattern ids in the outcome log to rewrite.
+* *The registry.* An old id maps to one new key (many-to-one for K3). The mapping is computed, not guessed: apply
+  the normal form to the stored description. Keep the old entries, marked `superseded_by`, and add the occurrences
+  to the new key. Delete nothing.
+* *Recipes.* A recipe names `pattern_ids` that nothing matches exactly today (0 of 42). After K3 a recipe can name a
+  class id and match it exactly, so the label `exact` of `E0-18` gets a meaning, and the cap of `E0-19` stops
+  lowering everything. The fuzzy match of `E0-21` reads the words of the recipe's ids after the rule: K3 keeps that
+  shape, so it keeps working.
+* *Receipts.* `pattern_id` in a receipt is a string (`schema/receipt.ncl`). A K3 or K4 id fits.
+* *A dry run first.* A script prints, for each old id, the new key, and the number of merges, and writes nothing.
+  The migration runs only after the owner has seen it.
+
+== 7. Who reads the pattern id
+
+[cols="3,5",options="header"]
+|===
+|Reader |What it does with it
+
+|`lib/recipe_matcher.ex`, lines 22, 32, 140 to 142, 196 to 218
+|Exact match by id (`best_recipe/2`), fuzzy match by the rule prefix and the keywords after it.
+
+|`lib/pattern_registry.ex`, lines 204, 211, 251
+|Builds the id, stores `pa_rule`, keeps the metadata.
+
+|`lib/dispatch_manifest.ex`, lines 59, 148, 177, 201, 247
+|Writes `pattern_id` in each manifest entry and names it in the fact of the step.
+
+|`lib/fleet_dispatcher.ex`, line 274
+|`pattern_id` of the action that goes to the Kin Gate.
+
+|`lib/kin/gate.ex`, line 531
+|Records `pattern_id` of the action.
+
+|`lib/neural/coordinator.ex`, line 505
+|Takes `pattern_id` as a candidate recipe id of a finding.
+
+|`lib/vcl/query.ex`, lines 284, 476 to 489
+|Joins patterns with the recipes that name them.
+
+|`lib/recipe_generator.ex`, lines 143, 231
+|Writes `pa_rule`, reads the id of a pattern.
+
+|`lib/outcome_tracker.ex`, line 256, and `lib/mix/tasks/hypatia.record_outcome.ex`, line 242
+|Writes `pattern_id` on a row (`E0-18`).
+
+|`lib/hypatia/receipt.ex`, line 117
+|Carries `pattern_id` in a receipt.
+
+|`lib/scorecard_ingestor.ex`, lines 612 and 643
+|Its own id: `<check>-<fingerprint of the repository>`. Not changed by this key.
+
+|`lib/data/arangodb.ex`, line 367
+|An index on `pattern_id`.
+
+|`gitbot-fleet`, `scripts/dispatch-runner.sh`
+|Reads `pattern_id` of a manifest entry (outside this repository).
+
+|`verisimdb-data`, `patterns/registry.json` and `recipes/`
+|The data that holds the ids today (outside this repository).
+|===
+
+Precedents inside the repository for a stable key: `lib/scorecard_reconciler.ex`, `fingerprint/3` (line 124),
+`repo|tool|rule|normalized-path`, which "deliberately excludes line numbers"; and `lib/hypatia/sarif.ex` (line 114),
+`hypatiaFindingHash/v1`, a hash of the rule, the uri, the type and the reason. The first is a finding key, not a
+pattern key.
+
+== 8. What this means for the other work orders
+
+* *`E0-22` (fix check by finding).* `E0-26` already makes the rescan judge a fix by its category and its file.
+  What is left is 2 findings of one class in the same file. The fix side knows the file and not the line, and a line
+  moves when the fix edits the file. The scanner gives no stable id for an instance. So that case cannot be decided
+  from the rescan at all, whatever the pattern key is. **The fleet already has an identity-free answer**: its own
+  postcondition counts the weak points of the recipe before and after (`before_hits` and `after_hits` in every
+  fleet row; `E0-03` stores them). The fleet's verdict `verified` needs `before_hits` above 0 and `after_hits`
+  equal to 0, counted by the recipe's predicate over the repository. So the recipe's own predicate judges the
+  fix, and nothing has to guess which of 2 findings was meant. It answers a stricter question than the
+  rescan: "did every target of the recipe go?", not "did this instance go?". When 2 instances exist and the fix
+  removes one, `after_hits` stays above 0 and the verdict is `incomplete`, which is the safe side.
+* *`E0-19` (cap for a merged match).* With the registry as it is, no recipe can match exactly (0 of 42), so the cap
+  would hold every dispatch at `review`. That is the intended direction, and it is also why a key like K3 matters
+  to the cap.
+* *The measurement of option C* of the merge-honesty note needs a pattern that is a class. Today's ids are
+  per-count and per-path, so a success rate for one id would measure one file.
+
+== 9. Ruling packet
+
+Stop here. Answer by letter.
+
+. *Which key?*
+  A. K3 now, K4 later (recommended).
+  B. K4 directly: the scanner emits a detector id first, and Hypatia waits.
+  C. K1.
+  D. Keep K0.
+. *The migration of the registry.*
+  A. Map each old id to its new key, keep the old entries marked `superseded_by`, after a dry run that you have seen
+  (recommended).
+  B. Rebuild the registry from the scans and drop the old ids.
+  C. No migration: new ids from now on, old ids left to age out.
+. *If K4 is wanted:* may a work order change `panic-attack` to emit a detector id? It is a separate repository that
+  you have approved for writes. I would not do it without this answer.
+. *The same-file case of `E0-22`.*
+  A. Judge it by the fleet's own before and after counts, and leave the rescan at the file (recommended).
+  B. Wait for K4.
+  C. Leave the same-file case as it is, and say so.
+
+== 10. Limits
+
+* The "about 105 classes" is an estimate. It rests on my own normal form, applied to the first description that the
+  registry kept for each id.
+* The estate registry is a snapshot of one commit (sha `9d94837`). I did not scan any repository for this note.
+* The examples of K1 and K2 are built from the classes that the registry shows. I did not run K1 or K2 on a scan.
+* No prover was run. No code of Hypatia was changed.
