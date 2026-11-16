@@ -29,7 +29,6 @@
          │     • lib/rules/code_safety.ex           │
          │     • lib/rules/security_errors.ex       │
          │     • lib/rules/cicd_rules.ex            │
-         │     • lib/rules/learning.ex (learned)    │
          └──────────────┬───────────────────────────┘
                         │
                         ▼
