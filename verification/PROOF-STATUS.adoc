@@ -123,7 +123,7 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |Confidence maps monotonically to dispatch strategy at the 95/85 boundaries; nascent recipes never auto-execute (P3)
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
-|`+verification/proofs/idris2/DispatchStrategy.idr+`: `+highConfidenceIsAuto+`, `+midConfidenceIsReview+`, `+lowConfidenceIsReport+`
+|`+verification/proofs/idris2/DispatchStrategy.idr+`: `+highConfidenceIsAuto+`, `+midConfidenceIsReview+`, `+lowConfidenceIsReport+`, `+dispatchMonotone+`, `+nascentNeverAutoExecutes+`
 |Over integer percentages; the Elixir FleetDispatcher is not shown to follow it
 
 |Raw records with every mandatory field parse, records missing one are rejected, and projection to FindingFact keeps repo, file, category and severity (P4; statement superseded 2026-11-01)
@@ -250,18 +250,18 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`
-|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. The model keeps an event at exactly windowStart where the runtime drops it; both count future-timestamped events. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
-|The Beta posterior stays in (0,1), rises with successes, falls with failures, is the prior with no observations, and clamps to [floor, cap] (H7)
+|The Beta posterior stays in (0,1), rises with successes, falls with failures, is the prior with no observations, and one clamp function keeps every result in [10%, 99%] (H7)
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
-|`+verification/proofs/idris2/BayesianUpdate.idr+`: `+posteriorLtOne+`, `+posteriorPos+`, `+moreSuccessesRaises+`, `+moreFailuresLowers+`, `+clampGeFloor+`, `+clampLeCap+`, `+bayesianUpdateSound+`
+|`+verification/proofs/idris2/BayesianUpdate.idr+`: `+posteriorLtOne+`, `+posteriorPos+`, `+moreSuccessesRaises+`, `+moreFailuresLowers+`, `+clampGeFloor+`, `+clampLeCap+`, `+bayesianUpdateSound+`, `+clampRaisesBelowFloor+`, `+clampLowersAboveCap+`
 |Over Nat pseudo-counts; Elixir floats are not modelled. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
-|The VCL FROM-clause parser is total and deterministic, passes the remainder on, and rejects malformed input
+|The VCL FROM-clause parser is total and deterministic; every well-formed clause passes its remainder on unchanged; input not starting with FROM, FROM followed by a non-source token, and a truncated clause are rejected
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
-|`+verification/proofs/idris2/ParserTotality.idr+`: `+parseFromDeterministic+`, `+parseFromPassesRemainder+`, `+parseFromOrphanFrom+`, `+parseFromNoFromKeyword+`
+|`+verification/proofs/idris2/ParserTotality.idr+`: `+parseFromDeterministic+`, `+parseFromStoreAny+`, `+parseFromStoreQuotedAny+`, `+parseFromFederationAny+`, `+parseFromFederationQuotedAny+`, `+parseFromHexadAny+`, `+parseFromRejectsNoFrom+`, `+parseFromRejectsBadSource+`, `+parseFromRejectsTruncated+`, `+parseFromOrphanFrom+`
 |FROM-clause subset over a token model; lib/vcl/ is not shown to follow it. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |PageRank inputs are well formed: edge weights and in/out weight sums are non-negative
@@ -814,26 +814,26 @@ Elixir held to it on a small domain; endpoints not modelled
 |KYAML alias budget |`+KyamlBudget.idr+` |Model proved; Elixir held to
 it on a small domain; the reader as a whole is tested, not proved
 
-|VCL parser totality |`+ParserTotality.lean+` |Full (FROM-clause subset)
+|VCL parser totality |`+ParserTotality.idr+` |Model proved (FROM-clause subset);
+the Elixir parser is not shown to follow it
 
 |VCL query correctness |- |Partial
 
-|Neural network convergence |`+PageRankInvariants.lean+`,
-`+ESNSpectralScaling.lean+` |Preconditions proven; full
-convergence/stability in progress (Lean + Mathlib)
+|Neural network convergence |`+PageRankInvariants.idr+`,
+`+ESNSpectralScaling.idr+` |Preconditions proven; convergence and
+stability open (Agda first, over constructive reals; no Mathlib)
 |===
 
 === File Locations
 
-Formal-verification sources live under three roots. The two inventory tables
-above carry the full path of every file; this section names only the roots, so
+Formal-verification sources live under three roots. The generated Proof Ledger above carries the full path of every file; this section names only the roots, so
 that adding a proof does not require editing a third hand-maintained list.
 
 ....
 hypatia/
 ├── src/Hypatia/ABI/        # Idris2 ABI definitions + proofs (normative wire contract)
 ├── verify/src/             # Pipeline state machine proofs
-└── verification/proofs/    # Standalone property proofs (idris2/, lean4/, tlaplus/, agda/)
+└── verification/proofs/    # Standalone property proofs (idris2/, tlaplus/, agda/)
 ....
 
 === Retired proofs

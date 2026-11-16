@@ -57,7 +57,11 @@ inWindow : (windowStart : Nat) -> Event -> Bool
 inWindow windowStart e = windowStart <= e.timestamp
 
 ||| Count events at or after windowStart, including future timestamps;
-||| no upper time bound is applied.
+||| no upper time bound is applied. The runtime does the same: it records
+||| events at System.system_time/1, a wall clock that can step back, and
+||| `now - ts < window` holds for a future `ts`, so it counts them too.
+||| Counting them only makes the limiter stricter; the invariant below is
+||| an upper bound and is unaffected.
 public export
 countEventsInWindow : List Event -> (windowStart : Nat) -> Nat
 countEventsInWindow es windowStart = length (filter (inWindow windowStart) es)

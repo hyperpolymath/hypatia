@@ -146,3 +146,84 @@ parseFromSucceededStore = Refl
 export
 parseFromSucceededEmpty : parseFromSucceeded [] = False
 parseFromSucceededEmpty = Refl
+
+------------------------------------------------------------------------
+-- Section 7: the remainder and rejection properties for every input
+------------------------------------------------------------------------
+-- Sections 4 and 5 check single inputs. The properties below quantify over
+-- every value and every remainder, so the ledger's obligation rests on them.
+
+||| Property 13: every well-formed clause passes its remainder on unchanged,
+||| for every value and every remainder.
+export
+parseFromStoreAny : (v : String) -> (rest : List Token) ->
+  parseFrom (KwFrom :: KwStore :: Ident v :: rest) = Ok (Store v) rest
+parseFromStoreAny _ _ = Refl
+
+export
+parseFromStoreQuotedAny : (v : String) -> (rest : List Token) ->
+  parseFrom (KwFrom :: KwStore :: Quoted v :: rest) = Ok (Store v) rest
+parseFromStoreQuotedAny _ _ = Refl
+
+export
+parseFromFederationAny : (v : String) -> (rest : List Token) ->
+  parseFrom (KwFrom :: KwFederation :: Ident v :: rest) = Ok (Federation v) rest
+parseFromFederationAny _ _ = Refl
+
+export
+parseFromFederationQuotedAny : (v : String) -> (rest : List Token) ->
+  parseFrom (KwFrom :: KwFederation :: Quoted v :: rest) = Ok (Federation v) rest
+parseFromFederationQuotedAny _ _ = Refl
+
+export
+parseFromHexadAny : (v : String) -> (rest : List Token) ->
+  parseFrom (KwFrom :: KwHexad :: Ident v :: rest) = Ok (Hexad v) rest
+parseFromHexadAny _ _ = Refl
+
+||| A token that is not FROM.
+public export
+data NotFrom : Token -> Type where
+  NFStore      : NotFrom KwStore
+  NFFederation : NotFrom KwFederation
+  NFHexad      : NotFrom KwHexad
+  NFIdent      : NotFrom (Ident s)
+  NFQuoted     : NotFrom (Quoted s)
+  NFOther      : NotFrom (Other s)
+
+||| Property 14: input that does not start with FROM is rejected, whatever
+||| follows.
+export
+parseFromRejectsNoFrom : (t : Token) -> (ts : List Token) -> NotFrom t ->
+  parseFrom (t :: ts) = Err ExpectedFromClause
+parseFromRejectsNoFrom KwStore _ NFStore = Refl
+parseFromRejectsNoFrom KwFederation _ NFFederation = Refl
+parseFromRejectsNoFrom KwHexad _ NFHexad = Refl
+parseFromRejectsNoFrom (Ident _) _ NFIdent = Refl
+parseFromRejectsNoFrom (Quoted _) _ NFQuoted = Refl
+parseFromRejectsNoFrom (Other _) _ NFOther = Refl
+
+||| A token that cannot follow FROM: not STORE, FEDERATION or HEXAD.
+public export
+data NotSourceKw : Token -> Type where
+  NSFrom   : NotSourceKw KwFrom
+  NSIdent  : NotSourceKw (Ident s)
+  NSQuoted : NotSourceKw (Quoted s)
+  NSOther  : NotSourceKw (Other s)
+
+||| Property 15: FROM followed by anything but a source keyword is rejected,
+||| whatever follows.
+export
+parseFromRejectsBadSource : (t : Token) -> (ts : List Token) -> NotSourceKw t ->
+  parseFrom (KwFrom :: t :: ts) = Err ExpectedFromClause
+parseFromRejectsBadSource KwFrom _ NSFrom = Refl
+parseFromRejectsBadSource (Ident _) _ NSIdent = Refl
+parseFromRejectsBadSource (Quoted _) _ NSQuoted = Refl
+parseFromRejectsBadSource (Other _) _ NSOther = Refl
+
+||| Property 16: a source keyword with nothing after it is rejected.
+export
+parseFromRejectsTruncated :
+  ( parseFrom [KwFrom, KwStore] = Err ExpectedFromClause
+  , parseFrom [KwFrom, KwFederation] = Err ExpectedFromClause
+  , parseFrom [KwFrom, KwHexad] = Err ExpectedFromClause )
+parseFromRejectsTruncated = (Refl, Refl, Refl)
