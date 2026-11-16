@@ -12,6 +12,20 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== WH014 reads the canonical workflow model (2026-11-16)
+
+The masked-report/SARIF-upload rule reads jobs, steps, inputs and working
+directory defaults through `Hypatia.Workflow`, replacing its own YAML text
+readers. Flow mappings, quoted keys, aliases and folded/quoted run values
+now share the KYAML semantics already used by RE001/RE002. A `run` key in
+step environment data is no longer treated as a shell script. Findings
+identify the affected job's source line; unreadable YAML produces a located
+incomplete-analysis warning.
+
+The shell analysis remains bounded to literal report paths within one job;
+absence of a finding does not establish scanner completion. This is one
+part of #971, not completion of the remaining workflow-reader migrations.
+
 ==== The oracle and CI toolchain move back to OTP 27.3.4.19 (2026-11-13)
 
 `rsr-oracle.yml` now defaults to OTP `27.3.4.19`, and the two `ci.yml`
