@@ -797,7 +797,9 @@ inventory row above. These are properties of the model, not of the Elixir.
 
 |Quarantine logic |`+Quarantine.idr+` |Full
 
-|Batch rollback |`+BatchRollback.idr+` |Full
+|Batch rollback |`+BatchRollback.idr+` |Model only: rollback returns
+the supplied original by definition; all-or-nothing execution and a
+rollback that undoes applied operations are not proved
 
 |VeriSimDB connector |`+VerisimdbConnector.idr+` |Full (model; statement
 superseded 2026-11-01)
