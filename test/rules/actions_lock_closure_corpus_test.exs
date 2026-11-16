@@ -92,9 +92,20 @@ defmodule Hypatia.Rules.ActionsLockClosureCorpusTest do
   end
 
   # `--   N  owner/repo@ref`: the model's ref numbering, keyed after the fold.
+  # Two refs sharing a number, or one ref listed twice, would let the model
+  # merge distinct records while every equation still held, so both raise.
   defp model_numbering(src) do
-    Regex.scan(~r/^--\s+(\d+)\s+(\S+@\S+)\s*$/m, src)
-    |> Map.new(fn [_, n, ref] -> {ActionsLock.normalise_ref(ref), String.to_integer(n)} end)
+    pairs =
+      Regex.scan(~r/^--\s+(\d+)\s+(\S+@\S+)\s*$/m, src)
+      |> Enum.map(fn [_, n, ref] -> {ActionsLock.normalise_ref(ref), String.to_integer(n)} end)
+
+    {refs, numbers} = Enum.unzip(pairs)
+    if refs != Enum.uniq(refs), do: raise("model numbering lists a ref twice: #{inspect(refs)}")
+
+    if numbers != Enum.uniq(numbers),
+      do: raise("model numbering reuses a number: #{inspect(numbers)}")
+
+    Map.new(pairs)
   end
 
   # `-- corpus: <fixture> <model row>`
@@ -125,34 +136,58 @@ defmodule Hypatia.Rules.ActionsLockClosureCorpusTest do
 
   # The edges a fixture names: every quoted ref under workflows:, and each
   # dependency record with its nested uses:, mapped through the numbering.
+  # The corpus has one layout, and every line must match one of its shapes;
+  # any other line raises, so a fixture written in another style cannot drop
+  # an edge from this comparison without failing it. A nested ref counts only
+  # under its record's `uses:` key.
   defp lock_edges(content, numbering) do
     id = &Map.fetch!(numbering, ActionsLock.normalise_ref(&1))
+    field = ~r/^        (ref|commit|hostname): '[^']*'$|^        (owner_id|repo_id): \d+$/
 
-    {_section, _key, refs, records} =
+    {_state, refs, records} =
       content
       |> String.split("\n")
-      |> Enum.reduce({nil, nil, [], %{}}, fn line, {section, key, refs, records} ->
+      |> Enum.reduce({:top, [], %{}}, fn line, {state, refs, records} ->
         cond do
+          line == "" or String.starts_with?(line, "#") ->
+            {state, refs, records}
+
+          Regex.match?(~r/^version: '[^']+'$/, line) ->
+            {:top, refs, records}
+
           line == "workflows:" ->
-            {:workflows, nil, refs, records}
+            {:workflows, refs, records}
 
           line == "dependencies:" ->
-            {:dependencies, nil, refs, records}
+            {:dependencies, refs, records}
 
-          section == :workflows and Regex.match?(~r/^\s+- '/, line) ->
-            [_, ref] = Regex.run(~r/^\s+- '([^']+)'$/, line)
-            {section, key, [id.(ref) | refs], records}
+          state == :workflows and Regex.match?(~r/^    '[^']+':( \[\])?$/, line) ->
+            {state, refs, records}
 
-          section == :dependencies and Regex.match?(~r/^    '[^']+':$/, line) ->
+          state == :workflows and Regex.match?(~r/^        - '[^']+'$/, line) ->
+            [_, ref] = Regex.run(~r/^        - '([^']+)'$/, line)
+            {state, [id.(ref) | refs], records}
+
+          state != :workflows and state != :top and Regex.match?(~r/^    '[^']+':$/, line) ->
             [_, ref] = Regex.run(~r/^    '([^']+)':$/, line)
-            {section, id.(ref), refs, Map.put(records, id.(ref), [])}
+            {{:record, id.(ref)}, refs, Map.put(records, id.(ref), [])}
 
-          section == :dependencies and Regex.match?(~r/^\s{12}- '/, line) ->
-            [_, ref] = Regex.run(~r/^\s+- '([^']+)'$/, line)
-            {section, key, refs, Map.update!(records, key, &Enum.sort([id.(ref) | &1]))}
+          match?({:record, _}, state) and Regex.match?(field, line) ->
+            {state, refs, records}
+
+          match?({:record, _}, state) and line == "        uses:" ->
+            {{:uses, elem(state, 1)}, refs, records}
+
+          match?({:uses, _}, state) and Regex.match?(~r/^            - '[^']+'$/, line) ->
+            {:uses, key} = state
+            [_, ref] = Regex.run(~r/^            - '([^']+)'$/, line)
+            {state, refs, Map.update!(records, key, &Enum.sort([id.(ref) | &1]))}
+
+          match?({:uses, _}, state) and Regex.match?(field, line) ->
+            {{:record, elem(state, 1)}, refs, records}
 
           true ->
-            {section, key, refs, records}
+            raise "unrecognised line in a closure fixture (state #{inspect(state)}): #{inspect(line)}"
         end
       end)
 
