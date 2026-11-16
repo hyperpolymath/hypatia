@@ -211,7 +211,11 @@ alert without a `suggest_fix/2` clause. `SecurityErrors.validate_alert/1`
 returns those fields plus `category` and `prevention_workflow`, and is
 total: absent facts are `nil`/`false` rather than query failure. A
 consumer that needs an "unknown alert" signal tests `category: nil` and
-`fix: nil` in the returned map (or the JSON `null`s).
+`fix: nil` in the returned map. In the learned-rules JSON export,
+`category` is never `null` (an unknown alert gets the task-local
+grouping, at worst `"unknown"`), so the export alone does not mark an
+alert as unknown: `fix: null` covers every unknown alert but also the
+known types without a fix. Call `validate_alert/1` for the exact signal.
 
 === Learning machinery — *Replaced*
 
