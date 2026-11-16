@@ -1953,6 +1953,8 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
     end
 
     test "literal working directories distinguish same-named report files" do
+      # The jq program goes in a block scalar: as a plain scalar, its `: `
+      # makes the line invalid YAML, which GitHub (and the reader) refuse.
       for {input, expected?} <- [{"findings.json", false}, {"../scanner/findings.json", true}] do
         repo =
           create_repo_with_workflow("""
@@ -1972,6 +1974,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
 
         on_exit(fn -> File.rm_rf!(repo) end)
         findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
+        assert Enum.all?(findings, &(&1.severity == :high))
         assert findings != [] == expected?
       end
     end
@@ -2107,6 +2110,331 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
         on_exit(fn -> File.rm_rf!(repo) end)
         assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
       end
+    end
+  end
+
+  # ─── WH013 and WH014 read the parsed model (#971) ───────────────────
+  #
+  # Each test below, except the refused workflow that names no write, fails
+  # on the line reader the two rules used before (deleted with this change;
+  # see CHANGELOG.adoc); each pins a place where it read the workflow
+  # differently from YAML.
+
+  describe "WH013 reads the parsed workflow model (#971)" do
+    test "a flow-style grant is a grant" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            permissions: { contents: write }
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+
+    test "text that only looks like a grant is not one" do
+      for grant <- ["contents: write", "write-all: true"] do
+        repo =
+          create_repo_with_workflow("""
+          name: Release
+          permissions:
+            contents: read
+          jobs:
+            publish:
+              runs-on: ubuntu-latest
+              steps:
+                - run: |
+                    cat > generated.yml <<'YML'
+                    permissions:
+                      #{grant}
+                    YML
+                    git commit -am generated && git push origin HEAD
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+
+        assert [%{severity: :high, fix_recipe: "grant-contents-write-to-writing-job"}] =
+                 WorkflowHardening.wh013_permission_starved_write(repo),
+               grant
+      end
+    end
+
+    test "a YAML comment that names a write is not a write" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: read
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test # the release job used to git push origin main
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+
+    test "a credential a script writes into a file is not the job's credential" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  cat > deploy.yml <<'YML'
+                  GH_TOKEN: ${{ secrets.DEPLOY_PAT }}
+                  YML
+                  git push origin HEAD
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      assert [%{severity: :high, fix_recipe: "grant-contents-write-to-writing-job"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+
+    test "flow-style jobs are judged per job, with their credentials and step flags" do
+      # One job releases with its own PAT; the other pushes with GITHUB_TOKEN
+      # from a step marked continue-on-error. Written in flow style, the line
+      # reader judged the file as one body: never credentialed, never masked.
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions: { contents: read }
+        jobs: {
+          notes: { runs-on: ubuntu-latest, steps: [
+            { env: { GH_TOKEN: "${{ secrets.RELEASE_PAT }}" }, run: "gh release create v1" } ] },
+          record: { runs-on: ubuntu-latest, steps: [
+            { continue-on-error: true, run: "git push origin HEAD" } ] }
+        }
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      assert [%{severity: :high, fix_recipe: "grant-contents-write-to-writing-job-and-unmask"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+
+    test "a workflow-level env written after `jobs:` still covers every job" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh release create v1 dist/*
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+
+    test "a writing workflow the reader refuses is reported at the error, not guessed at" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        x-defaults: &defaults
+          runs-on: ubuntu-latest
+        jobs:
+          publish:
+            <<: *defaults
+            permissions:
+              contents: write
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      assert [%{rule: "WH013", severity: :warn, line: 6, reason: reason}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      assert reason =~ "could not be read"
+    end
+
+    test "a refused workflow that names no write is not reported" do
+      repo =
+        create_repo_with_workflow("""
+        x-defaults: &defaults
+          runs-on: ubuntu-latest
+        jobs:
+          test:
+            <<: *defaults
+            steps:
+              - run: mix test
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+    end
+  end
+
+  describe "WH014 reads the parsed workflow model (#971)" do
+    test "a KYAML workflow is read, with its flow-style `with:`" do
+      repo =
+        create_repo_with_workflow("""
+        {
+          jobs: {
+            scan: {
+              "runs-on": "ubuntu-latest",
+              steps: [
+                {
+                  run: "hypatia scan . > findings.json || true",
+                },
+                {
+                  run: "jq '{runs: [{results: .}]}' findings.json > out.sarif",
+                },
+                {
+                  uses: "github/codeql-action/upload-sarif@v4",
+                  with: {sarif_file: "out.sarif"},
+                },
+              ],
+            },
+          },
+        }
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      assert [%{rule: "WH014", severity: :high, detail: %{jobs: ["scan"]}}] =
+               WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a folded or quoted run script is read as its YAML value" do
+      for run <- [
+            ">-\n          hypatia scan . > findings.json\n          || true",
+            ~s("hypatia scan . > findings.json || true"),
+            "'hypatia scan . > findings.json || true'"
+          ] do
+        repo =
+          create_repo_with_workflow("""
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              steps:
+                - run: #{run}
+                - run: |
+                    jq '{runs: [{results: .}]}' findings.json > out.sarif
+                - uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: out.sarif
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+
+        assert [%{rule: "WH014", severity: :high}] =
+                 WorkflowHardening.wh014_masked_scanner_upload(repo),
+               run
+      end
+    end
+
+    test "a job's defaults.run.working-directory counts wherever the key is written" do
+      for {sarif_file, expected?} <- [{"out.sarif", false}, {"scanner/out.sarif", true}] do
+        repo =
+          create_repo_with_workflow("""
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              steps:
+                - run: hypatia scan . > findings.json || true
+                - run: |
+                    jq '{runs: [{results: .}]}' findings.json > out.sarif
+                - uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: #{sarif_file}
+              defaults:
+                run:
+                  working-directory: scanner
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
+        assert findings != [] == expected?, sarif_file
+      end
+    end
+
+    test "a reusable workflow's `working-directory` input is not a default directory" do
+      repo =
+        create_repo_with_workflow("""
+        on:
+          workflow_call:
+            inputs:
+              working-directory:
+                type: string
+                default: .
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: hypatia scan . > findings.json || true
+              - run: |
+                  jq '{runs: [{results: .}]}' findings.json > out.sarif
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a step whose working directory is an expression is not followed" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - working-directory: ${{ inputs.dir }}
+                run: hypatia scan . > findings.json || true
+              - run: |
+                  jq '{runs: [{results: .}]}' findings.json > out.sarif
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an uploading workflow the reader refuses is reported at the error" do
+      repo =
+        create_repo_with_workflow("""
+        x-defaults: &defaults
+          runs-on: ubuntu-latest
+        jobs:
+          scan:
+            <<: *defaults
+            steps:
+              - run: hypatia scan . > findings.json || true
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: findings.json
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      assert [%{rule: "WH014", severity: :warn, line: 5}] =
+               WorkflowHardening.wh014_masked_scanner_upload(repo)
     end
   end
 end
