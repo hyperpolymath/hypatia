@@ -129,7 +129,7 @@ check() {
       # Evidence lives in this tree: an absolute path or a .. step would let a
       # row rest on a file outside the checkout, and on the runner it happens
       # to run on.
-      ( if .file != "-" and (.file | test("^/|(^|/)\\.\\.(/|$)")) then "\(.id): file \(.file) must be a path inside the repository, with no leading / or .. step" else empty end ),
+      ( if .file != "-" and any(.file | split("/")[]; IN(.; "", ".", "..")) then "\(.id): file \(.file) must be a canonical repository path: no leading /, and no empty, . or .. segment" else empty end ),
       ( if any(.names[], .axioms[]; test("\\S") | not) then "\(.id): names and axioms hold non-blank strings" else empty end ),
       ( if .kind == "theory" then
           ( if IN(.pwg; "3", "2i", "2ii", "1", "ungraded") then empty else "\(.id): a theory row records pwg as 3, 2i, 2ii, 1 or ungraded" end ),

@@ -59,10 +59,16 @@ mutate missing-file '.file = "verification/proofs/idris2/Gone.idr"' quarantine
 expect "a file that does not exist is refused" 1 env PROOF_LEDGER="$work/missing-file.jsonl" bash "$script" check
 
 mutate outside-file '.file = "/etc/passwd" | .names = ["root"]' abi-types
-expect_msg "a row resting on a file outside the repository is refused" 1 "must be a path inside the repository" env PROOF_LEDGER="$work/outside-file.jsonl" bash "$script" check
+expect_msg "a row resting on a file outside the repository is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/outside-file.jsonl" bash "$script" check
 
 mutate parent-file '.file = "../hypatia/verification/proofs/idris2/RateLimiting.idr"' rate-limiting
-expect_msg "a row whose file climbs out with .. is refused" 1 "must be a path inside the repository" env PROOF_LEDGER="$work/parent-file.jsonl" bash "$script" check
+expect_msg "a row whose file climbs out with .. is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/parent-file.jsonl" bash "$script" check
+
+mutate dot-file '.file = "./" + .file' rate-limiting
+expect_msg "a row spelling its file with ./ is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/dot-file.jsonl" bash "$script" check
+
+mutate double-slash-file '.file = (.file | sub("/"; "//"))' rate-limiting
+expect_msg "a row spelling its file with // is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/double-slash-file.jsonl" bash "$script" check
 
 mutate empty-name '.names = [""]' abi-types
 expect_msg "an empty witness name is refused" 1 "names and axioms hold non-blank strings" env PROOF_LEDGER="$work/empty-name.jsonl" bash "$script" check
