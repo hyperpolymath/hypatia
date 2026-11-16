@@ -348,16 +348,16 @@ jobs:
           echo "$(dirname "$agda_bin")" >> "$GITHUB_PATH"
           "$agda_bin" --version
 
-      - name: Check LogtalkMigration.agda (strict profile)
+      - name: Check AuditPreventionCorrespondence.agda (strict profile)
         working-directory: verification/proofs/agda
         run: |
           set -euo pipefail
           agda --version
-          sha256sum LogtalkMigration.agda
-          if agda --safe --without-K --cubical-compatible LogtalkMigration.agda; then
-            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda pass verification/proofs/agda/LogtalkMigration.agda -- checker="Agda $AGDA_VERSION"
+          sha256sum AuditPreventionCorrespondence.agda
+          if agda --safe --without-K --cubical-compatible AuditPreventionCorrespondence.agda; then
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda pass verification/proofs/agda/AuditPreventionCorrespondence.agda -- checker="Agda $AGDA_VERSION"
           else
-            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda fail verification/proofs/agda/LogtalkMigration.agda
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda fail verification/proofs/agda/AuditPreventionCorrespondence.agda
             exit 1
           fi
 
@@ -388,11 +388,11 @@ jobs:
           {
             echo "## Agda proof verification"
             echo ""
-            echo "- Invocation: \`agda --safe --without-K --cubical-compatible LogtalkMigration.agda\`"
+            echo "- Invocation: \`agda --safe --without-K --cubical-compatible AuditPreventionCorrespondence.agda\`"
             if command -v agda >/dev/null 2>&1; then
               echo "- Checker: \`$(agda --version | head -1)\`"
             fi
-            echo "- Source SHA-256: \`$(sha256sum verification/proofs/agda/LogtalkMigration.agda | cut -d' ' -f1)\`"
+            echo "- Source SHA-256: \`$(sha256sum verification/proofs/agda/AuditPreventionCorrespondence.agda | cut -d' ' -f1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   tlc:

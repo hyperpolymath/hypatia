@@ -2,17 +2,17 @@
 -- SPDX-License-Identifier: MPL-2.0
 -- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 --
--- Finite correspondence model for the Logtalk -> Elixir security-rule
--- migration (ECHIDNA rules/security_learning.lgt ->
--- Hypatia.Rules.SecurityErrors).
+-- Finite correspondence model between the source of record for the
+-- security-alert rules (ECHIDNA's security-learning rule table) and the
+-- Elixir target Hypatia.Rules.SecurityErrors.
 --
 -- Scope, deliberately narrow (estate PROOF-POLICY: a checked model is not
 -- a runtime-refinement proof):
 --
---   * The source functions transcribe the 18 alert_category/2 facts, the
---     classify_severity/2 clauses (including the final low catch-all),
---     the six is_auto_fixable/1 facts, the domain of suggest_fix/2, and
---     get_prevention_workflow/2 from security_learning.lgt.
+--   * The source functions transcribe the source of record: the 18
+--     alert_category/2 facts, the classify_severity/2 clauses (including
+--     the final low catch-all), the six is_auto_fixable/1 facts, the
+--     domain of suggest_fix/2, and get_prevention_workflow/2.
 --   * The target functions transcribe the corresponding Elixir tables in
 --     lib/rules/security_errors.ex over the same 18 alert types.
 --   * The theorems check exhaustive agreement for category, severity,
@@ -21,9 +21,9 @@
 --     the CodeReviewID extension are stated as separate lemmas rather
 --     than hidden inside a false universal equality.
 --   * Fix *text* is not modelled here: 10 of 13 strings are verbatim and
---     the other three are ledgered supersessions/generalisation in
---     docs/rules/logtalk-migration.adoc. Elixir runtime behaviour is
---     pinned by ExUnit tests, not by this file.
+--     the other three are recorded supersessions/generalisation in
+--     docs/rules/security-rule-provenance.adoc. Elixir runtime behaviour
+--     is pinned by ExUnit tests, not by this file.
 --
 -- Status and grade (standards PROOF-POLICY §5 and §8): the target is
 -- `PROVEN`, `PWG-3`, which holds only while the strict command in
@@ -34,7 +34,7 @@
 -- claim is made.
 -- No postulates, no unsafe options, no standard-library dependency.
 
-module LogtalkMigration where
+module AuditPreventionCorrespondence where
 
 open import Agda.Builtin.Bool
 open import Agda.Builtin.Equality
@@ -89,112 +89,112 @@ data Maybe (A : Set) : Set where
   just    : A -> Maybe A
 
 ------------------------------------------------------------------------
--- Source: ECHIDNA security_learning.lgt
+-- Source of record: ECHIDNA security-learning rule table
 ------------------------------------------------------------------------
 
-logtalkCategory : Alert -> Category
-logtalkCategory tokenPermissions        = workflowSecurity
-logtalkCategory pinnedDependencies      = workflowSecurity
-logtalkCategory missingWorkflowPerms    = workflowSecurity
-logtalkCategory hardCodedCrypto         = codeSecurity
-logtalkCategory remotePropertyInjection = codeSecurity
-logtalkCategory sqlInjection            = codeSecurity
-logtalkCategory unusedLocalVariable     = codeQuality
-logtalkCategory syntaxError             = codeQuality
-logtalkCategory vulnerabilities         = dependencyVuln
-logtalkCategory unmaintained            = dependencyVuln
-logtalkCategory securityPolicy          = processHygiene
-logtalkCategory maintained              = processHygiene
-logtalkCategory codeReview              = processHygiene
-logtalkCategory branchProtection        = processHygiene
-logtalkCategory ciiBestPractices        = processHygiene
-logtalkCategory fuzzing                 = missingTests
-logtalkCategory sast                    = missingTests
-logtalkCategory ciTests                 = missingTests
+sourceCategory : Alert -> Category
+sourceCategory tokenPermissions        = workflowSecurity
+sourceCategory pinnedDependencies      = workflowSecurity
+sourceCategory missingWorkflowPerms    = workflowSecurity
+sourceCategory hardCodedCrypto         = codeSecurity
+sourceCategory remotePropertyInjection = codeSecurity
+sourceCategory sqlInjection            = codeSecurity
+sourceCategory unusedLocalVariable     = codeQuality
+sourceCategory syntaxError             = codeQuality
+sourceCategory vulnerabilities         = dependencyVuln
+sourceCategory unmaintained            = dependencyVuln
+sourceCategory securityPolicy          = processHygiene
+sourceCategory maintained              = processHygiene
+sourceCategory codeReview              = processHygiene
+sourceCategory branchProtection        = processHygiene
+sourceCategory ciiBestPractices        = processHygiene
+sourceCategory fuzzing                 = missingTests
+sourceCategory sast                    = missingTests
+sourceCategory ciTests                 = missingTests
 
--- The final Logtalk clause is classify_severity(_, low), so every alert
+-- The final source clause is classify_severity(_, low), so every alert
 -- outside the critical/high/medium member lists is low here.
-logtalkSeverity : Alert -> Severity
-logtalkSeverity tokenPermissions        = high
-logtalkSeverity pinnedDependencies      = medium
-logtalkSeverity missingWorkflowPerms    = high
-logtalkSeverity hardCodedCrypto         = critical
-logtalkSeverity remotePropertyInjection = high
-logtalkSeverity sqlInjection            = critical
-logtalkSeverity unusedLocalVariable     = low
-logtalkSeverity syntaxError             = medium
-logtalkSeverity vulnerabilities         = critical
-logtalkSeverity unmaintained            = low
-logtalkSeverity securityPolicy          = medium
-logtalkSeverity maintained              = low
-logtalkSeverity codeReview              = medium
-logtalkSeverity branchProtection        = medium
-logtalkSeverity ciiBestPractices        = low
-logtalkSeverity fuzzing                 = low
-logtalkSeverity sast                    = low
-logtalkSeverity ciTests                 = low
+sourceSeverity : Alert -> Severity
+sourceSeverity tokenPermissions        = high
+sourceSeverity pinnedDependencies      = medium
+sourceSeverity missingWorkflowPerms    = high
+sourceSeverity hardCodedCrypto         = critical
+sourceSeverity remotePropertyInjection = high
+sourceSeverity sqlInjection            = critical
+sourceSeverity unusedLocalVariable     = low
+sourceSeverity syntaxError             = medium
+sourceSeverity vulnerabilities         = critical
+sourceSeverity unmaintained            = low
+sourceSeverity securityPolicy          = medium
+sourceSeverity maintained              = low
+sourceSeverity codeReview              = medium
+sourceSeverity branchProtection        = medium
+sourceSeverity ciiBestPractices        = low
+sourceSeverity fuzzing                 = low
+sourceSeverity sast                    = low
+sourceSeverity ciTests                 = low
 
-logtalkAutoFixable : Alert -> Bool
-logtalkAutoFixable tokenPermissions        = true
-logtalkAutoFixable pinnedDependencies      = true
-logtalkAutoFixable missingWorkflowPerms    = true
-logtalkAutoFixable hardCodedCrypto         = false
-logtalkAutoFixable remotePropertyInjection = false
-logtalkAutoFixable sqlInjection            = false
-logtalkAutoFixable unusedLocalVariable     = true
-logtalkAutoFixable syntaxError             = false
-logtalkAutoFixable vulnerabilities         = false
-logtalkAutoFixable unmaintained            = false
-logtalkAutoFixable securityPolicy          = true
-logtalkAutoFixable maintained              = false
-logtalkAutoFixable codeReview              = false
-logtalkAutoFixable branchProtection        = true
-logtalkAutoFixable ciiBestPractices        = false
-logtalkAutoFixable fuzzing                 = false
-logtalkAutoFixable sast                    = false
-logtalkAutoFixable ciTests                 = false
+sourceAutoFixable : Alert -> Bool
+sourceAutoFixable tokenPermissions        = true
+sourceAutoFixable pinnedDependencies      = true
+sourceAutoFixable missingWorkflowPerms    = true
+sourceAutoFixable hardCodedCrypto         = false
+sourceAutoFixable remotePropertyInjection = false
+sourceAutoFixable sqlInjection            = false
+sourceAutoFixable unusedLocalVariable     = true
+sourceAutoFixable syntaxError             = false
+sourceAutoFixable vulnerabilities         = false
+sourceAutoFixable unmaintained            = false
+sourceAutoFixable securityPolicy          = true
+sourceAutoFixable maintained              = false
+sourceAutoFixable codeReview              = false
+sourceAutoFixable branchProtection        = true
+sourceAutoFixable ciiBestPractices        = false
+sourceAutoFixable fuzzing                 = false
+sourceAutoFixable sast                    = false
+sourceAutoFixable ciTests                 = false
 
 -- Domain of suggest_fix/2 only (13 facts); the strings themselves are
--- handled by the migration ledger and Elixir tests.
-logtalkHasFix : Alert -> Bool
-logtalkHasFix tokenPermissions        = true
-logtalkHasFix pinnedDependencies      = true
-logtalkHasFix missingWorkflowPerms    = true
-logtalkHasFix hardCodedCrypto         = true
-logtalkHasFix remotePropertyInjection = true
-logtalkHasFix sqlInjection            = false
-logtalkHasFix unusedLocalVariable     = true
-logtalkHasFix syntaxError             = true
-logtalkHasFix vulnerabilities         = true
-logtalkHasFix unmaintained            = false
-logtalkHasFix securityPolicy          = true
-logtalkHasFix maintained              = false
-logtalkHasFix codeReview              = true
-logtalkHasFix branchProtection        = true
-logtalkHasFix ciiBestPractices        = true
-logtalkHasFix fuzzing                 = true
-logtalkHasFix sast                    = false
-logtalkHasFix ciTests                 = false
+-- handled by the provenance record and Elixir tests.
+sourceHasFix : Alert -> Bool
+sourceHasFix tokenPermissions        = true
+sourceHasFix pinnedDependencies      = true
+sourceHasFix missingWorkflowPerms    = true
+sourceHasFix hardCodedCrypto         = true
+sourceHasFix remotePropertyInjection = true
+sourceHasFix sqlInjection            = false
+sourceHasFix unusedLocalVariable     = true
+sourceHasFix syntaxError             = true
+sourceHasFix vulnerabilities         = true
+sourceHasFix unmaintained            = false
+sourceHasFix securityPolicy          = true
+sourceHasFix maintained              = false
+sourceHasFix codeReview              = true
+sourceHasFix branchProtection        = true
+sourceHasFix ciiBestPractices        = true
+sourceHasFix fuzzing                 = true
+sourceHasFix sast                    = false
+sourceHasFix ciTests                 = false
 
-logtalkPrevention : Alert -> Maybe Workflow
-logtalkPrevention tokenPermissions        = just workflowLinter
-logtalkPrevention pinnedDependencies      = just workflowLinter
-logtalkPrevention missingWorkflowPerms    = just workflowLinter
-logtalkPrevention hardCodedCrypto         = just secretScanner
-logtalkPrevention remotePropertyInjection = nothing
-logtalkPrevention sqlInjection            = nothing
-logtalkPrevention unusedLocalVariable     = nothing
-logtalkPrevention syntaxError             = nothing
-logtalkPrevention vulnerabilities         = just cargoAudit
-logtalkPrevention unmaintained            = nothing
-logtalkPrevention securityPolicy          = just scorecardEnforcer
-logtalkPrevention maintained              = nothing
-logtalkPrevention codeReview              = nothing
-logtalkPrevention branchProtection        = just branchProtectionEnforcer
-logtalkPrevention ciiBestPractices        = nothing
-logtalkPrevention fuzzing                 = nothing
-logtalkPrevention sast                    = nothing
-logtalkPrevention ciTests                 = nothing
+sourcePrevention : Alert -> Maybe Workflow
+sourcePrevention tokenPermissions        = just workflowLinter
+sourcePrevention pinnedDependencies      = just workflowLinter
+sourcePrevention missingWorkflowPerms    = just workflowLinter
+sourcePrevention hardCodedCrypto         = just secretScanner
+sourcePrevention remotePropertyInjection = nothing
+sourcePrevention sqlInjection            = nothing
+sourcePrevention unusedLocalVariable     = nothing
+sourcePrevention syntaxError             = nothing
+sourcePrevention vulnerabilities         = just cargoAudit
+sourcePrevention unmaintained            = nothing
+sourcePrevention securityPolicy          = just scorecardEnforcer
+sourcePrevention maintained              = nothing
+sourcePrevention codeReview              = nothing
+sourcePrevention branchProtection        = just branchProtectionEnforcer
+sourcePrevention ciiBestPractices        = nothing
+sourcePrevention fuzzing                 = nothing
+sourcePrevention sast                    = nothing
+sourcePrevention ciTests                 = nothing
 
 ------------------------------------------------------------------------
 -- Target: Hypatia.Rules.SecurityErrors (same 18 alert types)
@@ -304,7 +304,7 @@ elixirPrevention ciTests                 = nothing
 -- Correspondence theorems (exhaustive over the finite Alert type)
 ------------------------------------------------------------------------
 
-categoriesAgree : (a : Alert) -> logtalkCategory a ≡ elixirCategory a
+categoriesAgree : (a : Alert) -> sourceCategory a ≡ elixirCategory a
 categoriesAgree tokenPermissions        = refl
 categoriesAgree pinnedDependencies      = refl
 categoriesAgree missingWorkflowPerms    = refl
@@ -324,7 +324,7 @@ categoriesAgree fuzzing                 = refl
 categoriesAgree sast                    = refl
 categoriesAgree ciTests                 = refl
 
-severitiesAgree : (a : Alert) -> logtalkSeverity a ≡ elixirSeverity a
+severitiesAgree : (a : Alert) -> sourceSeverity a ≡ elixirSeverity a
 severitiesAgree tokenPermissions        = refl
 severitiesAgree pinnedDependencies      = refl
 severitiesAgree missingWorkflowPerms    = refl
@@ -344,7 +344,7 @@ severitiesAgree fuzzing                 = refl
 severitiesAgree sast                    = refl
 severitiesAgree ciTests                 = refl
 
-autoFixableAgrees : (a : Alert) -> logtalkAutoFixable a ≡ elixirAutoFixable a
+autoFixableAgrees : (a : Alert) -> sourceAutoFixable a ≡ elixirAutoFixable a
 autoFixableAgrees tokenPermissions        = refl
 autoFixableAgrees pinnedDependencies      = refl
 autoFixableAgrees missingWorkflowPerms    = refl
@@ -364,7 +364,7 @@ autoFixableAgrees fuzzing                 = refl
 autoFixableAgrees sast                    = refl
 autoFixableAgrees ciTests                 = refl
 
-fixPresenceAgrees : (a : Alert) -> logtalkHasFix a ≡ elixirHasFix a
+fixPresenceAgrees : (a : Alert) -> sourceHasFix a ≡ elixirHasFix a
 fixPresenceAgrees tokenPermissions        = refl
 fixPresenceAgrees pinnedDependencies      = refl
 fixPresenceAgrees missingWorkflowPerms    = refl
@@ -386,32 +386,32 @@ fixPresenceAgrees ciTests                 = refl
 
 -- Prevention: agreement on the six unchanged shared entries.
 preventionAgreesToken :
-  logtalkPrevention tokenPermissions ≡ elixirPrevention tokenPermissions
+  sourcePrevention tokenPermissions ≡ elixirPrevention tokenPermissions
 preventionAgreesToken = refl
 
 preventionAgreesPinned :
-  logtalkPrevention pinnedDependencies ≡ elixirPrevention pinnedDependencies
+  sourcePrevention pinnedDependencies ≡ elixirPrevention pinnedDependencies
 preventionAgreesPinned = refl
 
 preventionAgreesMissing :
-  logtalkPrevention missingWorkflowPerms ≡ elixirPrevention missingWorkflowPerms
+  sourcePrevention missingWorkflowPerms ≡ elixirPrevention missingWorkflowPerms
 preventionAgreesMissing = refl
 
 preventionAgreesHardCoded :
-  logtalkPrevention hardCodedCrypto ≡ elixirPrevention hardCodedCrypto
+  sourcePrevention hardCodedCrypto ≡ elixirPrevention hardCodedCrypto
 preventionAgreesHardCoded = refl
 
 preventionAgreesVulnerabilities :
-  logtalkPrevention vulnerabilities ≡ elixirPrevention vulnerabilities
+  sourcePrevention vulnerabilities ≡ elixirPrevention vulnerabilities
 preventionAgreesVulnerabilities = refl
 
 preventionAgreesSecurityPolicy :
-  logtalkPrevention securityPolicy ≡ elixirPrevention securityPolicy
+  sourcePrevention securityPolicy ≡ elixirPrevention securityPolicy
 preventionAgreesSecurityPolicy = refl
 
--- Prevention: the two ledgered non-equalities, stated exactly.
+-- Prevention: the two recorded non-equalities, stated exactly.
 preventionBranchSource :
-  logtalkPrevention branchProtection ≡ just branchProtectionEnforcer
+  sourcePrevention branchProtection ≡ just branchProtectionEnforcer
 preventionBranchSource = refl
 
 preventionBranchTarget :
@@ -419,14 +419,14 @@ preventionBranchTarget :
 preventionBranchTarget = refl
 
 preventionCodeReviewSource :
-  logtalkPrevention codeReview ≡ nothing
+  sourcePrevention codeReview ≡ nothing
 preventionCodeReviewSource = refl
 
 preventionCodeReviewTarget :
   elixirPrevention codeReview ≡ just scorecardEnforcer
 preventionCodeReviewTarget = refl
 
--- The three alerts that reached low only through the Logtalk catch-all
+-- The three alerts that reached low only through the source catch-all
 -- are explicit low entries in Elixir. (Also covered by
 -- severitiesAgree; named here because this was the one place where a
 -- fact-by-fact transcription would have changed behaviour to :info.)
