@@ -667,6 +667,11 @@ hyper withdraw [OPTIONS] <RULESET_ID>
 |`-o`
 |Output file path
 |stdout
+
+|`--file-format <FORMAT>`
+|
+|Format written to the output file: `json`, `yaml` or `toml`
+|`yaml`
 |===
 
 ==== Examples

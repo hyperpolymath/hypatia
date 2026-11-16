@@ -88,7 +88,7 @@
          │  • New patterns → New rules              │
          │  • Successful fixes → Higher confidence  │
          │  • Failed fixes → Try alternative        │
-         │  • promote_patterns → promote fix type   │
+         │  • promote_patterns → promote issue type │
          └───────────────────────────────────────────┘
 ....
 
@@ -105,7 +105,7 @@ from fixes to rules ❌ *GitHub integration* - No CI/CD calling hypatia
 patterns (now `+lib/rules/code_safety.ex+`) ✅ *hypatia-cli.sh* -
 Command-line scanner (ripgrep-based) ✅ *fleet-coordinator.sh* - Bot
 execution & coordination ✅ *Learning engine* - Records fix outcomes;
-`+promote_patterns+` marks qualifying fix types as promoted in the
+`+promote_patterns+` marks qualifying issue types as promoted in the
 module's own state, which nothing outside it acts on yet (now
 `+lib/rules/learning.ex+`) ✅ *GitHub Actions
 template* - CI/CD integration
@@ -182,7 +182,7 @@ cd gitbot-fleet
 ==== Threshold Phase
 
 ....
-At a promote_patterns call, for one fix type     | Action
+At a promote_patterns call, for one issue type   | Action
 -------------------------------------------------|---------------------
 fewer than 5 recorded fixes                      | not promoted
 success rate below 0.75                          | not promoted
@@ -197,7 +197,7 @@ not demote it.
 
 ==== Rule Promotion and New Recipes
 
-`+lib/rules/learning.ex+` promotes a fix type only when
+`+lib/rules/learning.ex+` promotes an issue type only when
 `+promote_patterns+` is called; nothing in `+lib/+` calls it on a
 timer. Rules for uncovered categories come from `+recipe_generator.ex+`
 at confidence 0.50, and the Bayesian loop in `+outcome_tracker.ex+`
