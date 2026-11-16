@@ -138,11 +138,11 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+verification/proofs/idris2/Quarantine.idr+`: `+failuresTriggerHard+`, `+highFPTriggersSoft+`, `+releaseRestoresOk+`, `+hardQuarantineBlocksAuto+`
 |Over the Idris2 model; lib/safety/quarantine.ex is not called by any dispatch path (CLAUDE.md Known Gap 2)
 
-|Rollback restores the supplied original snapshot after any batch result, including a failure at any index (P6). This holds by definition of the model rollback, which returns its second argument; execution is not proved all-or-nothing
+|A batch of reversible steps either commits every step (its result is the sequential application of all of them) or rolls back to exactly the starting state; nothing in between is reachable. The executor journals each successful step's undo and unwinds the journal on failure. For repository content overwrites every step is proved reversible, so that batch is all-or-nothing with no premise (P6)
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
-|`+verification/proofs/idris2/BatchRollback.idr+`: `+rollbackRestoresOriginal+`, `+reversibility+`, `+batchIsTransactional+`
-|Over the Idris2 model, where rollback ignores the current state; lib/safety/batch_rollback.ex is not called by any dispatch path
+|`+verification/proofs/idris2/BatchRollback.idr+`: `+batchAllOrNothing+`, `+rollbackRestoresOriginal+`, `+commitsIffAllSucceed+`, `+rollsBackIffSomeStepFails+`, `+setStepReversible+`, `+repoBatchAllOrNothing+`
+|Over the Idris2 executor model. lib/safety/batch_rollback.ex does not run steps: it marks a batch's outcomes and emits one git revert per outcome; that the Elixir module follows this discipline, and that git revert inverts a change (the Reversible premise), are ASSUMED
 
 |Uniform-mean aggregation of n predictions stays in [0,1] and above n times the minimum (H9)
 |proven
@@ -246,11 +246,11 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+test/dispatch_manifest_test.exs+`: `+DispatchManifest+`
 |There is no Signalbox repository to apply the criterion to
 
-|The rate-limit counter never exceeds its bound: tryAccept and prune preserve the invariant, an at-limit event is rejected, and a sequence of events sharing one timestamp preserves it (P7). Sequences across several timestamps are not covered
+|The rate-limit counter never exceeds its bound: tryAccept and prune preserve the invariant, an at-limit event is rejected, and from an empty limiter, for any events offered in time order, the accepted events in the window ending at any time from the last offer onward number at most maxEvents (P7)
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
-|`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`
-|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
+|`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`, `+invariantLater+`, `+processChronological+`, `+slidingWindowBound+`
+|Over Nat timestamps and counts; the model's window keeps an event exactly one window old, which the deployed limiter drops. lib/safety/rate_limiter.ex is not called by any dispatch path. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |The Beta posterior stays in (0,1), rises with successes, falls with failures, is the prior with no observations, and clamps to [floor, cap] (H7)
 |proven
@@ -707,16 +707,26 @@ dispatch strategies
 
 ==== 6. Batch Rollback (`+BatchRollback.idr+`)
 
-* *P6.1* Reversibility: rollback returns the supplied original snapshot
-* *P6.2* `+batchIsTransactional+`: every result of `+executeWithFailure+`
-meets `+TransactionProperty+` through its `+NothingApplied+` case
-* *P6.3* Rollback after a failure at any index returns the original
+* *P6.1* `+batchAllOrNothing+`: for a batch of reversible steps, the
+executor either commits every step, and its result is the sequential
+application of all of them, or rolls back to exactly the starting state
+* *P6.2* `+rollbackRestoresOriginal+`: a rolled-back batch reports the
+starting state
+* *P6.3* `+commitsIffAllSucceed+` and `+rollsBackIffSomeStepFails+`: the
+batch commits exactly when every step succeeds
+* *P6.4* `+setStepReversible+` and `+repoBatchAllOrNothing+`: overwriting a
+repository's content is reversible, so a batch of overwrites is
+all-or-nothing with no premise left
 
-Scope: the model `+rollback current original = original+` ignores its
-first argument, so all three hold by definition (each proof is `+Refl+`).
-They do not show that execution is all-or-nothing, or that a real rollback
-undoes applied operations. That would need a rollback that reads the
-current state and a proof that it inverts the applied prefix.
+Model: each step fails or returns its new state with the undo for that
+change. The executor journals the undos of the steps that succeed and, on
+a failure, unwinds the journal newest first. The proof is the journal
+invariant: the journal always unwinds the current state to the start.
+
+Scope: this is the executor model. `+lib/safety/batch_rollback.ex+` does
+not run steps; it marks a batch's outcomes and emits a `+git revert+`
+per outcome. That the Elixir module follows this discipline, and that a
+revert inverts its change (the `+Reversible+` premise), are ASSUMED.
 
 ==== 7. Rate Limiting (`+RateLimiting.idr+`)
 
@@ -728,10 +738,18 @@ list), for events that all carry the same timestamp `+t+`
 * *P7.5* At-limit rejection: when count = max, next event is always
 rejected
 * *P7.6* Count bounded after a sequence of accepts at one timestamp
+* *P7.7* `+invariantLater+`: if the bound holds at one time it holds at
+every later time, because a later window starts later and holds a subset
+of the events
+* *P7.8* `+slidingWindowBound+`: from an empty limiter, offer any events
+in time order (`+Chronological+`); at every time from the last offer
+onward, the accepted events in the window number at most `+maxEvents+`.
+Applied to each prefix, the bound holds at every point of the run
 
-Scope: P7.4 and P7.6 take `+All (\e => e.timestamp = t) es+`. Sequences
-spread over several timestamps, where pruning and window expiry interact,
-are not covered.
+Scope: timestamps are natural numbers. The model's window keeps an event
+exactly one window old; the deployed limiter (`+now - ts < window+`) drops
+it, so the deployed check is the stricter of the two. Out-of-order offers
+are outside P7.8.
 
 Status for all of P7: `proven` (Idris2 0.7.0, `%default total`). Moved
 from Lean on 2026-11-09; the Lean proofs rested on the kernel axioms
@@ -799,9 +817,9 @@ inventory row above. These are properties of the model, not of the Elixir.
 
 |Quarantine logic |`+Quarantine.idr+` |Full
 
-|Batch rollback |`+BatchRollback.idr+` |Model only: rollback returns
-the supplied original by definition; all-or-nothing execution and a
-rollback that undoes applied operations are not proved
+|Batch rollback |`+BatchRollback.idr+` |Executor model: all-or-nothing
+for reversible steps, with content overwrites proved reversible; the
+Elixir module and `+git revert+` are outside it
 
 |VeriSimDB connector |`+VerisimdbConnector.idr+` |Full (model; statement
 superseded 2026-11-01)
