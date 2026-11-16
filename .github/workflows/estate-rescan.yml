@@ -50,6 +50,11 @@ on:
         options:
           - 'false'
           - 'true'
+      credential_check_only:
+        description: Only create and delete a store probe branch; requires dry_run=false
+        required: false
+        default: false
+        type: boolean
   repository_dispatch:
     types: [estate-rescan]
 
@@ -87,7 +92,7 @@ jobs:
   # no commit, and takes about a second.
   preflight:
     name: Preflight — can we actually write to verisimdb-data?
-    if: inputs.dry_run != 'true'
+    if: inputs.dry_run != 'true' || inputs.credential_check_only
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -100,26 +105,30 @@ jobs:
 
       - name: Create and delete a probe branch
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          GH_TOKEN: ${{ secrets.VERISIMDB_DATA_PUBLISH_PAT }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
         run: |
           set -euo pipefail
+          [ "$DRY_RUN" != true ] || { echo '::error::A credential write check requires dry_run=false'; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] || { echo '::error::VERISIMDB_DATA_PUBLISH_PAT is missing'; exit 1; }
+          gh api user --silent
           R="hyperpolymath/verisimdb-data"
-          PROBE="preflight/${GITHUB_RUN_ID}"
+          PROBE="preflight/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           SHA="$(gh api "repos/${R}/git/ref/heads/main" --jq .object.sha)"
           if ! gh api -X POST "repos/${R}/git/refs" \
                  -f "ref=refs/heads/${PROBE}" -f "sha=${SHA}" --jq .ref >/dev/null 2>"$RUNNER_TEMP/probe-err.txt"; then
             cat "$RUNNER_TEMP/probe-err.txt" >&2
-            echo "::error title=verisimdb-data is not writable::HYPATIA_DISPATCH_PAT cannot create a branch on ${R}, so this rescan would discard ~20 minutes of scanning at the final step. Grant the token repository access to ${R} with Contents: Read and write AND Pull requests: Read and write. Note a fine-grained PAT must list the repo explicitly; org/user-wide scope is not inherited."
+            echo "::error title=verisimdb-data is not writable::VERISIMDB_DATA_PUBLISH_PAT cannot create a branch on ${R}. Use the dedicated publisher token with resource owner hyperpolymath, only verisimdb-data selected, Contents read/write, and Pull requests read/write for publication."
             exit 78
           fi
           gh api -X DELETE "repos/${R}/git/refs/heads/${PROBE}" >/dev/null
-          echo "verisimdb-data is writable — proceeding with the scan."
+          echo 'Store authentication and probe-branch creation/deletion passed. Pull-request creation, merging and scan publication were not tested.' | tee -a "$GITHUB_STEP_SUMMARY"
 
   scan:
     name: Rescan estate with panic-attack
     needs: preflight
     # A dry run skips the preflight; anything else must pass it first.
-    if: ${{ !cancelled() && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped') }}
+    if: ${{ !inputs.credential_check_only && !cancelled() && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
     outputs:
@@ -281,7 +290,7 @@ jobs:
 
       - name: Checkout verisimdb-data
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          GH_TOKEN: ${{ secrets.VERISIMDB_DATA_PUBLISH_PAT }}
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/hyperpolymath/verisimdb-data.git" "$RUNNER_TEMP/verisimdb-data"
@@ -309,7 +318,7 @@ jobs:
       - name: Publish to verisimdb-data (two signed, squash-merged PRs)
         if: steps.commit_scans.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          GH_TOKEN: ${{ secrets.VERISIMDB_DATA_PUBLISH_PAT }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
