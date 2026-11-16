@@ -160,8 +160,6 @@ detect_languages() {
     echo "$_files" | grep -qE '\.json$' && _langs="$_langs json"
     echo "$_files" | grep -qE '\.scm$' && _langs="$_langs scheme"
     echo "$_files" | grep -qE '\.ncl$' && _langs="$_langs nickel"
-    # .lgt is still *detected* so the RSR ban below can fire on it;
-    # detection is not approval (Logtalk retired estate-wide, ADR-001).
     echo "$_files" | grep -qE '\.(lgt|logtalk)$' && _langs="$_langs logtalk"
     echo "$_files" | grep -qE '\.adoc$' && _langs="$_langs asciidoc"
     echo "$_files" | grep -qE '\.md$' && _langs="$_langs markdown"
@@ -187,7 +185,7 @@ get_language_alternative() {
         go) echo "Rust" ;;
         python) echo "Elixir or Rust" ;;
         java|kotlin) echo "Rust" ;;
-        logtalk) echo "Elixir (lib/rules/*.ex)" ;;
+        logtalk) echo "Elixir" ;;
         *) echo "allowed languages" ;;
     esac
 }

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # Proof-of-concept scanner implementing hypatia rules in bash+ripgrep
 # Demonstrates the patterns work standalone (predates the Elixir ruleset
-# that absorbed the Logtalk engine, retired 2026-03-06)
+# in lib/rules/)
 
 set -euo pipefail
 
