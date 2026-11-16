@@ -1963,7 +1963,8 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
                 - working-directory: scanner
                   run: hypatia scan . > findings.json || true
                 - working-directory: render
-                  run: jq '{runs: [{results: .}]}' #{input} > ../out.sarif
+                  run: |
+                    jq '{runs: [{results: .}]}' #{input} > ../out.sarif
                 - uses: github/codeql-action/upload-sarif@v4
                   with:
                     sarif_file: out.sarif
