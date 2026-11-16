@@ -200,7 +200,7 @@
       :secrets ("HYPATIA_SCAN_PAT")
       :endpoints ("api.github.com:443")
       :enforcement harden-runner-block
-      :reason "Checks token identity and reads one repository's Dependabot alert endpoint without checking out code or printing API bodies.")
+      :reason "Checks token identity and one repository's Dependabot, code-scanning and secret-scanning alert endpoints without checking out code or printing API bodies.")
     (job
       :workflow ".github/workflows/credential-read-check.yml"
       :job "dispatch"
