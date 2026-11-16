@@ -69,8 +69,9 @@ jobs:
         run: |
           set -euo pipefail
           # Hypatia's rules are Elixir (lib/rules, ADR-001). A tracked .lgt
-          # or .logtalk source fails the run: the retired rule engine stays out.
-          hits=$(git ls-files '*.lgt' '*.logtalk' || true)
+          # or .logtalk source, in any letter case, fails the run: the retired
+          # rule engine stays out.
+          hits=$(git ls-files ':(icase)*.lgt' ':(icase)*.logtalk' || true)
           n=$(printf '%s' "$hits" | grep -c . || true)
           echo "retired rule-language sources in tree: ${n}"
           if [ "$n" -gt 0 ]; then
