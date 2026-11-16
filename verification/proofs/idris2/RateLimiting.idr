@@ -233,3 +233,106 @@ countBoundedAfterAccepts : (config : RateLimitConfig) -> (es : List Event) -> (t
 countBoundedAfterAccepts config es t times =
   processEventsPreservesInvariant (MkRateLimiterState config []) es t times
     (emptySatisfiesInvariant config t)
+
+------------------------------------------------------------------------
+-- Section 8: events over time (the sliding window)
+------------------------------------------------------------------------
+
+-- Sections 5 and 7 cover events that share one timestamp. This section
+-- covers a sequence whose timestamps never go backwards, which is how the
+-- limiter sees real traffic. The key fact is that the bound only gets
+-- easier with time: a later window starts later, so it holds a subset of
+-- the events an earlier window held.
+
+||| Nat's Bool `<=` agrees with LTE, one way.
+export
+leqTrueToLTE : (a, b : Nat) -> (a <= b) = True -> LTE a b
+leqTrueToLTE Z _ _ = LTEZero
+leqTrueToLTE (S a) Z prf = absurd prf
+leqTrueToLTE (S a) (S b) prf = LTESucc (leqTrueToLTE a b prf)
+
+||| ... and the other.
+export
+lteToLeqTrue : (a, b : Nat) -> LTE a b -> (a <= b) = True
+lteToLeqTrue Z Z _ = Refl
+lteToLeqTrue Z (S _) _ = Refl
+lteToLeqTrue (S a) Z prf = absurd prf
+lteToLeqTrue (S a) (S b) (LTESucc prf) = lteToLeqTrue a b prf
+
+||| An event inside a later window is inside every earlier one.
+export
+inWindowEarlier : (ws1, ws2 : Nat) -> (e : Event) -> LTE ws1 ws2 ->
+                  inWindow ws2 e = True -> inWindow ws1 e = True
+inWindowEarlier ws1 ws2 e le prf =
+  lteToLeqTrue ws1 e.timestamp
+    (transitive le (leqTrueToLTE ws2 e.timestamp prf))
+
+||| A window that starts later holds at most as many events.
+export
+countAntitone : (es : List Event) -> (ws1, ws2 : Nat) -> LTE ws1 ws2 ->
+                LTE (countEventsInWindow es ws2) (countEventsInWindow es ws1)
+countAntitone [] _ _ _ = LTEZero
+countAntitone (e :: es) ws1 ws2 le with (inWindow ws2 e) proof p2
+  _ | True with (inWindow ws1 e) proof p1
+    _ | True = LTESucc (countAntitone es ws1 ws2 le)
+    _ | False = absurd (trans (sym p1) (inWindowEarlier ws1 ws2 e le p2))
+  _ | False with (inWindow ws1 e)
+    _ | True = lteSuccRight (countAntitone es ws1 ws2 le)
+    _ | False = countAntitone es ws1 ws2 le
+
+||| If the bound holds at one time, it holds at every later time.
+export
+invariantLater : (state : RateLimiterState) -> (t1, t2 : Nat) -> LTE t1 t2 ->
+                 InvariantHolds state t1 -> InvariantHolds state t2
+invariantLater (MkRateLimiterState cfg evs) t1 t2 le h =
+  transitive (countAntitone evs (minus t1 cfg.windowSize) (minus t2 cfg.windowSize)
+                            (minusLteMonotone le)) h
+
+||| Events whose timestamps never go backwards, starting no earlier than t.
+public export
+data Chronological : (t : Nat) -> List Event -> Type where
+  Done : Chronological t []
+  Next : {e : Event} -> LTE t e.timestamp -> Chronological e.timestamp es ->
+         Chronological t (e :: es)
+
+||| The timestamp of the last event, or t when there is none.
+public export
+lastTime : (t : Nat) -> List Event -> Nat
+lastTime t [] = t
+lastTime _ (e :: es) = lastTime e.timestamp es
+
+||| tryAccept keeps the configuration.
+export
+tryAcceptConfig : (state : RateLimiterState) -> (e : Event) ->
+                  (fst (tryAccept state e)).config = state.config
+tryAcceptConfig (MkRateLimiterState cfg evs) e
+  with (isLT (countEventsInWindow evs (minus e.timestamp cfg.windowSize)) cfg.maxEvents)
+  _ | Yes _ = Refl
+  _ | No _ = Refl
+
+||| Offering events in time order keeps the bound at each event's time, so
+||| it holds at the time of the last one.
+export
+processChronological : (state : RateLimiterState) -> (es : List Event) -> (t : Nat) ->
+                       Chronological t es -> InvariantHolds state t ->
+                       InvariantHolds (processEvents state es) (lastTime t es)
+processChronological state [] t Done h = h
+processChronological state (e :: es) t (Next le rest) h =
+  processChronological (fst (tryAccept state e)) es e.timestamp rest
+    (tryAcceptPreservesInvariant state e (invariantLater state t e.timestamp le h))
+
+||| The sliding-window bound. From an empty limiter, offer any events in
+||| time order. At every time from the last offer onward, the accepted
+||| events in the window [now - windowSize, now] number at most maxEvents.
+||| Every accepted event is at or before the last offer, so the count the
+||| invariant takes (events at or after the window start) is exactly the
+||| window's count. Applied to each prefix, the bound holds at every point
+||| of the run.
+export
+slidingWindowBound : (config : RateLimitConfig) -> (es : List Event) ->
+                     Chronological 0 es -> (now : Nat) -> LTE (lastTime 0 es) now ->
+                     InvariantHolds (processEvents (MkRateLimiterState config []) es) now
+slidingWindowBound config es order now late =
+  invariantLater _ (lastTime 0 es) now late
+    (processChronological (MkRateLimiterState config []) es 0 order
+      (emptySatisfiesInvariant config 0))
