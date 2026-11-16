@@ -415,7 +415,7 @@ capability reader (`+verdictOf+`), so it passes iff
 `+scorecardProfilePresent+` for every source (`+verdictAgrees+`,
 `+profilePresentAgrees+`; the bffd76a fix is the instance
 `+deedDecidedAgrees+`); the case that diverged before the 3.2.2 fix now
-fails (`+emptyA2mlFails+`) |OPEN — not yet kernel-checked at this commit. The model changed with the 3.2.2 fix; the last receipt (Verify Proofs run 42634000625, idris2 --check job 129217248108, at 34c7bc7cff0cf54b1b5707a497d9f8abf826e844) covered the previous model, which proved the divergence instead
+fails (`+emptyA2mlFails+`) |PROVEN — Verify Proofs run 43939522672, idris2 --check job 133552988403, at commit 99a40d6ab758d084f352e0bd2d43ba643041ee06 (Idris2 v0.7.0, ABI package build). The earlier receipt (run 42634000625 at 34c7bc7c) covered the pre-fix model
 
 |`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
 the profile-reader cases of test/rules/rsr_conformance_test.exs stated
@@ -423,7 +423,7 @@ against the model and accepted by evaluation (`+deedEraDeclares+`,
 `+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
 `+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
 `+a2mlOnly+`, `+dupAgrees+`, `+emptyA2mlFailsHere+`, `+emptyA2mlNotPresent+`,
-`+emptyA2mlAgrees+`, `+a2mlListPasses+`) |OPEN — not yet accepted at this commit (see the row above)
+`+emptyA2mlAgrees+`, `+a2mlListPasses+`) |TESTED — accepted in the same job
 
 |`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
 rejection: a duplicated clause counted as a present profile is refused at
@@ -443,8 +443,8 @@ a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
 
 |`+tests/reject/EmptyA2mlPassesProfileCriterion.idr+` |Idris2 |Expected
 rejection: 3.2.2 passing with no deed and an a2ml that yields no
-capabilities list (the pre-fix behaviour) is refused at `+invalid+` |OPEN
-— not yet run at this commit
+capabilities list (the pre-fix behaviour) is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job ("Mismatch between: Pass and Fail.")
 
 |Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
 functions behave as the Elixir functions their header names. Argued by
