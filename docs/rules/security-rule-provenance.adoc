@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Security Rule Provenance
+:toc: macro
+:toclevels: 2
+
+This page records where two rule sets in `lib/rules/` came from, how each
+source rule maps onto Elixir, and every deliberate divergence:
+
+* the security-alert tables of `Hypatia.Rules.SecurityErrors`, transcribed
+  from ECHIDNA's security-learning rule table (the *source of record*);
+* the audit-training prevention rules AP001–AP015 of
+  `Hypatia.Rules.AuditPrevention`, first written as prevention-rule records
+  in the `.audittraining/security-errors/*.adoc` incident reports
+  (2025-12-29).
+
+It also defines the learned-rules JSON contract that
+`mix hypatia.batch_security_scan` writes. The Elixir modules are canonical;
+if this page and the code disagree, the code wins and this page is
+corrected.
+
+toc::[]
+
+== How fidelity is recorded
+
+Each transcribed item carries one disposition:
+
+[cols="1,3",options="header"]
+|===
+|Disposition |Meaning
+
+|Exact
+|Same inputs, same outputs, including failure/absence behaviour over
+the stated domain.
+
+|Operationalised
+|The source condition named an uninterpreted predicate
+(`crate_type(parser)`, `nearby_pattern/1`, `pr_reviews < 2`, …). The
+Elixir check states the concrete evidence test used in its place; the
+interpretation is written down here and in the module, not hidden.
+
+|Extension
+|The Elixir surface is a superset (more alert types, a total function
+where the source query failed, an extra prevention mapping).
+Shared-domain behaviour is unchanged.
+
+|Superseded
+|The source value was wrong or unsafe under current estate policy and
+was replaced on purpose. The old value is quoted here so the change is
+auditable.
+
+|Replaced
+|The source described a runtime mechanism that an Elixir subsystem
+replaces wholesale. No clause-by-clause equivalent is pretended.
+|===
+
+[[learned-rules-json]]
+== The learned-rules JSON contract
+
+`Mix.Tasks.Hypatia.BatchSecurityScan` writes one named-field JSON document,
+`schemas/learned-security-rules.schema.json` ($id
+`https://hyperpolymath.dev/schemas/hypatia/learned-security-rules`, format
+version `1.0.0`), to `~/repos/echidna/rules/learned_security_rules.json`
+when that directory exists, or to `.audittraining/echidna-rules.json`:
+
+[source,json]
+----
+{
+  "schema": "https://hyperpolymath.dev/schemas/hypatia/learned-security-rules",
+  "version": "1.0.0",
+  "generated_at": "2026-11-01T00:00:00Z",
+  "generator": "mix hypatia.batch_security_scan",
+  "source_alert_count": 1234,
+  "rules": [
+    {
+      "alert_type": "TokenPermissionsID",
+      "category": "workflow_security",
+      "severity": "high",
+      "auto_fixable": true,
+      "observations": 87,
+      "fix": "Add granular workflow-level permissions ...",
+      "prevention_workflow": "workflow-linter.yml"
+    }
+  ]
+}
+----
+
+Field provenance:
+
+[cols="1,2,2",options="header"]
+|===
+|JSON field |Source-of-record predicate |Canonical Elixir source
+
+|`alert_type` |the alert id |GitHub/Scorecard alert id
+|`category` |`alert_category/2`
+|`SecurityErrors.alert_category/1` (snake-case string; task-local
+substring grouping only as fallback for ids outside the 18)
+|`severity` |`classify_severity/2` |`SecurityErrors.issue_severity/1`
+|`auto_fixable` |`is_auto_fixable/1` |`SecurityErrors.auto_fixable?/1`
+|`observations` |— |Alert count in the producing scan. Evidence for
+belief formation only — never a soundness claim
+(`src/Hypatia/ABI/Verdict.idr`).
+|`fix` |`suggest_fix/2` |`SecurityErrors.fix_suggestion/1` (`null` when none)
+|`prevention_workflow` |`get_prevention_workflow/2`
+|`SecurityErrors.prevention_workflow/1` (`null` when none)
+|===
+
+All per-alert fields except `observations` are exactly
+`Hypatia.Rules.SecurityErrors.validate_alert/1` rendered as JSON. Named
+fields also remove an ambiguity in the source's training loader, which
+stored a catalog field as `Type` in one predicate and read the same
+position as `Category` in another.
+
+[[security-errors]]
+== `SecurityErrors`: the security-alert tables
+
+Source of record: ECHIDNA's security-learning rule table (added
+2025-12-29). Target: `Hypatia.Rules.SecurityErrors`, except where
+stated. The finite correspondence of the 18 alert types is checked in
+`verification/proofs/agda/AuditPreventionCorrespondence.agda` (see
+`verification/PROOF-STATUS.adoc`, section 8); runtime behaviour is
+pinned by `test/security_errors_test.exs`.
+
+=== `alert_category/2` — 18 facts → `@alert_categories` — *Exact*
+
+Canonical home: `SecurityErrors.alert_categories/0` / `alert_category/1`
+(snake-case atoms, as in the source):
+
+* `workflow_security`: TokenPermissionsID, PinnedDependenciesID,
+  missing-workflow-permissions
+* `code_security`: hard-coded-cryptographic-value,
+  remote-property-injection, sql-injection
+* `code_quality`: unused-local-variable, syntax-error
+* `dependency_vuln`: VulnerabilitiesID, unmaintained
+* `process_hygiene`: SecurityPolicyID, MaintainedID, CodeReviewID,
+  BranchProtectionID, CIIBestPracticesID
+* `missing_tests`: FuzzingID, SASTID, CITestsID
+
+Outside these 18, `alert_category/1` returns `nil`, mirroring the absence
+of a fact. (The batch-scan task keeps a separate kebab-case *display*
+grouping with substring fallback for unseen ids such as `unused-import`;
+it is not a second semantic source and is commented as such.)
+
+=== `classify_severity/2` → `issue_severity/1` — *Exact on the 18; one stated difference outside*
+
+* critical: hard-coded-cryptographic-value, sql-injection,
+  VulnerabilitiesID
+* high: remote-property-injection, TokenPermissionsID,
+  missing-workflow-permissions
+* medium: PinnedDependenciesID, SecurityPolicyID, BranchProtectionID,
+  CodeReviewID, syntax-error
+* low (the source catch-all `classify_severity(_, low)`): the remaining
+  seven — unused-local-variable, unmaintained, MaintainedID,
+  CIIBestPracticesID, FuzzingID, SASTID, CITestsID
+
+SASTID, CITestsID and unmaintained are explicit `:low` entries, so they do
+not fall through to `issue_severity/1`'s `:info` default. For ids
+*neither* table has seen, Elixir keeps its long-standing `:info`
+unknown-default rather than the source catch-all's `low`; that is the
+single deliberate difference, unreachable for any of the 18.
+
+=== `is_auto_fixable/1` — 6 facts → `@auto_fixable` — *Exact on the 18*
+
+TokenPermissionsID, PinnedDependenciesID, missing-workflow-permissions,
+SecurityPolicyID, BranchProtectionID, unused-local-variable. The Elixir
+set also holds later alert ids outside the source domain; on the 18 the
+two agree exactly.
+
+=== `suggest_fix/2` — 13 facts → `@fix_suggestions`
+
+* *Exact (10), byte-identical strings:* SecurityPolicyID,
+  BranchProtectionID, CodeReviewID, CIIBestPracticesID, FuzzingID,
+  VulnerabilitiesID, hard-coded-cryptographic-value,
+  remote-property-injection, unused-local-variable, syntax-error.
+* *Generalised (1):* PinnedDependenciesID — source
+  "Replace @v4 with @SHA # v4 format" → Elixir
+  "Replace @vN with @SHA # vN format" (same instruction, version
+  parameterised).
+* *Superseded (2):* TokenPermissionsID and missing-workflow-permissions —
+  the source prescribed `Add "permissions: read-all" at workflow level`.
+  Current OSSF guidance (and Hypatia's own
+  `scorecard_compliance/token_permissions` check) flags `read-all` itself
+  as high severity, so the canonical text prescribes granular
+  least-privilege permissions and warns against `read-all`.
+* *No fix in either table (5 of the 18):* sql-injection, unmaintained,
+  MaintainedID, SASTID, CITestsID → `fix_suggestion/1` returns `nil`.
+
+=== `get_prevention_workflow/2` — 7 facts → `@prevention_workflows`
+
+Exact for six: TokenPermissionsID, PinnedDependenciesID,
+missing-workflow-permissions → `workflow-linter.yml`;
+hard-coded-cryptographic-value → `secret-scanner.yml`;
+VulnerabilitiesID → `cargo-audit.yml`; SecurityPolicyID →
+`scorecard-enforcer.yml`.
+
+* *Superseded:* BranchProtectionID — source
+  `branch-protection-enforcer.yml` → Elixir `scorecard-enforcer.yml`. The
+  Elixir value groups BranchProtection with the other Scorecard process
+  checks and every executable consumer has used it; both workflow
+  templates still exist under `.audittraining/prevention/`. Changing it
+  back is a policy decision for a separate change.
+* *Extension:* CodeReviewID → `scorecard-enforcer.yml` exists in Elixir
+  with no source counterpart.
+
+=== `validate_alert/2` → `validate_alert/1` — *Total-function extension*
+
+The source composed severity, fix and auto-fixability into
+`alert_validation(Type, Severity, Fix, AutoFix)` and *failed* for any
+alert without a `suggest_fix/2` clause. `SecurityErrors.validate_alert/1`
+returns those fields plus `category` and `prevention_workflow`, and is
+total: absent facts are `nil`/`false` rather than query failure. A
+consumer that needs an "unknown alert" signal tests `category: nil` and
+`fix: nil` in the returned map (or the JSON `null`s).
+
+=== Learning machinery — *Replaced*
+
+The source's training-data loader, its dynamic learned-rule database and
+its CI/CD sync never formed a runnable pipeline and have no clause-level
+equivalents. Their purpose is served by:
+
+* `Hypatia.Rules.Learning` — outcome tracking, confidence, promotion;
+* `Mix.Tasks.Hypatia.BatchSecurityScan` — fleet alert collection and the
+  learned-rules JSON above;
+* `.audittraining/ERROR-CATALOG.scm` — retained as a training-data record.
+
+=== Where `.audittraining/ERROR-CATALOG.scm` disagrees with the source
+
+The source table says its facts derive from `ERROR-CATALOG.scm`, but the
+two disagree. `SecurityErrors` follows the source table (the values every
+executable consumer used) and records the catalog variants as open policy
+questions:
+
+* Categories: the catalog splits fuzzing/SAST/CI-tests into
+  `missing-fuzzing` / `missing-sast` / `missing-tests`; the source and
+  Elixir use one `missing_tests` group.
+* Severities: the catalog has VulnerabilitiesID high (source critical),
+  unmaintained medium (source low), FuzzingID/SASTID/CITestsID medium
+  (source low).
+* Auto-fixability: the catalog marks CodeReviewID, FuzzingID, SASTID and
+  CITestsID `#t`; the source and Elixir say false.
+* The catalog's extra entries (workflow-linter self-detection,
+  rust-toolchain input, duplicate workflows, …) were never in the source;
+  most already live in Elixir's extended severity/fix tables.
+
+Adopting the catalog's finer split or medium grading would change live
+severities fleet-wide and needs its own decision.
+
+[[audit-prevention]]
+== `AuditPrevention`: rules AP001–AP015
+
+`Hypatia.Rules.AuditPrevention.rules/0` keeps every source record
+verbatim as data (id, `source_functor`, `source_name`, effect,
+description, conditions, action, `origin` report, canonical equivalent);
+the module is the rules' only home.
+
+Common operationalisations:
+
+* The records had effects and actions but no severities. Finding
+  severity derives from the action (`block_merge_with_escalation` →
+  `:critical`; other `block_*` → `:high`; `warn_*`/`alert_*` →
+  `:medium`; `warn_and_log` → `:low`). Alert-id severities remain
+  `SecurityErrors`' business.
+* Checks are pure functions over caller-supplied evidence (file lists,
+  file contents, tag/review/score facts). `check_all/1` runs every
+  implemented check whose evidence is present and is silent otherwise;
+  it never duplicates a check whose canonical home is another module.
+
+[cols="1,2,3,3",options="header"]
+|===
+|ID |Source rule |Canonical Elixir |Disposition / operationalisation
+
+|AP001 |`parser_rule(input_limits)` (bunsenite)
+|`AuditPrevention.check_parser_input_limits/1`
+|Implemented. `crate_type(parser)` is inferred from a Cargo description
+naming a parser; the negated size-limit pattern is searched over the
+supplied contents.
+
+|AP002 |`wasm_rule(memory_limits)` (bunsenite)
+|`AuditPrevention.check_wasm_memory_limits/1`
+|Implemented. `feature("wasm")` is inferred from Cargo wasm
+features/dependencies; memory-limit markers searched likewise.
+
+|AP003 |`rust_rule(missing_audit)` (czech-file-knife)
+|`AuditPrevention.check_missing_cargo_audit/2`
+|Implemented exactly over evidence: `Cargo.toml` present and no
+*workflow* content running `cargo audit` (a README mention is not CI).
+
+|AP004 |`rust_rule(workspace_vuln)` (czech-file-knife)
+|`AuditPrevention.check_workspace_vuln/2`
+|Implemented as the stated conjunction; `any_member_has_vuln` is
+caller-supplied vulnerability evidence (this check does not itself
+audit members — that is the scanner's/cargo-audit's job).
+
+|AP005 |`project_rule(missing_ci_tests)` (gitvisor)
+|`AuditPrevention.check_missing_ci_tests/1`
+|Implemented. The literal glob was `*test*.yml`; `.yaml` test workflows
+are accepted as the same semantic object (the glob, read literally,
+would false-positive on them). `has_source_code` uses the module's
+source-extension list.
+
+|AP006 |`project_rule(missing_sast)` (gitvisor)
+|`AuditPrevention.check_missing_sast/2`
+|Implemented; `codeql.yaml` accepted alongside the literal `codeql.yml`,
+same reasoning as AP005. SecurityErrors' CodeQL language matrix
+validation is the related pre-existing surface.
+
+|AP007 |`security_rule(property_injection)` (polyglot-i18n)
+|`AuditPrevention.check_property_injection/1`
+|Implemented. Both source access patterns are used verbatim;
+`nearby_pattern(allowlist)` is operationalised as *same file*. CWE-915
+is mapped in `SecurityErrors` for `remote-property-injection` /
+`remote_property_injection`.
+
+|AP008 |`code_quality_rule(unused_vars)` (polyglot-i18n)
+|`SecurityErrors` metadata for `unused-local-variable`
+|Metadata only, deliberately: the source condition is a compiler
+diagnostic string ("is declared but its value is never read"), so the
+detector of record stays the language compiler/linter. Severity
+(`:low`), fix, category (`:code_quality`) and auto-fixability are
+canonical in `SecurityErrors`.
+
+|AP009 |`crypto_rule(enhanced_review)` (proof-of-work)
+|`AuditPrevention.check_crypto_enhanced_review/2`
+|Implemented. `pr_reviews < 2` is read as the *required approving review
+count* from branch protection; unknown (`nil`) never fires.
+
+|AP010 |`crypto_rule(require_fuzzing)` (proof-of-work)
+|`AuditPrevention.check_crypto_require_fuzzing/2`
+|Implemented: cryptography tag + no `fuzz/` path in the file list.
+
+|AP011 |`crypto_rule(no_panic)` (proof-of-work)
+|`CodeSafety.scan_content/2` (`:panic_macro`, `:unwrap_without_check`,
+`:expect_in_hot_path`)
+|Already canonical — and a superset: the Elixir patterns fire in every
+Rust repo, not only cryptography-tagged ones. Not duplicated.
+
+|AP012 |`meta_rule(rsr_self_compliance)` (supernorma)
+|`RsrConformance` + `Dogfooding`
+|Already canonical, generalised: the hard-coded `repo_name(supernorma)`
+becomes "any RSR-tooling repo, including Hypatia itself" via the
+conformance oracle and dogfooding checks.
+
+|AP013 |`template_rule(exemplary_standards)` (supernorma)
+|`AuditPrevention.check_exemplary_standards/2`
+|Implemented exactly: tooling purpose + Scorecard score < 8; boundary
+value 8 passes, mirroring `<`.
+
+|AP014 |`workflow_rule(missing_permissions)` (ubicity)
+|`WorkflowAudit.check_permissions/1`,
+`WorkflowHardening.wh002_excessive_permissions/1`
+|Already canonical (and stricter: excessive grants are flagged, not only
+absence). Not duplicated; `check_all/1` excludes it.
+
+|AP015 |`workflow_rule(unpinned_action)` (ubicity)
+|`WorkflowHardening.wh004_unpinned_uses/1`,
+`WorkflowAudit.check_unpinned_actions/1`
+|Already canonical with one supersession: the source excused a tag ref
+with a trailing `# vN` comment; the Elixir checks require the 40-hex SHA
+form (comment or not). A comment beside a mutable tag is not a pin.
+|===
+
+AP001–AP015 check semantics beyond the table correspondence carry no
+formal claim: the regex/evidence semantics are specified in code and in
+`test/rules/audit_prevention_test.exs`.

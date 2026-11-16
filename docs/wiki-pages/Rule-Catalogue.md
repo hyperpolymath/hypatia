@@ -9,23 +9,23 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 |---|---|---|
 | `actions_lock` | — | Strict local validation for machine-generated `gh actions-lock` v0.0.2/v0.0.3 files. |
 | `admin_merge_eligibility` | DBA002 | Recognises PR shapes that are safe to admin-merge in bulk when the |
-| `audit_prevention` | AP001 AP002 AP003 AP004 AP005 AP006 AP007 AP008 AP009 AP010 AP011 AP012 AP013 AP014 AP015 | Audit-training prevention rules AP001–AP015, transcribed from Logtalk. |
+| `audit_prevention` | AP001 AP002 AP003 AP004 AP005 AP006 AP007 AP008 AP009 AP010 AP011 AP012 AP013 AP014 AP015 | Audit-training prevention rules AP001–AP015. |
 | `baseline_health` | BH001 BH002 BH003 BH004 BH005 BH006 BH007 BH008 | Detects degraded `main`-branch baseline conditions that allow silent rot. |
 | `branch_protection` | BP001 BP002 BP003 BP004 BP005 BP006 BP007 BP008 BP009 | Branch-protection hygiene rules drawn from the CIS GitHub Benchmark, |
 | `build_system_rules` | — | Build-tool configuration anti-patterns that block estate CI but slip past |
-| `cicd_rules` | — | Primary Elixir CI/CD policy rules (migrated from legacy Logtalk engine). |
-| `code_safety` | — | Primary Elixir rules for code safety (migrated from legacy Logtalk engine). |
+| `cicd_rules` | — | Primary Elixir CI/CD policy rules. |
+| `code_safety` | — | Primary Elixir rules for code safety. |
 | `code_scanning_alerts` | CSA001 CSA002 CSA003 CSA004 CSA005 CSA006 | GitHub Code Scanning alert querying (CodeQL + third-party SARIF). |
 | `dependabot_alerts` | DA001 DA002 DA003 DA004 | GitHub Dependabot alert querying and risk assessment. |
 | `disambiguation_rules` | DR001 | Cross-reference / language-disambiguation rules. |
 | `dogfooding` | HYP-DOG-001 HYP-DOG-003 HYP-DOG-004 HYP-DOG-005 HYP-DOG-006 HYP-DOG-007 HYP-DOG-008 HYP-DOG-009 HYP-DOG-010 | Dogfooding compliance rules -- HYP-DOG-001 through HYP-DOG-010. |
-| `forge_adapters` | — | Primary Elixir forge adapter rules (migrated from legacy Logtalk engine). |
+| `forge_adapters` | — | Primary Elixir forge adapter rules. |
 | `git_state` | GS001 GS002 GS003 GS004 GS005 GS006 GS007 GS008 | Git repository synchronisation state checks. |
 | `green_web` | — | Green Web Foundation certification checks for hyperpolymath repositories. |
 | `honest_completion` | — | Honest completion audit -- cross-references claimed completion percentages |
 | `implementation_inside_canon` | — | Executable evaluator for the standards-authored HYP-S009 rule. |
-| `learning` | — | Learning engine rules absorbed from the retired Logtalk learning and |
-| `migration_rules` | — | Primary Elixir ReScript migration rules (migrated from legacy Logtalk engine). |
+| `learning` | — | Learning engine rules. |
+| `migration_rules` | — | Primary Elixir ReScript migration rules. |
 | `moved_repositories` | — | Versioned records of confirmed repository moves relevant to reusable workflows. |
 | `pin_integrity` | — | Pin-level integrity rules for workflow and lockfile content. |
 | `pin_sites` | — | Structural `uses:` pin sites on one line of workflow YAML. |
@@ -37,10 +37,10 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 | `rsr_conformance` | — | The RSR v2.0 conformance **oracle** (increment 3 of the HYP-S family): |
 | `rsr_criteria` | — | Loads the **RSR v2.0 criteria SSOT** (`rsr-criteria-v2.a2ml` from |
 | `rule_loader` | — | Loads standards-authored rule definitions (`.a2ml` files) into structured |
-| `rules` | ERR-LIC-001 | Facade module for all Hypatia rules, absorbed from the Logtalk engine. |
+| `rules` | ERR-LIC-001 | Facade module for all Hypatia rules. |
 | `scorecard_compliance` | — | Enforces OpenSSF Scorecard best practices as automated Elixir rules. |
 | `secret_scanning_alerts` | SSA001 SSA002 SSA003 SSA004 | GitHub Secret Scanning alert querying. |
-| `security_errors` | — | Primary Elixir security error database (migrated from legacy Logtalk engine). |
+| `security_errors` | — | Primary Elixir security error database. |
 | `sha_bump_propagation` | — | Detection: an estate-wide reusable workflow has been bumped to a new SHA |
 | `standards_repo` | — | The names of the estate standards repository. |
 | `strategy_drift` | — | N4: Detects strategy-shift events and flags previously-failed attempts |
@@ -54,7 +54,7 @@ Every rule module Hypatia ships. **Generated** from `lib/rules/*.ex` — regener
 | Prefix | Family |
 |---|---|
 | `AM` | Admin-merge eligibility |
-| `AP` | Audit-prevention rules transcribed from the historical Logtalk blocks |
+| `AP` | Audit-prevention rules from the audit-training incident reports |
 | `BH` | Baseline health (silent `main` rot) |
 | `BP` | Branch protection (CIS / Scorecard / NIST SSDF) |
 | `CSA` | Code-scanning alerts (CodeQL + third-party SARIF) |
