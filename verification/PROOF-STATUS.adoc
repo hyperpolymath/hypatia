@@ -138,11 +138,11 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+verification/proofs/idris2/Quarantine.idr+`: `+failuresTriggerHard+`, `+highFPTriggersSoft+`, `+releaseRestoresOk+`, `+hardQuarantineBlocksAuto+`
 |Over the Idris2 model; lib/safety/quarantine.ex is not called by any dispatch path (CLAUDE.md Known Gap 2)
 
-|Batch execution is all-or-nothing and rollback restores the original snapshot (P6)
+|Rollback restores the supplied original snapshot after any batch result, including a failure at any index (P6). This holds by definition of the model rollback, which returns its second argument; execution is not proved all-or-nothing
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/BatchRollback.idr+`: `+rollbackRestoresOriginal+`, `+reversibility+`, `+batchIsTransactional+`
-|Over the Idris2 model; lib/safety/batch_rollback.ex is not called by any dispatch path
+|Over the Idris2 model, where rollback ignores the current state; lib/safety/batch_rollback.ex is not called by any dispatch path
 
 |Uniform-mean aggregation of n predictions stays in [0,1] and above n times the minimum (H9)
 |proven
@@ -246,7 +246,7 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+test/dispatch_manifest_test.exs+`: `+DispatchManifest+`
 |There is no Signalbox repository to apply the criterion to
 
-|The rate-limit counter never exceeds its bound: tryAccept, prune and event sequences preserve the invariant, and an at-limit event is rejected (P7)
+|The rate-limit counter never exceeds its bound: tryAccept and prune preserve the invariant, an at-limit event is rejected, and a sequence of events sharing one timestamp preserves it (P7). Sequences across several timestamps are not covered
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`
@@ -707,12 +707,16 @@ dispatch strategies
 
 ==== 6. Batch Rollback (`+BatchRollback.idr+`)
 
-* *P6.1* Reversibility: rollback always restores the exact original
-snapshot
-* *P6.2* Transactionality: batch operations satisfy the
-"`All-or-Nothing`" property
-* *P6.3* Fault Tolerance: even partially failed batches are reversible
-to original state
+* *P6.1* Reversibility: rollback returns the supplied original snapshot
+* *P6.2* `+batchIsTransactional+`: every result of `+executeWithFailure+`
+meets `+TransactionProperty+` through its `+NothingApplied+` case
+* *P6.3* Rollback after a failure at any index returns the original
+
+Scope: the model `+rollback current original = original+` ignores its
+first argument, so all three hold by definition (each proof is `+Refl+`).
+They do not show that execution is all-or-nothing, or that a real rollback
+undoes applied operations. That would need a rollback that reads the
+current state and a proof that it inverts the applied prefix.
 
 ==== 7. Rate Limiting (`+RateLimiting.idr+`)
 
@@ -720,10 +724,14 @@ to original state
 * *P7.2* `+tryAccept+` preserves invariant (inductive step)
 * *P7.3* `+prune+` preserves invariant (GC safety)
 * *P7.4* Sequence processing preserves invariant (induction over event
-list)
+list), for events that all carry the same timestamp `+t+`
 * *P7.5* At-limit rejection: when count = max, next event is always
 rejected
-* *P7.6* Count bounded after any sequence of accepts
+* *P7.6* Count bounded after a sequence of accepts at one timestamp
+
+Scope: P7.4 and P7.6 take `+All (\e => e.timestamp = t) es+`. Sequences
+spread over several timestamps, where pruning and window expiry interact,
+are not covered.
 
 Status for all of P7: `proven` (Idris2 0.7.0, `%default total`). Moved
 from Lean on 2026-11-09; the Lean proofs rested on the kernel axioms
