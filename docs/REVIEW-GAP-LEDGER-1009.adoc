@@ -40,11 +40,14 @@ regression gate; no duplicate implementation is introduced here.
 |6 |kyq BOM, block-header-comment, Unicode column and trailing-comma defects;
 independent port comparison
 |Before merge |Pinned differential plus spec mutations
-|Port fixes and the differential are present. Upstream adoption remains open:
-the remote kyq main is still `4d1071df04d93e089500d58d0b6ba37bfcc75248`.
-Do not move `KYQ_REF` or erase divergence rows until the upstream fixes land.
-The local branch described in the issue was not available in this checkout;
-its reported test counts are historical evidence, not a reproduced receipt.
+|Upstream fixes landed in metadatastician/kyq#20 and #22. This consumer now
+pins #22's published `ca6f427e4c8ee936197517875deb99af0fde90d3` (0.3.0),
+synchronizes its corpus and removes both parser-divergence allowances.
+Fresh local checks on 2026-11-16: reference suite 429/429; strict comparison
+489/489 inputs, including 402 streams at the pinned YAML test-suite revision;
+180 parser/corpus/workflow/spec-mutation tests; independent YAML validity/value
+harness passed. Local Elixir 1.19.4 used OTP 28.3; CI's OTP 27.3.4.19 receipt
+remains required. Historical differences are retained as explanation, not waivers.
 |7 |Copilot emitted a COMMENTED review containing insufficient quota, #39
 |Review absent |Display head-bound reviewer coverage separately from verdicts
 |Companion metadatastician/standards#1417, corrected by #1418, adds an advisory coverage snapshot after the
@@ -186,7 +189,8 @@ unobserved matrix expansion and permissions. A plan or mocked executor test
 is not a hosted execution receipt.
 
 The recipe is not silently installed as a Git hook in this repository or the
-estate. Fleet rollout, canonical workflow-reader migration (#971) and upstream
-kyq corrections remain explicit adoption work. This analysis is complete
+estate. Fleet rollout and canonical workflow-reader migration (#971) remain
+explicit adoption work. The upstream kyq corrections are now published and
+this consumer's strict comparison is ready for hosted qualification. This analysis is complete
 when its ledger and conversion mechanisms are reviewed; those remaining
 rollouts must not be reported as already deployed.
