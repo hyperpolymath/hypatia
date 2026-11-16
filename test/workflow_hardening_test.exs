@@ -2121,6 +2121,30 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   # differently from YAML.
 
   describe "WH013 reads the parsed workflow model (#971)" do
+    test "the grant check still takes workflow text, and text the reader refuses grants nothing" do
+      assert WorkflowHardening.grants_contents_write_anywhere?(
+               "on: push\njobs:\n  a:\n    permissions: {contents: write}\n    runs-on: x\n"
+             )
+
+      refute WorkflowHardening.grants_contents_write_anywhere?(
+               "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo 'contents: write' > p.yml\n"
+             )
+
+      refute WorkflowHardening.grants_contents_write_anywhere?("jobs: [unclosed\n")
+    end
+
+    test "ResearchExtensions.read_workflow/1 stays callable from outside the module" do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "wh013-read-workflow-#{System.unique_integer([:positive])}.yml"
+        )
+
+      File.write!(path, "on: push\n")
+      assert Hypatia.Rules.ResearchExtensions.read_workflow(path) == "on: push\n"
+      File.rm!(path)
+    end
+
     test "a flow-style grant is a grant" do
       repo =
         create_repo_with_workflow("""

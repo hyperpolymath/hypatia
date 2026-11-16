@@ -1803,7 +1803,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # `Hypatia.Workflow` (#971), a KYAML workflow is shown to them as its block
   # layout, one line for one line. The rules that read the model (RE001, RE002,
   # WH013, WH014) do not use this.
-  defp read_workflow(path), do: path |> File.read!() |> flow_to_block()
+  @doc false
+  def read_workflow(path), do: path |> File.read!() |> flow_to_block()
 
   # Rewrite a KYAML document to block layout, preserving the line count:
   # the root `{` and every closer become blank lines, `key: {`/`key: [`

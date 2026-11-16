@@ -1401,7 +1401,17 @@ defmodule Hypatia.Rules.WorkflowHardening do
   (`permissions: {contents: write}` is the same grant as the block form).
   Text that only looks like a grant, such as a `run:` script that writes a
   workflow file, is not one.
+
+  It takes the parsed model or workflow text. Text the reader refuses grants
+  nothing.
   """
+  def grants_contents_write_anywhere?(content) when is_binary(content) do
+    case Workflow.parse(content) do
+      {:ok, %Workflow{} = workflow} -> grants_contents_write_anywhere?(workflow)
+      _ -> false
+    end
+  end
+
   def grants_contents_write_anywhere?(%Workflow{permissions: permissions, jobs: jobs}) do
     Enum.any?([permissions | Enum.map(jobs, & &1.permissions)], &grants_contents_write?/1)
   end
