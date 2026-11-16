@@ -132,7 +132,7 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+verification/proofs/idris2/VerisimdbConnector.idr+`: `+cleanFindingCompleteness+`, `+cleanFindingSoundness+`, `+factPreservesData+`, `+parseSeverityTotal+`
 |Over the Idris2 records; lib/verisim_connector.ex is not shown to follow them
 
-|An actions.lock is closed exactly when its dangling list is empty; that list is sound and complete, closure is decidable, and each shared closure-corpus row has the verdict and dangling refs expected.tsv gives it (standards#963)
+|An actions.lock is closed exactly when its dangling list is empty; that list is sound and complete, closure is decidable, and each of the four corpus rows transcribed into the model evaluates to the dangling list stated for it (standards#963). That those rows and lists match the fixtures and expected.tsv is the tested-only row actions-lock-closure-corpus
 |proven
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/ActionsLockClosure.idr+`: `+closedIffNoDangling+`, `+danglingSound+`, `+danglingComplete+`, `+decClosed+`, `+rowClosedV00x+`, `+rowClosedCaseVariant+`, `+rowDanglingNested+`, `+rowDanglingWorkflowRef+`

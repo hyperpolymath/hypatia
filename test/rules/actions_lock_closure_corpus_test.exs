@@ -115,14 +115,23 @@ defmodule Hypatia.Rules.ActionsLockClosureCorpusTest do
   end
 
   # `<row> = MkLock [w, ...] [(k, [u, ...]), ...]`
+  # A record the pattern does not match, or a key listed twice, would vanish
+  # from the map below while the row's equation still held, so both raise.
   defp model_lock(src, row) do
     [_, wf, recs] = Regex.run(~r/^#{row} = MkLock \[([\d, ]*)\] \[(.*)\]\s*$/m, src)
+    record = ~r/\((\d+), \[([\d, ]*)\]\)/
 
-    records =
-      Regex.scan(~r/\((\d+), \[([\d, ]*)\]\)/, recs)
-      |> Map.new(fn [_, k, uses] -> {String.to_integer(k), uses |> nats() |> Enum.sort()} end)
+    leftover = record |> Regex.replace(recs, "") |> String.replace(",", "") |> String.trim()
+    if leftover != "", do: raise("#{row}: unparsed text in its records: #{inspect(leftover)}")
 
-    {nats(wf), records}
+    pairs =
+      Regex.scan(record, recs)
+      |> Enum.map(fn [_, k, uses] -> {String.to_integer(k), uses |> nats() |> Enum.sort()} end)
+
+    keys = Enum.map(pairs, &elem(&1, 0))
+    if keys != Enum.uniq(keys), do: raise("#{row}: a record key appears twice: #{inspect(keys)}")
+
+    {nats(wf), Map.new(pairs)}
   end
 
   # `row<Name> : danglingOf ActionsLockClosure.<row> = [n, ...]`
@@ -170,6 +179,10 @@ defmodule Hypatia.Rules.ActionsLockClosureCorpusTest do
 
           state != :workflows and state != :top and Regex.match?(~r/^    '[^']+':$/, line) ->
             [_, ref] = Regex.run(~r/^    '([^']+)':$/, line)
+
+            if Map.has_key?(records, id.(ref)),
+              do: raise("a closure fixture lists the record #{ref} twice")
+
             {{:record, id.(ref)}, refs, Map.put(records, id.(ref), [])}
 
           match?({:record, _}, state) and Regex.match?(field, line) ->
