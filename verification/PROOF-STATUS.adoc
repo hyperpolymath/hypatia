@@ -60,7 +60,7 @@ receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or
 a stale underclaim.
 Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
-*Census:* 33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
+*Census:* 34 proven of 55; 0 proven-with-postulates, 12 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
 [cols="3,1,2,2,2",options="header"]
 |===
@@ -131,6 +131,12 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |Idris2 0.7.0, idris2 --check (--total)
 |`+verification/proofs/idris2/VerisimdbConnector.idr+`: `+cleanFindingCompleteness+`, `+cleanFindingSoundness+`, `+factPreservesData+`, `+parseSeverityTotal+`
 |Over the Idris2 records; lib/verisim_connector.ex is not shown to follow them
+
+|An actions.lock is closed exactly when its dangling list is empty; that list is sound and complete, closure is decidable, and each of the four corpus rows transcribed into the model evaluates to the dangling list stated for it (standards#963). That those rows and lists match the fixtures and expected.tsv is the tested-only row actions-lock-closure-corpus
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ActionsLockClosure.idr+`: `+closedIffNoDangling+`, `+danglingSound+`, `+danglingComplete+`, `+decClosed+`, `+rowClosedV00x+`, `+rowClosedCaseVariant+`, `+rowDanglingNested+`, `+rowDanglingWorkflowRef+`
+|Over the Idris2 model; lib/rules/actions_lock.ex and standards scripts/close-lock.sh agree with it on the corpus only (row actions-lock-closure-corpus), and the owner/repo fold happens before the model
 
 |Quarantine triggers, release and routing blockage behave as specified (P5)
 |proven
@@ -293,6 +299,12 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |ExUnit (mix test)
 |`+test/security_errors_test.exs+`: `+SecurityErrors+`
 |Example-based; the transcription into the Agda table is not itself checked. Bounds: ExUnit cases over the migrated alert types
+
+|ActionsLock.parse/1 reproduces every expected.tsv row of the shared closure corpus, and the Idris2 model transcribes every fixture and states every row
+|tested-only
+|ExUnit (mix test)
+|`+test/rules/actions_lock_closure_corpus_test.exs+`: `+ActionsLockClosureCorpusTest+`
+|The corpus only; standards close-lock-test.sh replays the same byte-identical corpus against close-lock.sh. Bounds: 5 corpus locks, 6 refs, lockfile versions v0.0.2 and v0.0.3
 
 |Damped PageRank iteration converges to a unique stationary vector
 |open, ungraded
@@ -510,7 +522,10 @@ standards#963). `+scripts/close-lock.sh --check+` in hyperpolymath/standards
 is a second implementation. The two share a five-row corpus,
 `+test/fixtures/actions_lock/closure/+`, which is byte-identical to standards'
 `+scripts/tests/fixtures/actions-lock-closure/+`. This is an engineering
-proof, so it carries §5 tokens only and no PWG.
+proof, so it carries §5 tokens only and no PWG. The canonical record is
+two rows of <<proof-ledger>>: `actions-lock-closure` (the model, proven) and
+`actions-lock-closure-corpus` (the corpus test, tested-only). This section
+explains them; where it and the ledger differ, the ledger wins.
 
 [width="100%",cols="28%,14%,42%,16%",options="header",]
 |===
