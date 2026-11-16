@@ -498,7 +498,8 @@ jobs:
   # ============================================================================
   # Hypatia.Kyaml (lib/hypatia/kyaml.ex) ports metadatastician/kyq
   # conformance/src/kyaml.js. This job parses kyq's own fixtures and every
-  # workflow in this repository with both, at a pinned kyq commit, and fails on
+  # workflow in this repository and the pinned YAML test-suite streams with
+  # both, at a pinned kyq commit, and fails on
   # any difference in documents (kind, location, value) or errors (code, line,
   # column, path). Move KYQ_REF with test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc.
   # It also holds Hypatia.Kyaml to the YAML test suite at a pinned commit: no
@@ -511,7 +512,7 @@ jobs:
     permissions:
       contents: read
     env:
-      KYQ_REF: 4d1071df04d93e089500d58d0b6ba37bfcc75248
+      KYQ_REF: ca6f427e4c8ee936197517875deb99af0fde90d3
       # yaml/yaml-test-suite, `data` branch ("Regenerated data from main 45db50ae").
       YAML_TEST_SUITE_REF: 6ad3d2c62885d82fc349026c136ef560838fdf3d
     steps:
@@ -557,12 +558,17 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
-      - name: Dump kyq's parse of its fixtures and this repository's workflows
+      - name: Dump kyq fixtures, workflows and pinned YAML test-suite streams
         run: |
+          mapfile -d '' suite_files < <(find .yts -name in.yaml -print0 | sort -z)
+          if [ "${#suite_files[@]}" -lt 300 ]; then
+            echo '::error::The pinned YAML test-suite input set is missing or incomplete'
+            exit 1
+          fi
           bun test/fixtures/kyaml/kyq_dump.mjs \
             .kyq/conformance/fixtures/kyaml/valid/*.yaml \
             .kyq/conformance/fixtures/kyaml/invalid/*.yaml \
-            .github/workflows/*.yml > "$RUNNER_TEMP/kyq.jsonl"
+            .github/workflows/*.yml "${suite_files[@]}" > "$RUNNER_TEMP/kyq.jsonl"
           echo "kyq dumped $(wc -l < "$RUNNER_TEMP/kyq.jsonl") files"
 
       - name: Compare with Hypatia.Kyaml

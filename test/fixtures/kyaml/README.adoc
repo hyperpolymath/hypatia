@@ -7,15 +7,15 @@ kyq is the canonical reader; these files hold the port to it.
 
 `corpus/`::
   kyq's conformance corpus (`conformance/fixtures/kyaml/`, `cases.json`), copied
-  from kyq `4d1071df04d93e089500d58d0b6ba37bfcc75248` plus three fixtures from the kyq
-  fix listed in `KNOWN_DIVERGENCES.adoc` (`flow-trailing-comma.yaml` stays as kyq
-  has it, and the test lists it as read differently). `test/kyaml_conformance_test.exs`
+  byte-for-byte from kyq `ca6f427e4c8ee936197517875deb99af0fde90d3` (contract 0.3.0).
+  `test/kyaml_conformance_test.exs`
   holds each valid fixture to its pinned number of documents, and each invalid
-  one to its pinned code, line, column and pointer path, with two kinds of
-  exception: the bridge-only refusals (`NON_STRING_KEY`, `UNSAFE_INTEGER`,
+  one to its pinned code, line, column and pointer path. Only the bridge-only
+  refusals (`NON_STRING_KEY`, `UNSAFE_INTEGER`,
   `NON_FINITE_NUMBER`), which the reader accepts and kyq's JSON bridge refuses,
-  and `flow-trailing-comma.yaml`, which must parse. Refresh it by copying kyq's directory over
-  this one, and update the commit above.
+  are exempt from parser rejection. Trailing commas are a canonical valid
+  fixture. Refresh by synchronizing kyq's directory, removing obsolete files
+  as well as copying additions, and update the commit above.
 
 `kyq_dump.mjs`::
   Prints kyq's parse of each file in the canonical form `Hypatia.Kyaml.canonical/1`
@@ -25,17 +25,23 @@ kyq is the canonical reader; these files hold the port to it.
 == The differential
 
 The `kyaml-conformance` job in `.github/workflows/ci.yml` checks out kyq at
-`KYQ_REF`, dumps kyq's own fixtures and every workflow in this repository,
+`KYQ_REF`, dumps kyq's own fixtures, every workflow in this repository and the
+pinned YAML test-suite streams,
 and runs `test/kyaml_differential_test.exs`. Locally:
 
 [source,bash]
 ----
 ln -s ../kyq .kyq    # the dumper reads kyq from .kyq, as CI checks it out
-bun test/fixtures/kyaml/kyq_dump.mjs .kyq/conformance/fixtures/kyaml/*/*.yaml .github/workflows/*.yml > /tmp/kyq.jsonl
+mapfile -d '' suite_files < <(find .yts -name in.yaml -print0 | sort -z)
+bun test/fixtures/kyaml/kyq_dump.mjs .kyq/conformance/fixtures/kyaml/*/*.yaml .github/workflows/*.yml "${suite_files[@]}" > /tmp/kyq.jsonl
 KYQ_DUMP=/tmp/kyq.jsonl mix test --only kyq_differential
 ----
 
-Measured when the port landed:
+Current adoption: 489 of 489 inputs agreed with kyq 0.3.0 in a fresh local
+comparison on 16 November 2026. No parser divergence is accepted. This does
+not claim complete YAML support or implementation-level proof.
+
+Historical measurements when the port landed:
 
 * kyq's corpus and the 185 workflows of hypatia, standards, rsr-template-repo,
   choreographic-types and kyq: 231 of 231 files agree;
@@ -69,4 +75,5 @@ Measured when the gate landed, over 402 cases: the port and the fixed kyq agree
 on every one; 94 invalid cases refused and none accepted; 143 valid cases read
 exactly as `in.json` and none read otherwise; 164 valid cases refused (subset).
 Before the fix both readers accepted 17 invalid cases and misread 6 valid ones;
-kyq at `KYQ_REF` accepts 21 and misreads 11.
+kyq at the former `4d1071d` pin accepted 21 and misread 11. The current pin
+carries the upstream corrections.

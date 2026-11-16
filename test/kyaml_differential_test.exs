@@ -8,19 +8,15 @@ defmodule Hypatia.KyamlDifferentialTest do
   from a kyq checkout; for each, this reader must give the same documents
   (every node's kind, location and value, aliases seen through) or the same
   error (code, line, column, path). The kyaml-conformance CI job runs it over
-  kyq's own fixtures and every workflow in this repository, at a pinned kyq
-  commit. Excluded by default (it needs the dump).
+  kyq's own fixtures, every workflow in this repository and the pinned YAML
+  test-suite streams, at a pinned kyq commit. Excluded by default (it needs
+  the dump).
   """
   use ExUnit.Case, async: true
 
   alias Hypatia.Kyaml
 
   @moduletag :kyq_differential
-
-  # Where kyq has a bug and the port follows YAML 1.2 and KYAML, each listed in
-  # test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc: {file name, kyq's code}. Only
-  # these may differ, and only the way the list says (kyq errs, the port reads).
-  @known_divergences [{"flow-trailing-comma.yaml", "FLOW_TRAILING_COMMA"}]
 
   test "Hypatia.Kyaml and kyq agree on every dumped file" do
     dump = System.get_env("KYQ_DUMP") || flunk("set KYQ_DUMP to the output of kyq_dump.mjs")
@@ -33,7 +29,6 @@ defmodule Hypatia.KyamlDifferentialTest do
       for row <- rows,
           mine = mine(File.read!(row["file"])),
           mine != Map.take(row, ["docs", "error"]),
-          not known_divergence?(row, mine),
           do:
             "#{row["file"]}\n  kyq:  #{inspect(row["error"] || :documents)}\n  mine: #{inspect(mine["error"] || :documents)}"
 
@@ -43,11 +38,6 @@ defmodule Hypatia.KyamlDifferentialTest do
 
     assert disagreements == [], Enum.join(disagreements, "\n")
   end
-
-  defp known_divergence?(%{"file" => file, "error" => [code | _]}, %{"docs" => _}),
-    do: {Path.basename(file), code} in @known_divergences
-
-  defp known_divergence?(_, _), do: false
 
   defp mine(bytes) do
     result =
