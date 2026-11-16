@@ -394,7 +394,10 @@ defmodule Hypatia.Rules.RsrConformance do
       # then to :unverified.
       case delegated_verdict(c.id, delegated) do
         :skip ->
+          # A detector of arity 2 also takes the capability set `score/2` read
+          # once, so it judges the same profile the scorecard reports.
           case Map.fetch(detectors(), c.id) do
+            {:ok, fun} when is_function(fun, 2) -> fun.(repo, caps)
             {:ok, fun} -> fun.(repo)
             :error -> :unverified
           end
@@ -606,22 +609,20 @@ defmodule Hypatia.Rules.RsrConformance do
     end
   end
 
-  # 3.2.2: the repo declares a profile. Either carrier counts, with the same
-  # precedence and validation as the capability reader above: when the repo
-  # deed carries a top-level (rsr-profile …) clause it decides, and it passes
-  # only if the reader accepts it (exactly one clause, with a `:capabilities`
-  # list). A duplicated or list-less clause fails, as it declares nothing.
-  # With no such clause, the legacy <machine tree>/rsr-profile.a2ml counts.
+  # 3.2.2: the repo declares a profile. It passes exactly when the capability
+  # set `score/2` read (once, via the reader above) is not `:none`, so 3.2.2
+  # and the scorecard's `profile_present` (`caps != :none`) judge the same
+  # value and agree by construction, even if the profile changes mid-scan
+  # (src/Hypatia/ABI/RsrProfile.idr, `profilePresentAgrees`, which models
+  # that single read). The deed's top-level (rsr-profile …) clause
+  # decides when present: a duplicated or list-less clause fails, as it
+  # declares nothing. With no such clause, the legacy
+  # <machine tree>/rsr-profile.a2ml counts only if it yields a capabilities
+  # list; a file that exists but does not parse, or has none, no longer
+  # passes on its presence alone (that case once passed 3.2.2 while the
+  # scorecard reported no profile).
   defp profile_present do
-    a2ml = present_mr("rsr-profile.a2ml")
-
-    fn repo ->
-      case deed_profile_capabilities(repo) do
-        :absent -> a2ml.(repo)
-        :none -> :fail
-        _caps -> :pass
-      end
-    end
+    fn _repo, caps -> if caps == :none, do: :fail, else: :pass end
   end
 
   # 3.1.8: the anchor. The legacy ANCHOR.a2ml still counts; its successor is

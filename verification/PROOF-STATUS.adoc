@@ -410,18 +410,20 @@ and fail 3.2.2, for every a2ml state (`+duplicateDeclaresNothing+`,
 `+listlessDeclaresNothing+`, `+duplicateFailsCriterion+`,
 `+listlessFailsCriterion+`). Fallback: no clause, the a2ml reading
 (`+fallbackNoDeed+`, `+fallbackNoClause+`,
-`+fallbackCriterionNoClause+`). Consistency: 3.2.2 passes iff
-`+scorecardProfilePresent+` whenever the deed decides
-(`+deedDecidedAgrees+`, the bffd76a fix) or the a2ml is not present-but-
-declaring-nothing (`+a2mlDecidedAgrees+`); they disagree in exactly that
-case (`+disagreementIsExactly+`) |PROVEN — Verify Proofs run 42634000625, idris2 --check job 129217248108, at commit 34c7bc7cff0cf54b1b5707a497d9f8abf826e844 (Idris2 v0.7.0, ABI package build)
+`+fallbackCriterionNoClause+`). Consistency: 3.2.2 is the verdict of the
+capability reader (`+verdictOf+`), so it passes iff
+`+scorecardProfilePresent+` for every source (`+verdictAgrees+`,
+`+profilePresentAgrees+`; the bffd76a fix is the instance
+`+deedDecidedAgrees+`); the case that diverged before the 3.2.2 fix now
+fails (`+emptyA2mlFails+`) |PROVEN — Verify Proofs run 43939522672, idris2 --check job 133552988403, at commit 99a40d6ab758d084f352e0bd2d43ba643041ee06 (Idris2 v0.7.0, ABI package build). The earlier receipt (run 42634000625 at 34c7bc7c) covered the pre-fix model
 
 |`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
 the profile-reader cases of test/rules/rsr_conformance_test.exs stated
 against the model and accepted by evaluation (`+deedEraDeclares+`,
 `+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
 `+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
-`+a2mlOnly+`, `+dupAgrees+`) |TESTED — accepted in the same job
+`+a2mlOnly+`, `+dupAgrees+`, `+emptyA2mlFailsHere+`, `+emptyA2mlNotPresent+`,
+`+emptyA2mlAgrees+`, `+a2mlListPasses+`) |TESTED — accepted in the same job
 
 |`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
 rejection: a duplicated clause counted as a present profile is refused at
@@ -439,6 +441,11 @@ rejection: a list-less clause falling back to the a2ml is refused at
 a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
 — refused at `invalid` in the same job
 
+|`+tests/reject/EmptyA2mlPassesProfileCriterion.idr+` |Idris2 |Expected
+rejection: 3.2.2 passing with no deed and an a2ml that yields no
+capabilities list (the pre-fix behaviour) is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job ("Mismatch between: Pass and Fail.")
+
 |Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
 functions behave as the Elixir functions their header names. Argued by
 review; no kernel checked it, and the Elixir is not extracted from the
@@ -446,15 +453,9 @@ model |ASSUMED
 
 |Runtime behaviour, lib/rules/rsr_conformance.ex |Elixir |Deed era,
 deed beside a2ml, duplicated, list-less and nested clauses, and 3.2.2 on a
-duplicated or list-less clause: test/rules/rsr_conformance_test.exs
-(sampled cases) |TESTED
-
-|`+src/Hypatia/ABI/RsrProfile.idr+` |Idris2 |3.2.2 and the scorecard's
-profile_present can never disagree. False of the code as it stands: with
-no deed clause, 3.2.2 checks only that rsr-profile.a2ml exists, while the
-scorecard needs it to yield a capabilities list, so an a2ml that does not
-parse or carries no list passes 3.2.2 with no profile present
-(`+residualDivergence+`) |OPEN
+duplicated or list-less clause, and 3.2.2 on an a2ml with and without a
+capabilities list: test/rules/rsr_conformance_test.exs (sampled cases)
+|TESTED
 |===
 
 ==== secret-alerts line contract (HYP-01, 2026-11-09)
@@ -790,9 +791,9 @@ inventory row above. These are properties of the model, not of the Elixir.
   `+listlessFailsCriterion+`
 * *P9.3* Fallback: `+fallbackNoDeed+`, `+fallbackNoClause+`,
   `+fallbackCriterionNoClause+`
-* *P9.4* Consistency of 3.2.2 with the scorecard: `+deedDecidedAgrees+`,
-  `+a2mlDecidedAgrees+`; the exact residual: `+disagreementIsExactly+`,
-  `+residualDivergence+`
+* *P9.4* Consistency of 3.2.2 with the scorecard, for every source:
+  `+verdictAgrees+`, `+profilePresentAgrees+`, `+deedDecidedAgrees+`; the
+  formerly divergent case now fails: `+emptyA2mlFails+`
 
 === Dangerous Pattern Audit
 
