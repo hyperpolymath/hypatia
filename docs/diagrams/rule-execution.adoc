@@ -17,9 +17,9 @@ flowchart TB
     end
 
     subgraph "Rule Loading"
-        Static[Static Rules<br/>cicd_rules.lgt]
-        Learned[Learned Patterns<br/>learning.lgt]
-        Distilled[Distilled Rules<br/>rule_distiller.lgt]
+        Static[Static Rules<br/>cicd_rules.ex]
+        Learned[Learned Patterns<br/>learning.ex]
+        Distilled[Distilled Rules<br/>learning.ex promotion]
     end
 
     subgraph "Evaluation"

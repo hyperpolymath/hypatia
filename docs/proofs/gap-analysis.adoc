@@ -14,7 +14,7 @@ ledger:
 * *Idris2:* `+idris2 --check+` on every file in
   `+verification/proofs/idris2/+`, and builds of `+src/abi/hypatia-abi.ipkg+`
   and `+verify/hypatia-verify.ipkg+`.
-* *Agda:* `+verification/proofs/agda/LogtalkMigration.agda+` under
+* *Agda:* `+verification/proofs/agda/AuditPreventionCorrespondence.agda+` under
   `+--safe --without-K --cubical-compatible+`.
 * *TLA+:* TLC on `+verification/proofs/tlaplus/KinGate.tla+`, a bounded model
   check (`+tested-only+`, not a proof).

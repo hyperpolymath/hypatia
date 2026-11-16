@@ -10,7 +10,7 @@
 
 == Introduction
 
-This guide covers development of hypatia components, including writing rules in Elixir (the rule engine — absorbed from the Logtalk engine, retired 2026-03-06), developing forge adapters, and contributing to the project.
+This guide covers development of hypatia components, including writing rules in Elixir (the rule engine), developing forge adapters, and contributing to the project.
 
 === Development Environment Setup
 
@@ -61,7 +61,6 @@ cd ../adapters && cargo build
 cd ../registry && cabal update && cabal build
 
 # Rule engine is Elixir — fetch deps and run the test suite
-# (the Logtalk engine these docs predated was retired 2026-03-06)
 
 # Start development environment
 cd ../deploy
@@ -130,14 +129,9 @@ cabal test
 == Writing Rules (Elixir)
 
 Rules are pure-Elixir modules under `+lib/rules/*.ex+` in the
-`+Hypatia.Rules+` namespace. There is no Logtalk engine, loader, or
-output format (ADR-001, 2026-04-14). The clause-by-clause transcription
-of the retired Logtalk semantics — and the JSON contracts that replaced
-Logtalk facts — is `+docs/rules/logtalk-migration.adoc+`. Do not add
-`+.lgt+`/`+.logtalk+` files or Logtalk output settings:
-`+scripts/check-no-active-logtalk.sh+` rejects them, and
-`+Hypatia.Rules.SecurityErrors.language_replacement("logtalk")+`
-answers `+"elixir"+` for scanned repositories.
+`+Hypatia.Rules+` namespace (ADR-001, 2026-04-14). Rules transcribed
+from an external source of record, and the learned-rules JSON contract,
+are recorded in `+docs/rules/security-rule-provenance.adoc+`.
 
 === Shape of a rule module
 
@@ -795,6 +789,6 @@ cabal haddock --open
 * <<api-reference.adoc#,API Reference>>
 * <<glossary.adoc#,Glossary>>
 * https://elixir-lang.org/docs.html[Elixir Documentation]
-* <<../rules/logtalk-migration.adoc#,Logtalk → Elixir Migration Ledger>> (historical semantics and replacement contracts)
+* <<../rules/security-rule-provenance.adoc#,Security Rule Provenance>> (transcribed rule tables and the learned-rules JSON contract)
 * https://www.haskell.org/documentation/[Haskell Documentation]
 * https://doc.rust-lang.org/book/[The Rust Book]

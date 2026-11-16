@@ -26,10 +26,10 @@
          │     (hypatia-cli.sh scan .)              │
          │                                           │
          │     Rules from:                           │
-         │     • code-safety-lessons.lgt            │
-         │     • container-security-lessons.lgt     │
-         │     • security-lessons.lgt               │
-         │     • learned-rules.lgt (auto-generated) │
+         │     • lib/rules/code_safety.ex           │
+         │     • lib/rules/security_errors.ex       │
+         │     • lib/rules/cicd_rules.ex            │
+         │     • lib/rules/learning.ex (learned)    │
          └──────────────┬───────────────────────────┘
                         │
                         ▼
@@ -73,8 +73,8 @@
          │  3 successes:    │  │  ← Feeds back    │
          │  → Auto-approve  │  │                  │
          │  → Add to        │  │                  │
-         │     learned-     │  │                  │
-         │     rules.lgt    │  │                  │
+         │     learned      │  │                  │
+         │     rules        │  │                  │
          └──────┬───────────┘  └─────┬────────────┘
                 │                    │
                 │ New rules          │ Fix results
@@ -101,19 +101,12 @@ from fixes to rules ❌ *GitHub integration* - No CI/CD calling hypatia
 
 === What Was Built (2026-01-25)
 
-✅ *code-safety-lessons.lgt* - Rust / (legacy ReScript) / CORS / auth
-patterns [Logtalk engine retired 2026-04; see commit d27fe4b] ✅
-*engine/scanner.lgt* - Actual file reading/pattern matching [same
-retirement] ✅ *hypatia-cli.sh* - Command-line scanner (ripgrep-based)
-✅ *fleet-coordinator.sh* - Bot execution & coordination ✅
-*learning_engine.lgt* - Auto-generates rules from patterns [same
-retirement] ✅ *GitHub Actions template* - CI/CD integration
-
-____
-*2026-04 update:* The `+.lgt+` (Logtalk) components were retired; rule
-logic now lives entirely in Elixir under `+lib/rules/+`. The historical
-entries above are kept for provenance.
-____
+✅ *Code-safety rules* - Rust / (legacy ReScript) / CORS / auth
+patterns (now `+lib/rules/code_safety.ex+`) ✅ *hypatia-cli.sh* -
+Command-line scanner (ripgrep-based) ✅ *fleet-coordinator.sh* - Bot
+execution & coordination ✅ *Learning engine* - Auto-generates rules
+from patterns (now `+lib/rules/learning.ex+`) ✅ *GitHub Actions
+template* - CI/CD integration
 
 === How To Use
 
@@ -191,7 +184,7 @@ Observations | Action
 -------------|-----------------------------------
 1-4          | Just observe and count
 5            | Generate rule proposal → manual review
-10 + 3 fixes | Auto-approve → add to learned-rules.lgt
+10 + 3 fixes | Auto-approve → add to the learned rules
 ....
 
 ==== Auto-Generated Rule Example
@@ -199,20 +192,14 @@ Observations | Action
 After seeing `+useUnsafePointer()+` 10 times, the learning pipeline in
 `+lib/rules/learning.ex+` auto-generates a rule module at confidence
 0.50 and promotes it via the Bayesian update loop once fixes succeed.
-The former Logtalk example here described the retired `+.lgt+` engine;
-the Elixir equivalent lives in `+lib/rules/code_safety.ex+`.
-
-____
-*Note:* this document still contains residual `+.lgt+` filenames and
-"`learned-rules.lgt`"-style references from the earlier Logtalk-era
-architecture; they are provenance only. The rules engine is 100% Elixir
-(`+lib/rules/*.ex+`); see `+docs/rules/logtalk-migration.adoc+` for the
-semantic transcription and JSON replacement contracts.
-____
+The Elixir rule for this pattern family lives in
+`+lib/rules/code_safety.ex+`. The rules engine is 100% Elixir
+(`+lib/rules/*.ex+`); see `+docs/rules/security-rule-provenance.adoc+`
+for the transcribed rule tables and the learned-rules JSON contract.
 
 === Current Rules Coverage
 
-==== Code Safety (code-safety-lessons.lgt)
+==== Code Safety
 
 * ✅ Rust `+unwrap()+` → panic DoS
 * ✅ Rust `+unwrap_or(0)+` → privilege escalation
@@ -227,7 +214,7 @@ detection kept for migration audits)
 * ✅ Path traversal patterns
 * ✅ Command injection patterns
 
-==== Container Security (container-security-lessons.lgt)
+==== Container Security
 
 * ✅ Environment variable injection
 * ✅ Shell variable quoting
@@ -237,7 +224,7 @@ detection kept for migration audits)
 * ✅ Permissive mode bypasses
 * ✅ Runtime delegation security
 
-==== Workflow Security (security-lessons.lgt)
+==== Workflow Security
 
 * ✅ Unpinned GitHub Actions
 * ✅ Missing permissions declarations

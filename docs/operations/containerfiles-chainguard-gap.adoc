@@ -77,7 +77,7 @@ Three options, each with constraints:
      Estimated cost: 1 person-day initial + half a day per quarter.
 
   3. *Switch Haskell projects to a different runtime.*
-     We've already retired Logtalk and several other languages. If
+     We've already retired several other languages. If
      the Haskell footprint is small enough, a port-or-retire decision
      might be cleaner than building a custom image. Out of scope for
      a Containerfile audit — that's an architectural call.

@@ -27,7 +27,7 @@ It combines:
   outcomes, which gates whether a fix is applied automatically, proposed as a PR, or merely reported
 * *Machine-checked proofs* — Idris2 proofs of the ABI and the decision logic (confidence bounds,
   safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
-  limiting), one Agda model of the Logtalk-to-Elixir migration, and a TLA+
+  limiting), one Agda model of the security-alert rule tables, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
   the code, not the Elixir runtime itself. Proof ledger: 33 proven of 53; 0 proven-with-postulates,
   11 tested-only, 2 argued, 7 open (link:EXPLAINME.adoc#proof-ledger[details])

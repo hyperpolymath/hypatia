@@ -434,28 +434,25 @@ producer.
 
 ==== D-2 · HIGH · Retired technology still documented as current · partly fixed in this pass
 
-41 surviving Logtalk/SWI-Prolog references in human docs for an engine
-purged 2026-04-14 — including an install runbook that says
-`+# Install SWI-Prolog and Logtalk+`. Also: a 135-line README section on
+Surviving references in human docs to the rule engine purged
+2026-04-14 (ADR-001), including an install runbook for its runtime.
+Also: a 135-line README section on
 a Haskell registry that *does not exist*, Julia neural networks (*zero
 `+.jl+` files*), and ArangoDB/Dragonfly architecture 37 lines after the
 README says ArangoDB was ditched. trufflehog is still _executing_ in
 `+security-policy.yml+` despite #675 retiring it.
 
-*Logtalk subset — closed 2026-11-01.* The remaining Logtalk *semantics*
-(ECHIDNA `security_learning.lgt`; Hypatia's embedded audit-training
-rules AP001–AP015) are transcribed to Elixir with a clause-by-clause
-ledger (`docs/rules/logtalk-migration.adoc`); the Logtalk generator is
-replaced by schema'd JSON; active-tense Logtalk documentation
-(developer guide, EXPLAINME, FAQ/glossary, diagrams, quickstarts, man
-page, security/testing/API docs, integration config, INTENT) is
-corrected to the canonical `lib/rules/*.ex` locations or explicitly
-classified historical; and `scripts/check-no-active-logtalk.sh` guards
-against new active `.lgt` files/settings. The two vendored DEED
-fixtures still carrying the retired Logtalk report-format value are upstream-owned
-(standards) and tracked in the migration packet, so they remain until
-standards re-sync. D-2 stays open for its non-Logtalk parts (Haskell
-registry prose, Julia claims, ArangoDB/Dragonfly, trufflehog).
+*Retired rule-engine subset — closed 2026-11-01, mentions removed
+2026-11-16.* The remaining rule semantics (ECHIDNA's security-learning
+rule table; Hypatia's audit-training rules AP001–AP015) are transcribed
+to Elixir, recorded clause by clause in
+`docs/rules/security-rule-provenance.adoc`; the old positional rule
+export is replaced by schema'd JSON; and the documentation names only
+the canonical `lib/rules/*.ex` locations. The vendored DEED fixtures
+that still carry the retired report-format value are upstream-owned
+(standards) and stay byte-faithful until standards re-syncs them. D-2
+stays open for its other parts (Haskell registry prose, Julia claims,
+ArangoDB/Dragonfly, trufflehog).
 
 ==== D-3 · HIGH · No rule catalogue exists · UNTRACKED
 
@@ -513,9 +510,9 @@ The test suite already asserts this as a known deviation
 ==== M-2 · HIGH · `+MUST.contractile+` declares invariants that would revert landed architecture · fixed in this pass
 
 It required "`5 neural networks … must not be reduced`" (there are 8)
-and — most seriously — "`**Logtalk rule engine … must be preserved**`",
-directly contradicting ADR-001 which purged it and `+AGENTIC.a2ml+`
-which _forbids_ it. Its `+k9-validator+` enforcement path
+and — most seriously — that the pre-ADR-001 rule engine "`**must be
+preserved**`", directly contradicting ADR-001 which purged it and
+`+AGENTIC.a2ml+` which _forbade_ it. Its `+k9-validator+` enforcement path
 (`+contractiles/self-validating/must-check.k9.ncl+`) *does not exist*,
 which is why the drift went undetected. Only 4 of ~14 declared
 invariants have contract tests.
@@ -532,7 +529,7 @@ corpus run both call`".
 
 It is the file agents are instructed to read _first_. Claimed `+VQL+`
 (renamed VCL 2026-04-05), `+verisimdb-data+` (renamed verisim-data),
-`+Logtalk rules+` (purged), `+5 neural networks+` (8), and `+lib/vql/+`
+the purged pre-ADR-001 rules, `+5 neural networks+` (8), and `+lib/vql/+`
 (does not exist).
 
 ==== M-5 · MEDIUM · Six `+6a2+` files stale by 74-136 days, with internal contradictions · fixed in this pass
