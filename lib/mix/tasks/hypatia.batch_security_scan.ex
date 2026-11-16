@@ -307,13 +307,18 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     Mix.shell().info("Generated learned security rules: #{filepath}")
   end
 
-  defp category_string(category, _rule_id) when is_atom(category) do
-    Atom.to_string(category)
-  end
-
-  defp category_string(nil, rule_id) do
+  # The category written for one alert type. `nil` (an id outside the 18
+  # canonical types) falls back to this task's substring grouping. The nil
+  # clause must come first: nil is an atom, so the general clause would
+  # otherwise export the string "nil".
+  @doc false
+  def category_string(nil, rule_id) do
     rule_id
     |> categorize_alert()
     |> String.replace("-", "_")
+  end
+
+  def category_string(category, _rule_id) when is_atom(category) do
+    Atom.to_string(category)
   end
 end

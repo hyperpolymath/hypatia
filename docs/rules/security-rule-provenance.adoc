@@ -104,8 +104,10 @@ belief formation only — never a soundness claim
 |`SecurityErrors.prevention_workflow/1` (`null` when none)
 |===
 
-All per-alert fields except `observations` are exactly
-`Hypatia.Rules.SecurityErrors.validate_alert/1` rendered as JSON. Named
+All per-alert fields except `observations` are
+`Hypatia.Rules.SecurityErrors.validate_alert/1` rendered as JSON, with
+one exception: where `validate_alert/1` gives no category (an id outside
+the 18), `category` is the task-local grouping above, not `null`. Named
 fields also remove an ambiguity in the source's training loader, which
 stored a catalog field as `Type` in one predicate and read the same
 position as `Category` in another.
