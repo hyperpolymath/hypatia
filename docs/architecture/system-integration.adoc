@@ -185,9 +185,14 @@ At a promote_patterns call, for one fix type     | Action
 -------------------------------------------------|---------------------
 fewer than 5 recorded fixes                      | not promoted
 success rate below 0.75                          | not promoted
-more than 30% of its fixes marked false positive | not promoted
-5+ fixes, success >= 0.75, false positives <= 30%| promoted
+false-positive records over 30% of fix count    | not promoted
+5+ fixes, success >= 0.75, FP records <= 30%    | promoted
 ....
+
+The false-positive share is the number of `+record_false_positive/2+`
+records for the type divided by its number of recorded fixes. A type that
+is already promoted stays promoted: a later call that fails a check does
+not demote it.
 
 ==== Rule Promotion and New Recipes
 
