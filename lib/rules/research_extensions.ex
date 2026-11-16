@@ -418,18 +418,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp re001_jobs(rel, %Workflow{} = workflow) do
     untrusted_events = Enum.filter(workflow.triggers, &(&1 in @re001_untrusted_events))
 
-    # Secrets in the workflow's top-level `env:` are inherited by every job,
-    # so each job reads them too, and a declaration must list them.
-    workflow_refs = node_secret_refs(workflow.env)
-    workflow_env_credentials = env_credentials(workflow.env)
-
     for job <- workflow.jobs,
         # Reusable jobs delegate their runtime to the source workflow: only a
         # job's own `runs-on` makes it local.
         job.runs_on != nil,
+        inherited_env = job_env_entries(workflow.env, job.env),
         refs =
           Enum.reject(
-            node_secret_refs(job.node) ++ workflow_refs,
+            node_secret_refs(job.node) ++ inherited_workflow_refs(workflow.env, job.env),
             &(elem(&1, 0) in @re001_ambient_secrets)
           ),
         refs != [] do
@@ -437,7 +433,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
       # A credential in the job's or the workflow's `env:` is in every step's
       # environment, unless the step sets the same variable itself.
-      env_credentials = env_credentials(job.env) ++ workflow_env_credentials
+      env_credentials = env_credentials(inherited_env)
 
       job_untrusted_events =
         case job_event_gate(job) do
@@ -524,11 +520,22 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # The `env:` variables of a workflow or job that hold a real secret, as
   # {NAME, line of the read}.
-  defp env_credentials(env) do
-    for %{key: key, value: value} <- Workflow.entries(env),
+  defp env_credentials(entries) do
+    for %{key: key, value: value} <- entries,
         {name, line} <- node_secret_refs(value),
         name not in @re001_ambient_secrets,
         do: {key.value, line}
+  end
+
+  # Keep the job's original traversal order and alias locations, adding only
+  # workflow environment values that its own environment does not override.
+  defp inherited_workflow_refs(workflow_env, job_env) do
+    keys = MapSet.new(Workflow.entries(job_env), &Workflow.text(&1.key))
+
+    workflow_env
+    |> Workflow.entries()
+    |> Enum.reject(&(Workflow.text(&1.key) in keys))
+    |> Enum.flat_map(&node_secret_refs(&1.value))
   end
 
   # The events a job-level `if:` restricts the job to, when the condition is
@@ -765,11 +772,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # A host a workflow can name: a dotted domain name, or a literal IPv4
   # address. A single-label name (`localhost`, a service container such as
   # `postgres`) is not egress and is not compared.
-  @host ~S"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}(?![\w-]|\.\w)"
+  @label ~S"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+  @host "(?:(?:#{@label}\\.)+(?:xn--#{@label}|[A-Za-z]{2,})|(?:\\d{1,3}\\.){3}\\d{1,3})\\.?(?![\\w.-])"
   # A URL's scheme (in any case, as clients read it), host, and port: digits,
   # or an expression (`:${{ vars.PORT }}`), whose value is known only at run time.
   # The schemes are the web's, and the databases' and brokers' a job reaches.
-  @url_host ~r<\b(https?|wss?|ssh|s?ftp|ftps|git|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
+  @url_host ~r<\b(https?|wss?|ssh|s?ftp|ftps|git|docker|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
   # A `user@host:path` remote. The path is not blank (`a@example.com: failed`
   # is prose) and not a port (`user:pass@host:5432/db` is a URL's userinfo),
   # though it may start with a digit (`git@gitlab.com:123team/x.git`).
@@ -778,6 +786,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     "http" => 80,
     "ws" => 80,
     "https" => 443,
+    "docker" => 443,
     "wss" => 443,
     "ssh" => 22,
     "git" => 9418,
@@ -810,10 +819,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
     steps
     |> Enum.flat_map(fn step ->
       own = MapSet.new(Workflow.entries(step.env), &Workflow.text(&1.key))
-      Enum.reject(inherited, &(Workflow.text(&1.key) in own)) ++ step_entries(step)
+
+      inherited_nodes =
+        inherited
+        |> Enum.reject(&(Workflow.text(&1.key) in own))
+        |> Enum.map(&{&1.value, false})
+
+      inherited_nodes ++
+        Enum.map(step_entries(step), &{&1.value, Workflow.text(&1.key) == "run"})
     end)
     |> Enum.uniq()
-    |> Enum.flat_map(&named_hosts(&1.value))
+    |> Enum.flat_map(fn {node, shell?} -> named_hosts(node, shell?) end)
   end
 
   # The `env:` entries a job passes to its steps: its own, and the
@@ -831,49 +847,25 @@ defmodule Hypatia.Rules.ResearchExtensions do
     do: Enum.reject(Workflow.entries(step.node), &(Workflow.text(&1.key) in @step_labels))
 
   # The hosts outside GitHub a node names literally, as {host, port, line}.
-  defp named_hosts(node) do
+  defp named_hosts(node, shell?) do
     for {text, line_of} <- Workflow.strings(node),
+        # Shared byte-preserving mask: endpoint positions still refer to the
+        # original scalar, including folded values and alias use sites.
+        text = if(shell?, do: Workflow.shell_mask(text), else: text),
         {host, port, at} <- url_hosts(text) ++ scp_hosts(text),
-        not in_shell_comment?(text, at),
-        host = String.downcase(host),
+        host = host |> String.downcase() |> String.trim_trailing("."),
         not Regex.match?(@github_hosts, host),
         not loopback?(host),
         do: {host, port, line_of.(at)}
   end
 
-  defp loopback?(host), do: Regex.match?(~r/\A(?:127\.|0\.0\.0\.0\z)/, host)
-
-  # Is offset `at` inside a `#` comment: after a `#` that starts a word (at
-  # the start of the line, or after a blank or a control or redirection
-  # operator: `; & | ( ) < >`), outside quotes? (A URL fragment, `/#x`, is
-  # not one, nor is the `#` of `git commit -m "fix #12"`.)
-  defp in_shell_comment?(text, at) do
-    line_start =
-      case :binary.matches(binary_part(text, 0, at), "\n") do
-        [] -> 0
-        matches -> matches |> List.last() |> elem(0) |> Kernel.+(1)
-      end
-
-    comment_opens?(binary_part(text, line_start, at - line_start), nil, true)
+  defp loopback?(host) do
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, {127, _, _, _}} -> true
+      {:ok, {0, 0, 0, 0}} -> true
+      _ -> false
+    end
   end
-
-  # Walks one line: `quote` is the open quote character or nil, `word_start?`
-  # whether the next character starts a word. A backslash escapes the next
-  # character outside single quotes, as the shell reads it.
-  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
-  defp comment_opens?(<<>>, _quote, _word_start?), do: false
-  defp comment_opens?(<<?#, _::binary>>, nil, true), do: true
-
-  defp comment_opens?(<<c, rest::binary>>, nil, _) when c in [?', ?"],
-    do: comment_opens?(rest, c, false)
-
-  defp comment_opens?(<<?\\, _, rest::binary>>, quote, _) when quote != ?',
-    do: comment_opens?(rest, quote, false)
-
-  defp comment_opens?(<<c, rest::binary>>, c, _), do: comment_opens?(rest, nil, false)
-
-  defp comment_opens?(<<c, rest::binary>>, quote, _),
-    do: comment_opens?(rest, quote, quote == nil and c in @word_breaks)
 
   # A port written as an expression is unknown (nil), not the scheme's default.
   defp url_hosts(text) do
@@ -938,7 +930,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # Does a {pattern, port} cover a host and port? `*.x` covers the
   # subdomains of x (as harden-runner reads it), not x itself; an endpoint
-  # without a port (nil or `:any`) covers every port. A port known only at
+  # without a port (`:any`) covers every port. A port known only at
   # run time (nil) is covered by any port of the host; every port (`:any`)
   # only by an endpoint without a port.
   defp covers?({pattern, want}, host, port) do
@@ -948,11 +940,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
         _ -> pattern == host
       end
 
-    host_ok and (want in [nil, :any] or port == nil or want == port)
+    host_ok and (want == :any or (port != :any and (want == nil or port == nil or want == port)))
   end
 
   defp re001_endpoint_findings(job, deed_file, decl) do
-    declared = decl.endpoints |> Enum.map(&literal_endpoint/1) |> Enum.reject(&is_nil/1)
+    declared =
+      decl.endpoints
+      |> Enum.map(&literal_endpoint/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&any_port/1)
 
     uncovered =
       job.named_hosts
@@ -970,7 +966,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp allowed_endpoint_findings(%{allowed_endpoints: nil}, _deed_file, _declared), do: []
 
   defp allowed_endpoint_findings(job, deed_file, declared) do
-    allowed = Enum.reject(job.allowed_endpoints, &Regex.match?(@github_hosts, elem(&1, 0)))
+    allowed = Enum.reject(job.allowed_endpoints, &github_endpoint?(elem(&1, 0)))
 
     # What the hardener lets out must be declared. A declared literal host
     # must be let out, or block mode stops the job; a declared wildcard is a
@@ -983,7 +979,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     # allowed entry without a port lets it out.
     blocked =
       Enum.reject(declared, fn {h, p} ->
-        String.starts_with?(h, "*.") or Regex.match?(@github_hosts, h) or
+        String.starts_with?(h, "*.") or github_endpoint?(h) or
           Enum.any?(allowed, &covers?(&1, h, p || :any))
       end)
 
@@ -993,6 +989,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
       [re001_allowed_mismatch(job, deed_file, undeclared, blocked)]
     end
   end
+
+  # A wildcard restricted to a GitHub domain is still a GitHub endpoint;
+  # stripping only the leading wildcard preserves the domain boundary.
+  defp github_endpoint?("*." <> suffix), do: Regex.match?(@github_hosts, "probe." <> suffix)
+  defp github_endpoint?(host), do: Regex.match?(@github_hosts, host)
 
   defp endpoint_text({host, port}) when port in [nil, :any], do: "\"#{host}\""
   defp endpoint_text({host, port}), do: "\"#{host}:#{port}\""

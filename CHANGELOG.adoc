@@ -12,6 +12,27 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== RE001 post-merge review corrections (2026-11-16)
+
+RE001 excludes workflow environment secrets overridden by a job, including
+when deciding whether fetched code shares a step with a credential. Existing
+alias-use locations and job traversal order are preserved.
+
+Endpoint discovery distinguishes numeric loopback addresses from `127.*`
+hostnames, keeps full punycode names and explicit Docker registry hosts, and
+treats hashes in environment and action-input values as data. Run scripts now
+use `Workflow.shell_mask/1`, including its command-substitution handling,
+instead of a second shell-comment walker. GitHub wildcard allow entries stay
+within the GitHub exemption; unknown runtime ports cannot establish an
+allowance for every port.
+
+Ten new regression tests reproduce the eight outstanding #1036 findings on
+the previous implementation. The repaired implementation passes 189 focused
+tests, including the existing located-diagnostic, representation-equivalence
+and bounded Egress decision tests. RE001 findings are unchanged on snapshots
+of Hypatia `b93f0615`, standards `305743d2` and Echidna `478b7519` (zero before
+and after on each). These checks do not complete #971 or prove runtime egress.
+
 ==== The oracle and CI toolchain move back to OTP 27.3.4.19 (2026-11-13)
 
 `rsr-oracle.yml` now defaults to OTP `27.3.4.19`, and the two `ci.yml`
