@@ -58,6 +58,20 @@ expect "a name the file does not hold is refused" 1 env PROOF_LEDGER="$work/rena
 mutate missing-file '.file = "verification/proofs/idris2/Gone.idr"' quarantine
 expect "a file that does not exist is refused" 1 env PROOF_LEDGER="$work/missing-file.jsonl" bash "$script" check
 
+mutate outside-file '.file = "/etc/passwd" | .names = ["root"]' abi-types
+expect_msg "a row resting on a file outside the repository is refused" 1 "must be a path inside the repository" env PROOF_LEDGER="$work/outside-file.jsonl" bash "$script" check
+
+mutate parent-file '.file = "../hypatia/verification/proofs/idris2/RateLimiting.idr"' rate-limiting
+expect_msg "a row whose file climbs out with .. is refused" 1 "must be a path inside the repository" env PROOF_LEDGER="$work/parent-file.jsonl" bash "$script" check
+
+mutate empty-name '.names = [""]' abi-types
+expect_msg "an empty witness name is refused" 1 "names and axioms hold non-empty strings" env PROOF_LEDGER="$work/empty-name.jsonl" bash "$script" check
+
+mutate empty-axiom '.status = "proven-with-postulates" | .axioms = [""]' rate-limiting
+expect_msg "an empty axiom name is refused" 1 "names and axioms hold non-empty strings" env PROOF_LEDGER="$work/empty-axiom.jsonl" bash "$script" check
+
+expect_msg "a receipt with no file is refused" 2 "receipt needs at least one file" env PROOF_RECEIPTS="$work/none.jsonl" bash "$script" receipt idris2 pass --
+
 mutate unbounded-test '.bounds = ""' kin-gate
 expect "tested-only without bounds is refused" 1 env PROOF_LEDGER="$work/unbounded-test.jsonl" bash "$script" check
 

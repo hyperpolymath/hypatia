@@ -126,6 +126,11 @@ check() {
       ( if .status != "tested-only" and .bounds != "" then "\(.id): only a tested-only row has bounds" else empty end ),
       ( if .status != "open" and .file == "-" then "\(.id): only an open row may have no file" else empty end ),
       ( if .file != "-" and (.names | length) == 0 then "\(.id): a row with a file names what it rests on in that file" else empty end ),
+      # Evidence lives in this tree: an absolute path or a .. step would let a
+      # row rest on a file outside the checkout, and on the runner it happens
+      # to run on.
+      ( if .file != "-" and (.file | test("^/|(^|/)\\.\\.(/|$)")) then "\(.id): file \(.file) must be a path inside the repository, with no leading / or .. step" else empty end ),
+      ( if any(.names[], .axioms[]; . == "") then "\(.id): names and axioms hold non-empty strings" else empty end ),
       ( if .kind == "theory" then
           ( if IN(.pwg; "3", "2i", "2ii", "1", "ungraded") then empty else "\(.id): a theory row records pwg as 3, 2i, 2ii, 1 or ungraded" end ),
           ( if (.foundation_diverse | type) == "boolean" then empty else "\(.id): a theory row records foundation_diverse" end ),
@@ -258,6 +263,9 @@ receipt() {
   local files=()
   while [ $# -gt 0 ] && [ "$1" != "--" ]; do files+=("$1"); shift; done
   [ "${1:-}" = "--" ] && shift
+  if [ "${#files[@]}" -eq 0 ]; then
+    echo "::error::proof-ledger: receipt needs at least one file" >&2; exit 2
+  fi
   for kv in "$@"; do
     extra=$(jq -cS --arg k "${kv%%=*}" --arg v "${kv#*=}" '. + {($k): $v}' <<<"$extra")
   done
