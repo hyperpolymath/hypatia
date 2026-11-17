@@ -346,8 +346,8 @@ async fn test_ruleset_registration() -> Result<()> {
             author: "hyperpolymath".to_string(),
             license: "MPL-2.0".to_string(),
             tags: vec!["security".to_string(), "github-actions".to_string()],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -388,8 +388,8 @@ async fn test_ruleset_verification() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -408,8 +408,8 @@ async fn test_ruleset_verification() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -459,8 +459,8 @@ async fn test_duplicate_rule_detection() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -499,8 +499,8 @@ async fn test_rule_search_by_category() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -524,8 +524,8 @@ async fn test_rule_search_by_category() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 
@@ -595,8 +595,8 @@ async fn test_rule_search_by_severity() -> Result<()> {
             author: "test".to_string(),
             license: "MIT".to_string(),
             tags: vec![],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         },
     };
 

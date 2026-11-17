@@ -465,7 +465,7 @@ impl DragonflyCache {
         self.set(&key, result, Some(ttl_secs)).await?;
 
         // Update scan queue for scheduling
-        let now = chrono::Utc::now().timestamp() as f64;
+        let now = jiff::Timestamp::now().as_second() as f64;
         let mut conn = self.get_conn().await?;
         conn.zadd::<_, _, _, ()>("queue:scans", repo_key, now)
             .await?;
@@ -516,7 +516,7 @@ impl DragonflyCache {
             .await?;
 
         // Update active bots set
-        let now = chrono::Utc::now().timestamp() as f64;
+        let now = jiff::Timestamp::now().as_second() as f64;
         let mut conn = self.get_conn().await?;
         conn.zadd::<_, _, _, ()>("fleet:active", bot_id, now)
             .await?;
@@ -541,7 +541,7 @@ impl DragonflyCache {
     /// Get bots that haven't reported recently
     pub async fn get_stale_bots(&self, threshold_seconds: i64) -> Result<Vec<String>> {
         let mut conn = self.get_conn().await?;
-        let cutoff = chrono::Utc::now().timestamp() - threshold_seconds;
+        let cutoff = jiff::Timestamp::now().as_second() - threshold_seconds;
         let bots: Vec<String> = conn.zrangebyscore("fleet:active", "-inf", cutoff).await?;
         Ok(bots)
     }

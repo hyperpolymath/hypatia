@@ -60,7 +60,7 @@ receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or
 a stale underclaim.
 Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
-*Census:* 34 proven of 55; 0 proven-with-postulates, 12 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
+*Census:* 35 proven of 57; 0 proven-with-postulates, 13 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
 [cols="3,1,2,2,2",options="header"]
 |===
@@ -395,6 +395,18 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |Idris2 0.7.0, idris2 --build src/abi/hypatia-abi.ipkg (--total)
 |`+src/Hypatia/ABI/Receipt.idr+`: `+missingIff+`, `+missingEmptyIff+`, `+receiptMissingExact+`, `+fieldListed+`, `+allFields+`
 |Over the Idris2 types. Order and absence of duplicates in missing_evidence are not proved (the Nickel contract and the mirror test check them). At E0 the set is never empty at run time, because subject_identity has no source yet (issue 984, E1), so the empty case is a property of the model that is not reached. The mirror test reads the 14 names from this file and from the contract and compares them
+
+|CI-health B-ALLOWLIST remediation writes current UNION required with both trust flags as read: nothing allowed before is lost, every required pattern is present, nothing beyond the required set is added, no trust flag changes, a covered list is left unchanged, and after one run nothing is missing (detect.sh stops firing) and a second run changes nothing; each of the four corpus rows reduces to the counts stated for it. That those rows match the fixtures and remediate.sh is the tested-only row allowlist-remediation-corpus
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/AllowlistRemediation.idr+`: `+keepsCurrent+`, `+coversRequired+`, `+onlyAdds+`, `+flagsKept+`, `+noWriteWhenCovered+`, `+converges+`, `+idempotent+`, `+rowCovered+`, `+rowEmpty+`, `+rowExtras+`, `+rowPartial+`
+|Over the Idris2 model with patterns as abstract values; scripts/ci-health/remediate.sh agrees with it on the corpus only (row allowlist-remediation-corpus), and GitHub enforcing patterns_allowed as stored is assumed
+
+|remediate.sh and detect.sh, run against a mock gh on each corpus allow-list, keep every current pattern, add every required one, keep both trust flags, write nothing on a second run, stop detect.sh firing, and match the counts the Idris2 model states for each row
+|tested-only
+|ExUnit (mix test)
+|`+test/ci_health_allowlist_corpus_test.exs+`: `+Hypatia.CiHealthAllowlistCorpusTest+`
+|The corpus only, through a mock gh; the live GitHub API is not exercised. Bounds: 4 corpus allow-lists (empty, extras, partial, covered), 131 required patterns, one mock gh
 |===
 // END GENERATED: proof ledger
 
@@ -571,6 +583,74 @@ refinement is not claimed.
 fold. Its corpus rows are transcribed with the fold applied.
 |ASSUMED in the model. TESTED in both implementations by
 `+closed-case-variant.lock+`.
+|===
+
+
+==== CI-health allow-list remediation is additive (2026-11-17)
+
+An engineering property of one script's effect on one setting (a
+repository's Actions `+selected-actions+` allow-list), so Idris2 under
+PROOF-POLICY §1. It backs the stopgap chosen for the standards repository's
+move (`+docs/operations/standards-move-estate-rollout.adoc+`): the sweep may
+widen an allow-list but never narrow one. Before this change
+`+remediate.sh+` replaced the list with the curated set and forced both trust
+flags on, so a repository's own patterns were dropped and a
+`+verified_allowed: false+` became `+true+`. This is an engineering proof, so
+it carries §5 tokens only and no PWG. The canonical record is two rows of
+<<proof-ledger>>: `allowlist-remediation` (the model) and
+`allowlist-remediation-corpus` (the corpus run, tested-only). This section
+explains them; where it and the ledger differ, the ledger wins.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Properties stated |Status
+|`+verification/proofs/idris2/AllowlistRemediation.idr+` |Idris2
+|The model is generic over patterns with decidable equality. The
+remediation appends to the current list the required patterns it lacks,
+and keeps both flags as read:
+
+* `+keepsCurrent+`: every pattern allowed before is allowed after
+  (monotone, so no workflow that started before is newly refused).
+* `+coversRequired+`: every required pattern is allowed after.
+* `+onlyAdds+`: nothing is added beyond the required set.
+* `+flagsKept+`: `+github_owned_allowed+` and `+verified_allowed+` are
+  unchanged.
+* `+noWriteWhenCovered+`: a list missing nothing is left as it is.
+* `+converges+`, `+idempotent+`: after one run nothing is missing, so
+  `+detect.sh+` stops firing and a second run changes nothing.
+
+The four corpus rows are evaluated as equations (`+rowCovered+`,
+`+rowEmpty+`, `+rowExtras+`, `+rowPartial+`), with patterns renamed to
+numbers. `+test/ci-health-test.sh+` checks each fixture's expected counts
+against the model's `+-- corpus:+` line and the equation under it.
+
+`+keepsCurrent+` is the premise of hyperpolymath/mathesis THY-1
+(`+Monotone.reach-mono+`: reachability over a monotone family of edge sets
+is monotone): the allowed set after a run contains the set before, so no
+`+uses:+` that could start before is refused after. It is not recorded as a
+Mathesis bridge: Mathesis bridge endpoints are theory provers only
+(Agda, Rocq, Lean) and this is an Idris2 engineering proof.
+|Ledger row `allowlist-remediation`: proven, derived by Verify Proofs
+(`+idris2 --check+`, Idris 2 0.7.0, `+%default total+`, no
+`+believe_me+`, `+assert_total+` or `+postulate+`). Receipt: Verify
+Proofs run 44154561700, idris2 --check job 134291680073, at commit
+a5acb963f2666e9af0127640fa6de2c64520442e (Idris2 v0.7.0).
+
+|`+scripts/ci-health/remediate.sh+` and `+detect.sh+` against the model
+|Bash, via ExUnit |On each corpus allow-list, through a mock `+gh+` that
+records writes: no current pattern dropped, every required pattern
+present, both flags as read, a second run writes nothing, `+detect.sh+`
+no longer reports B-ALLOWLIST, and the counts match the model. An
+unreadable list is never written. Run by
+`+test/ci_health_allowlist_corpus_test.exs+`.
+|TESTED. Bounds: 4 allow-lists (empty, extras, partial, covered), 131
+required patterns. Negative controls: main's `+remediate.sh+` fails the
+`+covered+` row (a pattern dropped); forcing `+verified_allowed+` on fails
+`+extras+`; a drifted model equation fails the binding.
+
+|GitHub enforcing `+patterns_allowed+` as stored |- |That a stored pattern
+lets a matching `+uses:+` start, and that the API stores what was written.
+|ASSUMED.
 |===
 
 
@@ -854,6 +934,11 @@ AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 |actions.lock closure |`+ActionsLockClosure.idr+` |Model only: decision
 procedure and the five corpus verdicts; the implementations are TESTED
 against the corpus, and runtime refinement is excluded
+
+|CI-health allow-list remediation |`+AllowlistRemediation.idr+` |Model only:
+additivity, covering, flags kept, convergence and the four corpus counts;
+`+remediate.sh+` is TESTED against the corpus through a mock `+gh+`, and
+GitHub's enforcement of the stored list is ASSUMED
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)

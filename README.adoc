@@ -29,8 +29,8 @@ It combines:
   safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
   limiting), one Agda model of the security-alert rule tables, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
-  the code, not the Elixir runtime itself. Proof ledger: 34 proven of 55; 0 proven-with-postulates,
-  12 tested-only, 2 argued, 7 open (link:EXPLAINME.adoc#proof-ledger[details])
+  the code, not the Elixir runtime itself. Proof ledger: 35 proven of 57; 0 proven-with-postulates,
+  13 tested-only, 2 argued, 7 open (link:EXPLAINME.adoc#proof-ledger[details])
 
 === Core philosophy
 

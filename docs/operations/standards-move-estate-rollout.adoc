@@ -35,10 +35,16 @@ this page is the estate view.
   then decide", A4 on standards#1234) applied to this incident.
 
 | Stopgap until D lands
-| *Narrow per-repository allow-list PUT*: `remediate.sh` B-ALLOWLIST adds
-  the exact `metadatastician/standards/.github/workflows/*-reusable.yml@*`
-  paths from `scripts/ci-health/action-superset.txt`. No owner-wide
-  `metadatastician/*` pattern.
+| *Narrow, additive per-repository allow-list PUT*: `remediate.sh`
+  B-ALLOWLIST writes the repository's current patterns plus any required
+  ones it lacks, among them the exact
+  `metadatastician/standards/.github/workflows/*-reusable.yml@*` paths from
+  `scripts/ci-health/action-superset.txt`. No owner-wide
+  `metadatastician/*` pattern. `github_owned_allowed` and `verified_allowed`
+  are written back as read. Nothing a repository allows today is removed
+  (owner ruling 2026-11-17; proved over a model in
+  `verification/proofs/idris2/AllowlistRemediation.idr`, ledger rows
+  `allowlist-remediation` and `allowlist-remediation-corpus`).
 
 | D pilot
 | *A leaf repository*, one that no other repository calls via `uses:`,
@@ -107,9 +113,13 @@ checks out the current one (#1004).
 |===
 | Item | Owner | Evidence / next step
 
-| Rotate `HYPATIA_DISPATCH_PAT`
-| *Repository owner*
-| Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
+| Unblock the sweep's credential
+| *Repository owner*, via #1197
+| Owner ruling 2026-11-17: the rollout follows #1197, which replaces
+  `HYPATIA_DISPATCH_PAT` with GitHub App installation tokens; the PAT is not
+  rotated for this. Once #1197 merges and the App is installed, run one
+  `ci-health-sweep` dispatch with `dry_run: true`, then the stopgap and the
+  census below. Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
   `HTTP 401: Bad credentials` at `repos to scan: 0` (e.g. runs 40266651942
   and 41574487070). `hypatia-remediation-sweep` fails the same way. The
   run on 2026-11-04 (41769485545) ended in `startup_failure` on
@@ -125,7 +135,7 @@ checks out the current one (#1004).
   xref:credential-roles.adoc[credential roles and validation limits].
 
 | Census of old-owner callers
-| Sweep, after the rotation
+| Sweep, once its credential works (#1197)
 | Code search found about 764 workflow files under `hyperpolymath` still
   naming `hyperpolymath/standards/.github/workflows`, echidna among them.
   Code search caps at 1,000 results and its index lags, so the census of
@@ -173,7 +183,11 @@ These cases are not detected; each one was weighed on the PR and left:
 
 They share one root cause: hand-written YAML parsing. A parsed workflow
 model (tracked in #971 for RE001) would close all of them at once, for
-WF027 and WF028 as well.
+WF027 and WF028 as well. Owner ruling 2026-11-17: WF028 gets no separate
+formal model. Its call extraction moves onto that parsed model, and the
+parse-to-call step is modelled once there, for RE001, WF027 and WF028
+together. Until then its evidence is the ExUnit suite in
+`test/rules/workflow_audit_pins_test.exs`.
 
 == Acceptance criteria (closes CI-9)
 
@@ -188,7 +202,7 @@ WF027 and WF028 as well.
 
 == When to update this memo
 
-* When `HYPATIA_DISPATCH_PAT` is rotated, or the sweep's first dry run
+* When #1197 merges and the App is installed, or the sweep's first dry run
   reports its results.
 * When a D transfer batch lands: add its rows to
   `Hypatia.Rules.MovedRepositories`, and record the batch here.

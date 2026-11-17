@@ -16,8 +16,8 @@
 //! - Tickets (issues) are in todo.sr.ht
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
+use jiff::Timestamp;
 use reqwest::{header::HeaderMap, Client};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -224,8 +224,8 @@ struct SrhtTicket {
     status: String,
     submitter: SrhtUser,
     labels: Vec<String>,
-    created: DateTime<Utc>,
-    updated: DateTime<Utc>,
+    created: Timestamp,
+    updated: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -233,7 +233,7 @@ struct SrhtTicketComment {
     id: u64,
     text: String,
     submitter: SrhtUser,
-    created: DateTime<Utc>,
+    created: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,8 +242,8 @@ struct SrhtJob {
     status: String,
     note: Option<String>,
     tags: Vec<String>,
-    created: DateTime<Utc>,
-    updated: DateTime<Utc>,
+    created: Timestamp,
+    updated: Timestamp,
 }
 
 #[allow(dead_code)]

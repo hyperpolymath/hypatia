@@ -186,6 +186,16 @@ owner. The CI-health sweep that would apply the allow-list stopgap
 cannot run, because `+HYPATIA_DISPATCH_PAT+` returns `+HTTP 401+`
 (e.g. run 41574487070). WF028 detects the calls (#965).
 
+*Found 2026-11-17, fixed in the same change:* that stopgap was not
+additive. `+remediate.sh+` B-ALLOWLIST replaced a repository's
+`+patterns_allowed+` with the curated set and forced both trust flags on,
+so a repository's own patterns would have been dropped (its workflows
+then refused at startup) while the script still reported "exact set
+verified". It now writes current ∪ required with the flags as read
+(`+AllowlistRemediation.idr+`, ledger rows `allowlist-remediation` and
+`allowlist-remediation-corpus`). `+test/ci-health-test.sh+` had been run
+by no workflow; the ExUnit lane now runs it.
+
 Decision, evidence and owed actions:
 `+docs/operations/standards-move-estate-rollout.adoc+`.
 
