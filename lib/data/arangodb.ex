@@ -613,7 +613,7 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->
         Jason.decode(to_string(resp_body))
 
-      {:ok, {{_, code, _}, _, resp_body}} when code in 300..499 ->
+      {:ok, {{_, code, _}, _, resp_body}} when code in 400..499 ->
         Jason.decode(to_string(resp_body))
 
       {:ok, {{_, status, _}, _, resp_body}} ->
