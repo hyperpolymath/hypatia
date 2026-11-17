@@ -112,12 +112,20 @@ dupAgrees : passes (criterion322 (MkProfileSource (Just RsrProfileResolution.dup
                 (declaredCapabilities (MkProfileSource (Just RsrProfileResolution.dupDeed) (A2mlDeclares ["bash"])))
 dupAgrees = deedDecidedAgrees (MkProfileSource (Just dupDeed) (A2mlDeclares ["bash"])) nothingIsNotAbsent
 
--- The residual case: no deed clause and an .a2ml that exists but yields no
--- capabilities list.  3.2.2 passes on the file's presence; the scorecard
--- reports no profile.
-residualPasses : criterion322 (MkProfileSource Nothing A2mlDeclaresNothing) = Pass
-residualPasses = fst residualDivergence
+-- The case that diverged before the 3.2.2 fix: no deed clause and an .a2ml
+-- that exists but yields no capabilities list.  3.2.2 now fails, and agrees
+-- with the scorecard, which reports no profile.
+emptyA2mlFailsHere : criterion322 (MkProfileSource Nothing A2mlDeclaresNothing) = Fail
+emptyA2mlFailsHere = emptyA2mlFails
 
-residualNotPresent : scorecardProfilePresent (declaredCapabilities (MkProfileSource Nothing A2mlDeclaresNothing))
-                     = False
-residualNotPresent = snd residualDivergence
+emptyA2mlNotPresent : scorecardProfilePresent (declaredCapabilities (MkProfileSource Nothing A2mlDeclaresNothing))
+                      = False
+emptyA2mlNotPresent = Refl
+
+emptyA2mlAgrees : passes (criterion322 (MkProfileSource Nothing A2mlDeclaresNothing))
+                  = scorecardProfilePresent (declaredCapabilities (MkProfileSource Nothing A2mlDeclaresNothing))
+emptyA2mlAgrees = profilePresentAgrees (MkProfileSource Nothing A2mlDeclaresNothing)
+
+-- A2ML with a list and no deed: 3.2.2 passes.
+a2mlListPasses : criterion322 (MkProfileSource Nothing (A2mlDeclares ["bash"])) = Pass
+a2mlListPasses = Refl
