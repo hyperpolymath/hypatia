@@ -581,7 +581,12 @@ defmodule Hypatia.Data.ArangoDB do
       {~c"Accept", ~c"application/json"}
     ]
 
-    case :httpc.request(:get, {String.to_charlist(url), headers}, [{:timeout, 10_000}], []) do
+    case :httpc.request(
+           :get,
+           {String.to_charlist(url), headers},
+           [{:timeout, 10_000}, {:autoredirect, false}],
+           []
+         ) do
       {:ok, {{_, 200, _}, _, body}} -> Jason.decode(to_string(body))
       {:ok, {{_, status, _}, _, body}} -> {:error, {status, to_string(body)}}
       {:error, reason} -> {:error, reason}
@@ -602,7 +607,7 @@ defmodule Hypatia.Data.ArangoDB do
     case :httpc.request(
            :post,
            {String.to_charlist(url), headers, ~c"application/json", json_body},
-           [{:timeout, 10_000}],
+           [{:timeout, 10_000}, {:autoredirect, false}],
            []
          ) do
       {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->

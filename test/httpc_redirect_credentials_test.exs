@@ -2,13 +2,19 @@
 
 defmodule Hypatia.HttpcRedirectCredentialsTest do
   # Guards the Erlang/OTP pin (mise.toml and the CI test lanes), not Hypatia's
-  # code. OTP releases before 27.3.4.13 make `:httpc` resend the
-  # `authorization` header to whatever host a redirect names; measured on
-  # 2026-11-09, 27.3.4.4 and 27.3.4.12 forwarded it to another port and to
-  # another host for 301, 302, 303, 307 and 308, GET and POST, while
-  # 27.3.4.13, 27.3.4.19 and 28.5.0.8 dropped it. The two echidnabot senders
-  # already set `autoredirect: false`; this test fails if the runtime itself
-  # regresses, so every other `:httpc` caller stays covered.
+  # code. Older OTP releases make `:httpc` resend credentials to whatever host
+  # a redirect names. Measured on loopback for 301, 302, 303, 307 and 308, GET
+  # and POST, to another port and to another host:
+  #
+  # * an explicit `authorization` header: forwarded by 27.3.4.4 and
+  #   27.3.4.12 (2026-11-09), dropped from 27.3.4.13;
+  # * credentials in the URL (`http://user:pass@host`, sent as Basic auth):
+  #   still forwarded by 27.3.4.13, dropped by 27.3.4.19 and 28.5.0.8
+  #   (2026-11-17).
+  #
+  # So 27.3.4.19 is the floor on the 27 line. Credentialed callers in lib/
+  # also set `autoredirect: false` (checked by the last test here), so they
+  # do not depend on the pin alone.
   #
   # Each case runs a redirector and a target on loopback. The redirector
   # answers with STATUS and a Location on the target; the target reports the
@@ -16,6 +22,7 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
   use ExUnit.Case, async: true
 
   @token "Bearer test-dummy-redirect-probe"
+  @userinfo "test-dummy-user:test-dummy-pass"
 
   setup_all do
     {:ok, _} = Application.ensure_all_started(:inets)
@@ -30,15 +37,49 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
     end
   end
 
-  # Positive control: the target does see the header when the redirect stays
-  # on the same origin, so an empty list above is the runtime dropping it, not
-  # the harness failing to observe it.
+  for status <- [301, 302, 303, 307, 308], method <- [:get, :post] do
+    test "#{method} #{status} to another origin drops credentials from the URL" do
+      {line, auth} = follow(unquote(method), unquote(status), :other_origin, :userinfo)
+      assert line =~ "/final"
+      assert auth == []
+    end
+  end
+
+  # Positive controls: the target does see the credentials when the redirect
+  # stays on the same origin, so an empty list above is the runtime dropping
+  # them, not the harness failing to observe them.
   test "same-origin redirect keeps the authorization header" do
     {_line, auth} = follow(:get, 302, :same_origin)
     assert auth == ["authorization: #{@token}"]
   end
 
-  defp follow(method, status, where) do
+  test "same-origin redirect keeps credentials from the URL" do
+    {_line, auth} = follow(:get, 302, :same_origin, :userinfo)
+    assert auth == ["authorization: Basic " <> Base.encode64(@userinfo)]
+  end
+
+  # Every lib/ module that sends an Authorization header must turn off
+  # automatic redirects on each :httpc request, so a credential never depends
+  # on the runtime pin alone (for example on the OTP 28.3 CI lanes).
+  test "credentialed :httpc callers in lib/ disable automatic redirects" do
+    offenders =
+      Path.wildcard(Path.expand("../lib/**/*.ex", __DIR__))
+      |> Enum.filter(fn path ->
+        src = File.read!(path)
+        String.match?(src, ~r/authorization/i) and String.contains?(src, ":httpc.request")
+      end)
+      |> Enum.reject(fn path ->
+        src = File.read!(path)
+        calls = length(String.split(src, ":httpc.request")) - 1
+        guarded = length(String.split(src, "{:autoredirect, false}")) - 1
+        guarded >= calls
+      end)
+      |> Enum.map(&Path.relative_to_cwd/1)
+
+    assert offenders == []
+  end
+
+  defp follow(method, status, where, cred \\ :header) do
     {:ok, front} = listen()
     {:ok, back} = listen()
     {:ok, front_port} = :inet.port(front)
@@ -69,8 +110,15 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
         :gen_tcp.close(s2)
       end)
 
-    url = ~c"http://127.0.0.1:#{front_port}/start"
-    headers = [{~c"authorization", String.to_charlist(@token)}]
+    {url, headers} =
+      case cred do
+        :header ->
+          {~c"http://127.0.0.1:#{front_port}/start",
+           [{~c"authorization", String.to_charlist(@token)}]}
+
+        :userinfo ->
+          {~c"http://#{@userinfo}@127.0.0.1:#{front_port}/start", []}
+      end
 
     request =
       case method do

@@ -422,7 +422,12 @@ defmodule Hypatia.Reviewer do
           []
         end
 
-    case :httpc.request(:get, {String.to_charlist(url), headers}, [{:timeout, 15_000}], []) do
+    case :httpc.request(
+           :get,
+           {String.to_charlist(url), headers},
+           [{:timeout, 15_000}, {:autoredirect, false}],
+           []
+         ) do
       {:ok, {{_, 200, _}, _resp_headers, body}} ->
         {:ok, to_string(body)}
 
