@@ -422,6 +422,19 @@ defmodule Hypatia.Reviewer do
           []
         end
 
+    get_same_origin(url, headers)
+  end
+
+  @max_redirects 3
+
+  # GET that follows a redirect only to the origin (scheme, host and port)
+  # of the first request, at most @max_redirects times. GitHub answers a
+  # request for a renamed repository with a 301 to
+  # https://api.github.com/repositories/<id>/..., so the review still runs,
+  # while the token never reaches another origin or a plain-HTTP downgrade.
+  # :httpc's own redirect handling stays off (#1195).
+  @doc false
+  def get_same_origin(url, headers, hops \\ @max_redirects) do
     case :httpc.request(
            :get,
            {String.to_charlist(url), headers},
@@ -431,11 +444,32 @@ defmodule Hypatia.Reviewer do
       {:ok, {{_, 200, _}, _resp_headers, body}} ->
         {:ok, to_string(body)}
 
+      {:ok, {{_, status, _}, resp_headers, _}} when status in [301, 302, 303, 307, 308] ->
+        with {:ok, target} <- redirect_target(url, resp_headers),
+             true <- same_origin?(url, target) and hops > 0 do
+          get_same_origin(target, headers, hops - 1)
+        else
+          _ -> {:error, {:http_status, status}}
+        end
+
       {:ok, {{_, status, _}, _, _}} ->
         {:error, {:http_status, status}}
 
       {:error, reason} ->
         {:error, {:http_error, reason}}
     end
+  end
+
+  defp redirect_target(url, resp_headers) do
+    case List.keyfind(resp_headers, ~c"location", 0) do
+      {_, location} -> {:ok, url |> URI.merge(to_string(location)) |> URI.to_string()}
+      nil -> :error
+    end
+  end
+
+  defp same_origin?(from, to) do
+    a = URI.parse(from)
+    b = URI.parse(to)
+    {a.scheme, a.host, a.port} == {b.scheme, b.host, b.port}
   end
 end
