@@ -26,8 +26,11 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   (gitbot-fleet `docs/AUTOMATION-QUARANTINE.adoc`). The fixer itself refuses
   to rewrite an existing manifest and never edits a lockfile.
 
-  The fixer puts the producing job only in `fork-governance.yml`. A repository
-  that calls the grid reusable directly is still flagged, but as not
+  A grid lane is a workflow whose `uses:` value calls the grid reusable; a
+  fork governance workflow with only the DEED and K9 lanes renders no grid and
+  is not flagged. The fixer puts the producing job only in a
+  `fork-governance.yml` that has a `hypatia:` job calling the reusable, so only
+  that shape is auto-fixable. Any other grid caller is flagged as not
   auto-fixable, with a remediation that names fork governance adoption first.
 
   Not flagged:
@@ -112,16 +115,15 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   end
 
   @doc """
-  True when the repository's pull requests render the verdict grid: it has
-  the fork governance workflow, or a workflow that calls the Hypatia grid
-  reusable.
+  True when the repository's pull requests render the verdict grid: some
+  workflow calls the Hypatia grid reusable. A fork governance workflow alone
+  is not enough; one that carries only the DEED and K9 lanes renders no grid.
   """
   def grid_lane?(repo_path) do
-    File.regular?(Path.join(repo_path, @governance_workflow)) or
-      repo_path
-      |> Path.join(".github/workflows/*.{yml,yaml}")
-      |> Path.wildcard()
-      |> Enum.any?(&calls_grid_reusable?/1)
+    repo_path
+    |> Path.join(".github/workflows/*.{yml,yaml}")
+    |> Path.wildcard()
+    |> Enum.any?(&calls_grid_reusable?/1)
   end
 
   defp calls_grid_reusable?(workflow) do
@@ -148,7 +150,20 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   # The fixer inserts the producing job into fork-governance.yml only; a repo
   # that calls the grid reusable directly must adopt fork governance first,
   # and an enrolment without a producer would turn every row orange.
-  defp governed?(repo_path), do: File.regular?(Path.join(repo_path, @governance_workflow))
+  defp governed?(repo_path) do
+    workflow = Path.join(repo_path, @governance_workflow)
+
+    case File.read(workflow) do
+      {:ok, text} ->
+        lines = String.split(text, "\n")
+
+        Enum.any?(lines, &(&1 =~ ~r/^  hypatia:\s*$/)) and
+          Enum.any?(lines, &uses_grid_reusable?/1)
+
+      _ ->
+        false
+    end
+  end
 
   defp pattern(repo_name, repo_path, governed?) do
     %{

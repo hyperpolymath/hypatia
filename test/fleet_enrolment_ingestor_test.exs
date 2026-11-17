@@ -36,12 +36,36 @@ defmodule Hypatia.FleetEnrolmentIngestorTest do
     assert p["remediation"] =~ "Adopt fork governance first"
   end
 
-  test "the fork governance workflow alone is a grid lane, and is auto-fixable", %{dir: dir} do
-    write(dir, ".github/workflows/fork-governance.yml", "name: Fork governance\n")
+  test "fork governance with a hypatia job calling the reusable is auto-fixable", %{dir: dir} do
+    write(dir, ".github/workflows/fork-governance.yml", "name: Fork governance\n" <> @caller)
     assert {:ok, [p]} = FE.local_scan(dir, "some-repo")
     assert p["auto_fixable"] == true
     assert p["remediation"] =~ "fix-fleet-enrolment.sh"
     refute p["remediation"] =~ "Adopt fork governance"
+  end
+
+  # The shape hyperpolymath/mathesis had on 2026-11-17: fork governance with
+  # only the DEED and K9 lanes, so no grid is rendered and nothing is flagged.
+  test "fork governance without a Hypatia lane is not a grid lane", %{dir: dir} do
+    write(
+      dir,
+      ".github/workflows/fork-governance.yml",
+      "name: Fork governance\njobs:\n  deed:\n    name: DEED syntax\n  k9:\n    name: K9-DEED conformance\n"
+    )
+
+    assert {:ok, []} = FE.local_scan(dir, "some-repo")
+  end
+
+  test "fork governance calling the reusable from a job not named hypatia is not auto-fixable",
+       %{dir: dir} do
+    write(
+      dir,
+      ".github/workflows/fork-governance.yml",
+      String.replace(@caller, "  hypatia:", "  grid:")
+    )
+
+    assert {:ok, [p]} = FE.local_scan(dir, "some-repo")
+    assert p["auto_fixable"] == false
   end
 
   test "an enrolled repository is not flagged, whatever it enrols", %{dir: dir} do
