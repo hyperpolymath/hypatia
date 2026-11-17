@@ -175,16 +175,36 @@ later with no change in the readers.
 
 * *Outcome rows.* Rows have a `pattern_id` only since `E0-18`, and older rows have none. There is no history of
   pattern ids in the outcome log to rewrite.
-* *The registry.* An old id maps to one new key (many-to-one for K3). The mapping is computed, not guessed: apply
-  the normal form to the stored description. Keep the old entries, marked `superseded_by`, and add the occurrences
-  to the new key. Delete nothing.
-* *Recipes.* A recipe names `pattern_ids` that nothing matches exactly today (0 of 42). After K3 a recipe can name a
-  class id and match it exactly, so the label `exact` of `E0-18` gets a meaning, and the cap of `E0-19` stops
-  lowering everything. The fuzzy match of `E0-21` reads the words of the recipe's ids after the rule: K3 keeps that
-  shape, so it keeps working.
+* *Ambiguous legacy ids.* Before mapping, identify every `PA000` id, every id whose contributing categories
+  conflict in retained scans or rule-map history, and every id for which a single category cannot be established.
+  `PA000` is a shared fallback (R3), so the stored category and first description cannot prove a category split.
+  Hold these ids and all their occurrences out of the merge for owner review: preserve their entries and counts,
+  assign no `superseded_by`, and exclude them from dispatch and recipe matching while held. Do not infer a split
+  from the stored description. This proposal does not establish that retained scans cover all contributing
+  findings; releasing a hold needs an owner-approved category split with evidence accounting for every occurrence
+  per repository, or a separate ruling on unrecoverable data.
+* *Readers before migration.* These are proposed requirements, not current behaviour: registry enumeration
+  (`all_patterns`, active, category and trend queries) must skip entries with `superseded_by`; dispatch must also
+  reject them even if passed directly. Explicit history access may return the original entries and counts, but
+  must not feed them into live totals or dispatch. Held ambiguous entries must be identified as held in enumeration
+  and excluded from dispatch as above. Implement and validate these reader rules before migrating any data.
+* *The registry.* Only an old id established to contain one category maps to one new key (many-to-one for K3).
+  Compute its key from that category's canonical rule and the normal form of the stored description. Keep the old
+  entry marked `superseded_by`, and add its per-repository occurrences to the new key exactly once. Delete nothing;
+  subsequent syncs and migration reruns must preserve the marker and must not count the old entry again.
+* *Recipes and old-id lookup.* For recipe matching, resolve both the requested id and each recipe `pattern_ids`
+  entry through `superseded_by` to the terminal class id before exact, category or fuzzy matching. This is separate
+  from history lookup, which returns the original entry. A held id, missing alias target or alias cycle produces
+  no match and a diagnostic; it must not fall back to category or fuzzy matching. An id absent from the registry
+  remains a literal recipe id, preserving today's category/fuzzy matching for recipe names (0 of 42 currently
+  equal registry ids). A valid alias whose canonical ids are equal is an `exact` match; otherwise category/fuzzy
+  matching uses the resolved ids. After K3 a recipe can name a class id directly. The fuzzy match of `E0-21` reads
+  the words after the rule: K3 keeps that shape. Implement and validate alias resolution before migration too.
 * *Receipts.* `pattern_id` in a receipt is a string (`schema/receipt.ncl`). A K3 or K4 id fits.
-* *A dry run first.* A script prints, for each old id, the new key, and the number of merges, and writes nothing.
-  The migration runs only after the owner has seen it.
+* *A dry run first.* A script prints each eligible old id and new key, merge counts and per-repository occurrence
+  totals, and writes nothing. It lists ambiguous ids separately, with the reason for each hold and its withheld
+  per-repository counts; they have no proposed target and are excluded from merge totals. The migration runs only
+  after the owner has seen this report and the reader and alias rules above have been implemented and validated.
 
 == 7. Who reads the pattern id
 
@@ -268,8 +288,9 @@ Stop here. Answer by letter.
   C. K1.
   D. Keep K0.
 . *The migration of the registry.*
-  A. Map each old id to its new key, keep the old entries marked `superseded_by`, after a dry run that you have seen
-  (recommended).
+  A. Map eligible old ids to new keys and keep them marked `superseded_by`; hold ambiguous ids for owner review,
+  with the enumeration, dispatch and recipe-resolution rules of section 6 in place, after a dry run that you have
+  seen (recommended).
   B. Rebuild the registry from the scans and drop the old ids.
   C. No migration: new ids from now on, old ids left to age out.
 . *If K4 is wanted:* may a work order change `panic-attack` to emit a detector id? It is a separate repository that
