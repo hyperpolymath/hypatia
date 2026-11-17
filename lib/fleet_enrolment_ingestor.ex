@@ -24,6 +24,11 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   pull-request step) runs the fixer. The fixer itself refuses to rewrite an
   existing manifest and never edits a lockfile.
 
+  Also as of 2026-11-17, that whole path is quarantined: `dispatch-runner.sh`
+  and live issue publication exit 78 until directive enforcement is qualified
+  (gitbot-fleet `docs/AUTOMATION-QUARANTINE.adoc`). This check only emits the
+  finding; it authorises no write.
+
   Not flagged:
 
     * a repository with no grid lane (nothing would read the manifest);

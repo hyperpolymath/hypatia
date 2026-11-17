@@ -129,7 +129,7 @@ Elixir pipeline:
         |
   DispatchManifest.write()              -- JSONL for execution layer
         |
-dispatch-runner.sh (gitbot-fleet)
+dispatch-runner.sh (gitbot-fleet; quarantined since 2026-09-26, exits 78: docs/AUTOMATION-QUARANTINE.adoc there)
   ├── auto_execute (>=0.95 confidence): robot-repo-automaton
   ├── review (0.85-0.94): finding queued for review (shared-context/findings/pending/; process-review-findings.sh opens an issue; no PR step yet)
   └── report_only (<0.85): sustainabot advisory
