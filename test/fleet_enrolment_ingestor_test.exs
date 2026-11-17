@@ -55,6 +55,26 @@ defmodule Hypatia.FleetEnrolmentIngestorTest do
     assert {:ok, []} = FE.local_scan(dir, "some-repo")
   end
 
+  test "the reusable named only in an inline comment is not a grid lane", %{dir: dir} do
+    write(
+      dir,
+      ".github/workflows/ci.yml",
+      "jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4 # hypatia-scan-reusable.yml disabled\n"
+    )
+
+    assert {:ok, []} = FE.local_scan(dir, "some-repo")
+  end
+
+  test "a quoted uses value calling the reusable is a grid lane", %{dir: dir} do
+    write(
+      dir,
+      ".github/workflows/ci.yml",
+      ~s(jobs:\n  h:\n    uses: "o/standards/.github/workflows/hypatia-scan-reusable.yml@abc" # pinned\n)
+    )
+
+    assert {:ok, [_]} = FE.local_scan(dir, "some-repo")
+  end
+
   test "a commented-out call is not a grid lane", %{dir: dir} do
     write(
       dir,

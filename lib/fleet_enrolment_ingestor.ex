@@ -111,15 +111,19 @@ defmodule Hypatia.FleetEnrolmentIngestor do
       {:ok, text} ->
         text
         |> String.split("\n")
-        |> Enum.any?(fn line ->
-          trimmed = String.trim_leading(line)
-
-          not String.starts_with?(trimmed, "#") and String.contains?(trimmed, "uses:") and
-            String.contains?(trimmed, @grid_reusable)
-        end)
+        |> Enum.any?(&uses_grid_reusable?/1)
 
       _ ->
         false
+    end
+  end
+
+  # Only the value of a `uses:` key counts, never a comment: `uses: x@v4 #
+  # hypatia-scan-reusable.yml` and `# uses: ...` are not grid lanes.
+  defp uses_grid_reusable?(line) do
+    case Regex.run(~r/^\s*(?:-\s+)?uses:\s*["']?([^\s"'#]+)/, line) do
+      [_, value] -> value |> String.split("@") |> hd() |> String.ends_with?("/" <> @grid_reusable)
+      _ -> false
     end
   end
 
