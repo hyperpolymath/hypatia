@@ -60,8 +60,12 @@ inWindow windowStart e = windowStart <= e.timestamp
 ||| no upper time bound is applied. The runtime does the same: it records
 ||| events at System.system_time/1, a wall clock that can step back, and
 ||| `now - ts < window` holds for a future `ts`, so it counts them too.
-||| Counting them only makes the limiter stricter; the invariant below is
-||| an upper bound and is unaffected.
+||| That makes each admission stricter, but it does not keep the bound at
+||| every time: after the clock steps back, an event stamped later than
+||| `now` still counts at `now`, and the window can hold more than
+||| maxEvents (clockStepBackBreaksBound, Section 8). The theorems below
+||| assume the bound at the offer's own time (tryAcceptPreservesInvariant)
+||| or offers in time order (slidingWindowBound).
 public export
 countEventsInWindow : List Event -> (windowStart : Nat) -> Nat
 countEventsInWindow es windowStart = length (filter (inWindow windowStart) es)
@@ -336,3 +340,16 @@ slidingWindowBound config es order now late =
   invariantLater _ (lastTime 0 es) now late
     (processChronological (MkRateLimiterState config []) es 0 order
       (emptySatisfiesInvariant config 0))
+
+||| The time-order premise is needed. With one event per 10-tick window,
+||| offers at 0 and then 11 are both accepted. If the clock then steps back
+||| to 5, the window [0, 5] counts both (the one at 11 is "in the future"),
+||| so the bound fails. lib/safety/rate_limiter.ex stamps events with
+||| System.system_time/1, which can step back.
+export
+clockStepBackBreaksBound :
+  Not (InvariantHolds
+         (processEvents (MkRateLimiterState (MkRateLimitConfig 1 10 (LTESucc LTEZero)) [])
+                        [MkEvent 0, MkEvent 11])
+         5)
+clockStepBackBreaksBound (LTESucc h) = absurd h
