@@ -559,8 +559,8 @@ Key dependencies used across the workspace:
 |`anyhow`
 |Error handling
 
-|`chrono`
-|Date/time handling
+|`jiff`
+|Date/time handling (`Timestamp`; replaced the unmaintained `chrono`, RUSTSEC-2026-0543)
 |===
 
 == See Also
