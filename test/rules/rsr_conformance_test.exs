@@ -288,6 +288,29 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       end
     end
 
+    # With no deed clause, the legacy .a2ml counts only if the reader gets a
+    # capabilities list from it. This case used to pass 3.2.2 on the file's
+    # presence while the scorecard reported no profile (RsrProfile.idr: the
+    # former `residualDivergence`; now `emptyA2mlFails`).
+    test "3.2.2 agrees with profile_present on an rsr-profile.a2ml with no list", %{
+      tmp_dir: tmp
+    } do
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      path = ".machine_readable/rsr-profile.a2ml"
+
+      for {text, want} <- [
+            {"[rsr-profile]\ncapabilities = [\"bash\"]\n", {:pass, true}},
+            {"[rsr-profile]\nversion = \"1.0.0\"\n", {:fail, false}},
+            {"[unrelated]\ncapabilities = [\"bash\"]\n", {:fail, false}},
+            {"this is not a record [[[\n", {:fail, false}}
+          ] do
+        mk!(tmp, path, text)
+        {:ok, sc} = RsrConformance.score(catalogue, tmp)
+        verdict = Enum.find(sc.results, &(&1.id == "3.2.2")).verdict
+        assert {verdict, sc.profile_present} == want, "for #{inspect(text)}"
+      end
+    end
+
     test "a malformed descriptile fails 3.2.1 (parse gate, not just presence)", %{
       tmp_dir: tmp
     } do
