@@ -97,8 +97,8 @@ ____
   safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
   limiting), one Agda model of the Logtalk-to-Elixir migration, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
-  the code, not the Elixir runtime itself. Proof ledger: 33 proven of 53; 0 proven-with-postulates,
-  11 tested-only, 2 argued, 7 open
+  the code, not the Elixir runtime itself. Proof ledger: 34 proven of 55; 0 proven-with-postulates,
+  12 tested-only, 2 argued, 7 open
 ____
 
 How this is implemented::
@@ -251,8 +251,9 @@ for the owner, not a licence change).
 ====
 Safety systems are built but not wired. No scan or dispatch path calls
 `Safety.RateLimiter` or `Safety.Quarantine`: the application starts both, the
-Kin watchdog watches the limiter, and the REST and GraphQL APIs only list
-quarantines (`lib/hypatia/web/api_router.ex`, `lib/hypatia/web/graphql.ex`). `BatchRollback.rollback/2` is
+Kin watchdog watches both (`lib/kin/watchdog.ex`), and the REST and GraphQL
+APIs only list quarantines (`lib/hypatia/web/api_router.ex`,
+`lib/hypatia/web/graphql.ex`). `BatchRollback.rollback/2` is
 reached only through `Kin.Contingency.rollback_wave/2`, which nothing calls.
 `SelfDiagnostics.record_dispatch_failure/0` and `record_dispatch_success/0`
 have no callers, so its circuit breaker never opens. The moduledoc of
@@ -294,7 +295,7 @@ Census, from `scripts/proof-ledger.sh check`:
 
 [source,text]
 ----
-33 proven of 53; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
+34 proven of 55; 0 proven-with-postulates, 12 tested-only, 2 argued, 7 open.
 ----
 
 Of the three theory rows, `logtalk-migration` is `PWG-3`;

@@ -17,8 +17,8 @@
 --   `clause_capabilities/1`        ~ `readClause` (with `capLists`,
 --                                    `keepCaps`)
 --   `a2ml_capabilities/1`          ~ `a2mlCapabilities`
---   `profile_present/0` (3.2.2)    ~ `criterion322`
---   `present_mr("rsr-profile.a2ml")` ~ `a2mlFileVerdict`
+--   `profile_present/0` (3.2.2)    ~ `criterion322` (= `verdictOf` of
+--                                    `declaredCapabilities`)
 --   `deed_clause?/2`               ~ not used by 3.2.2 since bffd76a; before
 --                                    it, 3.2.2 passed on any clause, which is
 --                                    the defect `deedDecidedAgrees` excludes
@@ -42,13 +42,14 @@
 --     `duplicateFailsCriterion`, `listlessFailsCriterion`);
 --   * fallback: with no clause the result is the a2ml reading
 --     (`fallbackNoDeed`, `fallbackNoClause`, `fallbackCriterionNoClause`);
---   * consistency: 3.2.2 passes iff the scorecard says `profile_present`
---     whenever the deed decides (`deedDecidedAgrees`, the bffd76a fix) and
---     whenever the a2ml is not "present but declaring nothing"
---     (`a2mlDecidedAgrees`); they disagree in exactly that one case
---     (`disagreementIsExactly`), and it is inhabited (`residualDivergence`):
---     with no deed clause, 3.2.2 checks only that rsr-profile.a2ml exists,
---     while the scorecard needs it to yield a capabilities list.
+--   * consistency: 3.2.2 passes iff the scorecard says `profile_present`,
+--     for every source (`profilePresentAgrees`).  It holds by construction:
+--     3.2.2 is the verdict of the same capability reader.  The bffd76a fix
+--     is the deed-decided instance (`deedDecidedAgrees`).  The case that
+--     diverged before the 3.2.2 fix (no deed clause; an rsr-profile.a2ml
+--     that exists but yields no capabilities list, which passed 3.2.2 on its
+--     presence while the scorecard reported no profile) now fails
+--     (`emptyA2mlFails`).
 --
 -- What is NOT proved here: that the Elixir behaves as this model.  The
 -- Elixir is not extracted from this module; the correspondence is by review
@@ -202,24 +203,17 @@ passes : CriterionVerdict -> Bool
 passes Pass = True
 passes Fail = False
 
-||| `present_mr("rsr-profile.a2ml")`: the file exists.
+||| The verdict of `profile_present/0`: pass exactly when the capability
+||| reader declares a profile (`declared_capabilities(repo) == :none` fails).
 public export
-a2mlFileVerdict : A2mlState -> CriterionVerdict
-a2mlFileVerdict A2mlMissing = Fail
-a2mlFileVerdict A2mlDeclaresNothing = Pass
-a2mlFileVerdict (A2mlDeclares _) = Pass
-
-||| The `case` of `profile_present/0`.
-public export
-check322 : Resolution -> A2mlState -> CriterionVerdict
-check322 Absent a = a2mlFileVerdict a
-check322 DeclaresNothing _ = Fail
-check322 (Declared _) _ = Pass
+verdictOf : Caps -> CriterionVerdict
+verdictOf CapsNone = Fail
+verdictOf (CapsList _) = Pass
 
 ||| Criterion 3.2.2, `profile_present/0`.
 public export
 criterion322 : ProfileSource -> CriterionVerdict
-criterion322 src = check322 (resolve (deed src)) (a2ml src)
+criterion322 src = verdictOf (declaredCapabilities src)
 
 ------------------------------------------------------------------------
 -- Section 4: Lemmas on the reading steps
@@ -239,16 +233,6 @@ public export
 fromAbsent : (a : A2mlState) -> (r : Resolution)
           -> r = Absent -> fromResolution r a = a2mlCapabilities a
 fromAbsent _ _ Refl = Refl
-
-public export
-checkNothing : (a : A2mlState) -> (r : Resolution)
-            -> r = DeclaresNothing -> check322 r a = Fail
-checkNothing _ _ Refl = Refl
-
-public export
-checkAbsent : (a : A2mlState) -> (r : Resolution)
-           -> r = Absent -> check322 r a = a2mlFileVerdict a
-checkAbsent _ _ Refl = Refl
 
 ||| One clause: the reading is that clause's.
 public export
@@ -350,9 +334,7 @@ duplicateFailsCriterion : (items : List TopItem) -> (a : A2mlState)
                        -> {b1, b2 : List BodyItem} -> {rest : List (List BodyItem)}
                        -> profileBodies items = b1 :: b2 :: rest
                        -> criterion322 (MkProfileSource (Just items) a) = Fail
-duplicateFailsCriterion items a dup =
-  checkNothing a (readBodies (profileBodies items))
-    (twoClauses (profileBodies items) dup)
+duplicateFailsCriterion items a dup = cong verdictOf (duplicateDeclaresNothing items a dup)
 
 ||| One clause without a capabilities list fails 3.2.2, for every a2ml
 ||| state.
@@ -362,9 +344,7 @@ listlessFailsCriterion : (items : List TopItem) -> (a : A2mlState)
                       -> capLists body = []
                       -> criterion322 (MkProfileSource (Just items) a) = Fail
 listlessFailsCriterion items a body one listless =
-  checkNothing a (readBodies (profileBodies items))
-    (trans (oneClause (profileBodies items) body one)
-           (listlessClause body listless))
+  cong verdictOf (listlessDeclaresNothing items a body one listless)
 
 ------------------------------------------------------------------------
 -- Section 7: Fallback to the a2ml
@@ -384,74 +364,45 @@ fallbackNoClause : (items : List TopItem) -> (a : A2mlState)
 fallbackNoClause items a none =
   fromAbsent a (readBodies (profileBodies items)) (noClause (profileBodies items) none)
 
-||| A deed without a top-level clause: 3.2.2 is the a2ml file check.
+||| A deed without a top-level clause: 3.2.2 is the verdict of the a2ml
+||| reading, so an .a2ml that exists but yields no list fails.
 public export
 fallbackCriterionNoClause : (items : List TopItem) -> (a : A2mlState)
                          -> profileBodies items = []
-                         -> criterion322 (MkProfileSource (Just items) a) = a2mlFileVerdict a
-fallbackCriterionNoClause items a none =
-  checkAbsent a (readBodies (profileBodies items)) (noClause (profileBodies items) none)
+                         -> criterion322 (MkProfileSource (Just items) a) = verdictOf (a2mlCapabilities a)
+fallbackCriterionNoClause items a none = cong verdictOf (fallbackNoClause items a none)
 
 ------------------------------------------------------------------------
 -- Section 8: 3.2.2 and the scorecard agree
 ------------------------------------------------------------------------
 
+||| The verdict passes exactly when the scorecard field is true.
 public export
-agreeWhenDecided : (r : Resolution) -> (a : A2mlState) -> Not (r = Absent)
-                -> passes (check322 r a) = scorecardProfilePresent (fromResolution r a)
-agreeWhenDecided Absent _ notAbsent = void (notAbsent Refl)
-agreeWhenDecided (Declared _) _ _ = Refl
-agreeWhenDecided DeclaresNothing _ _ = Refl
+verdictAgrees : (c : Caps) -> passes (verdictOf c) = scorecardProfilePresent c
+verdictAgrees CapsNone = Refl
+verdictAgrees (CapsList _) = Refl
 
+||| 3.2.2 passes iff the scorecard says the profile is present, for every
+||| source: both read the same capability set.
 public export
-agreeUnlessEmptyA2ml : (r : Resolution) -> (a : A2mlState)
-                    -> Not (a = A2mlDeclaresNothing)
-                    -> passes (check322 r a) = scorecardProfilePresent (fromResolution r a)
-agreeUnlessEmptyA2ml Absent A2mlMissing _ = Refl
-agreeUnlessEmptyA2ml Absent A2mlDeclaresNothing notEmpty = void (notEmpty Refl)
-agreeUnlessEmptyA2ml Absent (A2mlDeclares _) _ = Refl
-agreeUnlessEmptyA2ml (Declared _) _ _ = Refl
-agreeUnlessEmptyA2ml DeclaresNothing _ _ = Refl
-
-public export
-disagreeReading : (r : Resolution) -> (a : A2mlState)
-               -> Not (passes (check322 r a) = scorecardProfilePresent (fromResolution r a))
-               -> (r = Absent, a = A2mlDeclaresNothing)
-disagreeReading Absent A2mlMissing differ = void (differ Refl)
-disagreeReading Absent A2mlDeclaresNothing _ = (Refl, Refl)
-disagreeReading Absent (A2mlDeclares _) differ = void (differ Refl)
-disagreeReading (Declared _) _ differ = void (differ Refl)
-disagreeReading DeclaresNothing _ differ = void (differ Refl)
+profilePresentAgrees : (src : ProfileSource)
+                    -> passes (criterion322 src) = scorecardProfilePresent (declaredCapabilities src)
+profilePresentAgrees src = verdictAgrees (declaredCapabilities src)
 
 ||| When the deed decides, 3.2.2 passes iff the scorecard says the profile
 ||| is present.  This is the property bffd76a restored: a duplicated or
-||| list-less clause neither passes 3.2.2 nor counts as a profile.
+||| list-less clause neither passes 3.2.2 nor counts as a profile.  It is
+||| now an instance of `profilePresentAgrees`.
 public export
 deedDecidedAgrees : (src : ProfileSource) -> Not (resolve (deed src) = Absent)
                  -> passes (criterion322 src) = scorecardProfilePresent (declaredCapabilities src)
-deedDecidedAgrees src notAbsent = agreeWhenDecided (resolve (deed src)) (a2ml src) notAbsent
+deedDecidedAgrees src _ = profilePresentAgrees src
 
-||| Unless the a2ml is present but declares no capabilities list, 3.2.2
-||| passes iff the scorecard says the profile is present.
+||| The case that diverged before the 3.2.2 fix: no deed, and an
+||| rsr-profile.a2ml that exists but yields no capabilities list.  It used
+||| to pass 3.2.2 on the file's presence while the scorecard reported no
+||| profile; it now fails 3.2.2 (tests/reject/EmptyA2mlPassesProfileCriterion
+||| is the regression guard).
 public export
-a2mlDecidedAgrees : (src : ProfileSource) -> Not (a2ml src = A2mlDeclaresNothing)
-                 -> passes (criterion322 src) = scorecardProfilePresent (declaredCapabilities src)
-a2mlDecidedAgrees src notEmpty = agreeUnlessEmptyA2ml (resolve (deed src)) (a2ml src) notEmpty
-
-||| The two readers disagree only when there is no deed clause and the a2ml
-||| is present but declares no capabilities list.
-public export
-disagreementIsExactly : (src : ProfileSource)
-                     -> Not (passes (criterion322 src) = scorecardProfilePresent (declaredCapabilities src))
-                     -> (resolve (deed src) = Absent, a2ml src = A2mlDeclaresNothing)
-disagreementIsExactly src differ = disagreeReading (resolve (deed src)) (a2ml src) differ
-
-||| And that case occurs: no deed, and an rsr-profile.a2ml that exists but
-||| yields no capabilities list, passes 3.2.2 while the scorecard reports no
-||| profile.
-public export
-residualDivergence : ( criterion322 (MkProfileSource Nothing A2mlDeclaresNothing) = Pass
-                     , scorecardProfilePresent
-                         (declaredCapabilities (MkProfileSource Nothing A2mlDeclaresNothing))
-                       = False )
-residualDivergence = (Refl, Refl)
+emptyA2mlFails : criterion322 (MkProfileSource Nothing A2mlDeclaresNothing) = Fail
+emptyA2mlFails = Refl

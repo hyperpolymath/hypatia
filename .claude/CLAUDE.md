@@ -13,7 +13,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ## Architecture
 
 ```
-Hypatia                       # 172 Elixir source files under lib/ (recursive tree count, 2026-11-16)
+Hypatia                       # 171 Elixir source files under lib/ (recursive tree count, 2026-11-16)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
@@ -210,7 +210,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `Retraction.idr` | Quarantine as retraction (HYP-01): a token survives iff its support thins into what remains; a finding survives through one of its tokens. Transcribed from residual-evidence-types `Revision.agda` @ 97244f5 |
 | `Egress.idr` | RE001's decision on egress declarations (standards ADR-009): `Clean` is decidable (`decClean`); an audit hardener never passes a block claim; a declaration lists exactly the secrets read; a run-time key is never declared. Mirror: `test/egress_decision_mirror_test.exs` |
 | `SecretAlerts.idr` | The `hypatia secret-alerts` line contract read by the bash/jq secret-scanning sweep: exit 0 iff ok, 3 iff error; an error line is never "clean"; `total` = number of findings; no finding is "sound". Gate: `scripts/check-verdicts.sh` (`tests/accept/SecretAlertsLines.idr`, `tests/reject/SecretAlerts*.idr`) |
-| `RsrProfile.idr` | RSR capability-profile resolution (engineering model of `lib/rules/rsr_conformance.ex`): deed precedence, fail-closed duplicate/list-less clauses, a2ml fallback, and when criterion 3.2.2 agrees with the scorecard's `profile_present` (and the one case it does not). Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
+| `RsrProfile.idr` | RSR capability-profile resolution (engineering model of `lib/rules/rsr_conformance.ex`): deed precedence, fail-closed duplicate/list-less clauses, a2ml fallback, and that criterion 3.2.2 agrees with the scorecard's `profile_present` for every source (3.2.2 is the verdict of the same capability reader). Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
 The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the
