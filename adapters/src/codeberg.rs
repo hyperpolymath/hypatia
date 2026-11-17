@@ -13,8 +13,8 @@
 //! and response structures.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
+use jiff::Timestamp;
 use reqwest::{header::HeaderMap, Client};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -200,8 +200,8 @@ struct GiteaPullRequest {
     base: GiteaBranch,
     merged: bool,
     mergeable: Option<bool>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[allow(dead_code)]
@@ -223,8 +223,8 @@ struct GiteaIssue {
     html_url: String,
     user: GiteaUser,
     labels: Vec<GiteaLabel>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[allow(dead_code)]
@@ -240,8 +240,8 @@ struct GiteaComment {
     id: u64,
     body: String,
     user: GiteaUser,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[allow(dead_code)]
@@ -252,8 +252,8 @@ struct GiteaCommitStatus {
     context: String,
     description: Option<String>,
     target_url: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[allow(dead_code)]
@@ -265,8 +265,8 @@ struct GiteaHook {
     active: bool,
     events: Vec<String>,
     config: GiteaHookConfig,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -291,8 +291,8 @@ struct GiteaActionRun {
     status: String,
     conclusion: Option<String>,
     workflow_id: String,
-    started_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
+    started_at: Option<Timestamp>,
+    completed_at: Option<Timestamp>,
     html_url: String,
     head_sha: String,
     head_branch: String,
@@ -540,7 +540,7 @@ impl From<GiteaActionRun> for WorkflowRun {
             _ => None,
         });
 
-        let now = chrono::Utc::now();
+        let now = jiff::Timestamp::now();
         WorkflowRun {
             id: run.id.to_string(),
             workflow_id: run.workflow_id,

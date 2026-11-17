@@ -7,7 +7,7 @@
 
 use crate::error::Result;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// Supported forge types
@@ -124,8 +124,8 @@ pub struct WorkflowRun {
     pub head_branch: String,
     pub head_sha: String,
     pub url: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Workflow run status
@@ -164,8 +164,8 @@ pub struct Issue {
     pub author: String,
     pub labels: Vec<String>,
     pub url: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Issue state
@@ -182,8 +182,8 @@ pub struct Comment {
     pub id: String,
     pub body: String,
     pub author: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Pull request / Merge request information
@@ -199,8 +199,8 @@ pub struct PullRequest {
     pub base_branch: String,
     pub url: String,
     pub mergeable: Option<bool>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
 }
 
 /// Pull request state
@@ -221,8 +221,8 @@ pub struct CheckRun {
     pub conclusion: Option<CheckConclusion>,
     pub head_sha: String,
     pub url: Option<String>,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
+    pub completed_at: Option<Timestamp>,
 }
 
 /// Check run status

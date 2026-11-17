@@ -32,7 +32,7 @@ use super::{
     MatrixConfig, MockCircleCI, MockGitHubActions, MockGitLabCI, SecurityFinding,
     SimulatedArtifact, SimulatedBuild, SimulatedCI, SimulatedJob, SimulatedStep,
 };
-use chrono::Utc;
+use jiff::Timestamp;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -685,7 +685,7 @@ pub async fn parallel_jobs_with_count(job_count: usize) -> ScenarioResult {
         let build = builds.get_mut(&build_id).unwrap();
         for job in &mut build.jobs {
             job.status = BuildStatus::InProgress;
-            job.started_at = Some(Utc::now());
+            job.started_at = Some(Timestamp::now());
         }
     }
 
