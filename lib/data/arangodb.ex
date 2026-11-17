@@ -89,8 +89,21 @@ defmodule Hypatia.Data.ArangoDB do
     # Try to connect, but don't crash if ArangoDB isn't available
     state = try_connect(state)
 
+    state =
+      if state.connected do
+        case ensure_schema(state) do
+          :ok ->
+            state
+
+          {:error, reason} ->
+            Logger.warning("ArangoDB schema initialisation failed: #{inspect(reason)}")
+            %{state | connected: false}
+        end
+      else
+        state
+      end
+
     if state.connected do
-      ensure_schema(state)
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
       Logger.info("ArangoDB connected: #{url}/#{db}")
       {:ok, %{state | sync_timer: timer}}
@@ -347,56 +360,80 @@ defmodule Hypatia.Data.ArangoDB do
     db_url = "#{state.base_url}/_db/#{state.database}"
 
     # Create database if it doesn't exist
-    http_post("#{state.base_url}/_api/database", state.auth_header, %{"name" => state.database})
+    database =
+      http_post("#{state.base_url}/_api/database", state.auth_header, %{"name" => state.database})
 
     # Create document collections
-    Enum.each(@document_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 2})
-    end)
+    documents =
+      Enum.map(@document_collections, fn name ->
+        http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 2})
+      end)
 
     # Create edge collections
-    Enum.each(@edge_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 3})
-    end)
+    edges =
+      Enum.map(@edge_collections, fn name ->
+        http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 3})
+      end)
 
     # Create indices for common queries
-    create_index(state, "confidence_history", ["recipe_id", "timestamp"])
-    create_index(state, "outcomes", ["timestamp"])
-    create_index(state, "outcomes", ["recipe_id"])
-    create_index(state, "findings", ["repo", "severity"])
-    create_index(state, "findings", ["pattern_id"])
-    create_index(state, "anomalies", ["resolved", "timestamp"])
-    create_index(state, "repos", ["trust_score"])
-    create_index(state, "bots", ["quarantined"])
+    indices = [
+      create_index(state, "confidence_history", ["recipe_id", "timestamp"]),
+      create_index(state, "outcomes", ["timestamp"]),
+      create_index(state, "outcomes", ["recipe_id"]),
+      create_index(state, "findings", ["repo", "severity"]),
+      create_index(state, "findings", ["pattern_id"]),
+      create_index(state, "anomalies", ["resolved", "timestamp"]),
+      create_index(state, "repos", ["trust_score"]),
+      create_index(state, "bots", ["quarantined"])
+    ]
 
     # Create named graph
-    http_post("#{db_url}/_api/gharial", state.auth_header, %{
-      "name" => "hypatia_graph",
-      "edgeDefinitions" => [
-        %{
-          "collection" => "trusts",
-          "from" => ["repos", "bots", "recipes", "contributors"],
-          "to" => ["repos", "bots", "recipes", "contributors"]
-        },
-        %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
-        %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
-        %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
-        %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
-        %{
-          "collection" => "finding_matches_pattern",
-          "from" => ["findings"],
-          "to" => ["patterns"]
-        },
-        %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
-        %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
-        %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
-      ]
-    })
+    graph =
+      http_post("#{db_url}/_api/gharial", state.auth_header, %{
+        "name" => "hypatia_graph",
+        "edgeDefinitions" => [
+          %{
+            "collection" => "trusts",
+            "from" => ["repos", "bots", "recipes", "contributors"],
+            "to" => ["repos", "bots", "recipes", "contributors"]
+          },
+          %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
+          %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
+          %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
+          %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
+          %{
+            "collection" => "finding_matches_pattern",
+            "from" => ["findings"],
+            "to" => ["patterns"]
+          },
+          %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
+          %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
+          %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
+        ]
+      })
 
-    Logger.info(
-      "ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections"
-    )
+    results = [database] ++ documents ++ edges ++ indices ++ [graph]
+
+    case Enum.find(results, &(not schema_result_ok?(&1))) do
+      nil ->
+        Logger.info(
+          "ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections"
+        )
+
+        :ok
+
+      failure ->
+        {:error, failure}
+    end
   end
+
+  # Repeated initialisation may encounter resources that already exist.
+  defp schema_result_ok?({:ok, %{"error" => true, "errorNum" => number}})
+       when number in [1207, 1925], do: true
+
+  defp schema_result_ok?({:ok, %{"error" => true}}), do: false
+  defp schema_result_ok?({:ok, _}), do: true
+  defp schema_result_ok?(_), do: false
 
   defp create_index(state, collection, fields) do
     db_url = "#{state.base_url}/_db/#{state.database}"
@@ -613,7 +650,7 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->
         Jason.decode(to_string(resp_body))
 
-      {:ok, {{_, code, _}, _, resp_body}} when code in 300..499 ->
+      {:ok, {{_, code, _}, _, resp_body}} when code in 400..499 ->
         Jason.decode(to_string(resp_body))
 
       {:ok, {{_, status, _}, _, resp_body}} ->
