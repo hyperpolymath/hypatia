@@ -65,7 +65,7 @@
 % ABSTRACT
 % ============================================================
 \begin{abstract}
-Modern software supply chains deploy numerous static and dynamic analysis tools---CodeQL, Semgrep, Snyk, Trivy, SonarQube---that collectively generate thousands of findings per organisation. Yet the critical gap is not \emph{detection} but \emph{decision}: given a finding, what should be done, by whom, with what confidence, and in what order? We present \textsc{Hypatia}, a neurosymbolic decision intelligence system that sits between scanners and fixers in CI/CD pipelines, orchestrating automated remediation across a fleet of specialised bots. \textsc{Hypatia} combines five lightweight neural networks---a trust-weighted PageRank graph, a sparse Mixture of Experts, two reservoir computing networks (Liquid State Machine and Echo State Network), and a Radial Basis Function novelty detector---with 20 declarative Elixir rules for known standards compliance. A Safety Triangle framework inspired by occupational hazard hierarchies routes every finding through Eliminate, Substitute, or Control tiers with confidence-gated dispatch. Over 16{,}671 recorded outcomes across 302 repositories, the system achieves a 99\% remediation success rate with Bayesian confidence updating, automatic bot quarantine on failure streaks, and batch rollback capability. We argue that this detection--decision decoupling represents a necessary paradigm shift for managing the combinatorial explosion of findings in modern DevSecOps environments.
+Modern software supply chains deploy numerous static and dynamic analysis tools---CodeQL, Semgrep, Snyk, Trivy, SonarQube---that collectively generate thousands of findings per organisation. Yet the critical gap is not \emph{detection} but \emph{decision}: given a finding, what should be done, by whom, with what confidence, and in what order? We present \textsc{Hypatia}, a neurosymbolic decision intelligence system that sits between scanners and fixers in CI/CD pipelines, orchestrating automated remediation across a fleet of specialised bots. \textsc{Hypatia} combines five lightweight neural networks---a trust-weighted PageRank graph, a sparse Mixture of Experts, two reservoir computing networks (Liquid State Machine and Echo State Network), and a Radial Basis Function novelty detector---with a declarative rule layer for known standards compliance (20 rules in the version evaluated here). A Safety Triangle framework inspired by occupational hazard hierarchies routes every finding through Eliminate, Substitute, or Control tiers with confidence-gated dispatch. Over 16{,}671 recorded outcomes across 302 repositories, the system achieves a 99\% remediation success rate with Bayesian confidence updating, automatic bot quarantine on failure streaks, and batch rollback capability. We argue that this detection--decision decoupling represents a necessary paradigm shift for managing the combinatorial explosion of findings in modern DevSecOps environments.
 
 \medskip
 \noindent\textbf{Keywords:} neurosymbolic AI, CI/CD, automated remediation, software engineering intelligence, safety triangle, DevSecOps, reservoir computing
@@ -216,7 +216,7 @@ Three structural factors perpetuate the detection--decision gap:
 \node[neuralbox, right=0.3cm of esn] (rbf) {Radial\\(RBF)};
 
 % Symbolic layer
-\node[symbox, below right=1.0cm and 2.5cm of registry] (rules) {Elixir rules\\(20 rules)};
+\node[symbox, below right=1.0cm and 2.5cm of registry] (rules) {Symbolic rules\\(20, as evaluated)};
 
 % Coordinator
 \node[box, fill=purple!10, draw=purple!50!black, below=1.8cm of registry] (coord) {Neural Coordinator};
@@ -386,11 +386,11 @@ When $\max_i \phi_i(\mathbf{x}) < \tau_{\text{novelty}}$ (no known centre is clo
 \subsection{The Symbolic Layer: Declarative Rules}
 \label{subsec:symbolic}
 
-Twenty declarative Elixir rules encode deterministic domain knowledge---the ``known-knowns'' that do not benefit from neural approximation. These rules cover:
+In the version evaluated here, twenty declarative rules encode deterministic domain knowledge---the ``known-knowns'' that do not benefit from neural approximation. The rule layer is now implemented as Elixir modules and has since grown: the generated catalogue (\texttt{docs/rules/catalogue.adoc}) lists 44 rule modules. The twenty evaluated rules cover:
 
 \begin{table}[htbp]
 \centering
-\caption{Symbolic rule categories in \textsc{Hypatia}. Each rule is an Elixir predicate function with deterministic output, avoiding neural computation overhead for well-understood checks.}
+\caption{Symbolic rule categories in the evaluated version of \textsc{Hypatia}. Each rule has deterministic output, avoiding neural computation overhead for well-understood checks.}
 \label{tab:rules}
 \begin{tabular}{@{}llc@{}}
 \toprule

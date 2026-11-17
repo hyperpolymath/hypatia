@@ -76,7 +76,7 @@
          │  ; no timer)     │  │                  │
          └──────┬───────────┘  └─────┬────────────┘
                 │                    │
-                │ New rules          │ Fix results
+                │ Promotions         │ Fix results
                 │                    │
                 └──────────┬─────────┘
                            │
@@ -84,7 +84,7 @@
          ┌──────────────────────────────────────────┐
          │  7. CONTINUOUS IMPROVEMENT               │
          │                                           │
-         │  • New patterns → New rules              │
+         │  • New categories → recipes at 0.50      │
          │  • Successful fixes → Higher confidence  │
          │  • Failed fixes → Try alternative        │
          │  • promote_patterns → promote issue type │
@@ -198,8 +198,10 @@ not demote it.
 
 `+lib/rules/learning.ex+` promotes an issue type only when
 `+promote_patterns+` is called; nothing in `+lib/+` calls it on a
-timer. Rules for uncovered categories come from `+recipe_generator.ex+`
-at confidence 0.50, and the Bayesian loop in `+outcome_tracker.ex+`
+timer. For an uncovered category, `+recipe_generator.ex+` writes a
+remediation recipe (`+recipe-<category>.json+`) at confidence 0.50. It
+does not create a detector rule: nothing generates executable rules yet.
+The Bayesian loop in `+outcome_tracker.ex+`
 updates that confidence as fixes succeed or fail.
 The Elixir rule for this pattern family lives in
 `+lib/rules/code_safety.ex+`. The rules engine is 100% Elixir
@@ -295,7 +297,7 @@ Scan of svalinn (2026-01-25):
 . *Feedback-driven* - Fix outcomes update confidence; rule promotion
 runs when `+promote_patterns+` is called
 . *Incremental* - Starts with basic rules, grows organically
-. *Evidence-based* - Rules generated from actual observations
+. *Evidence-based* - Recipe confidence comes from recorded fix outcomes
 . *Self-correcting* - Failed fixes reduce pattern confidence
 . *Explainable* - Every rule has observation count + context
 . *Collaborative* - Bots share findings via gitbot-fleet
