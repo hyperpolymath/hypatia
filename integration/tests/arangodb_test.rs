@@ -252,8 +252,8 @@ async fn test_repository_crud() -> Result<()> {
         url: "https://github.com/hyperpolymath/hypatia".to_string(),
         default_branch: "main".to_string(),
         languages: vec!["Rust".to_string(), "Haskell".to_string()],
-        created_at: chrono::Utc::now().to_rfc3339(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
+        updated_at: jiff::Timestamp::now().to_string(),
     };
 
     let key = client.insert_repository(repo.clone()).await?;
@@ -289,8 +289,8 @@ async fn test_alert_storage() -> Result<()> {
         url: "https://github.com/test/test-repo".to_string(),
         default_branch: "main".to_string(),
         languages: vec!["Rust".to_string()],
-        created_at: chrono::Utc::now().to_rfc3339(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
+        updated_at: jiff::Timestamp::now().to_string(),
     };
     client.insert_repository(repo).await?;
 
@@ -306,7 +306,7 @@ async fn test_alert_storage() -> Result<()> {
         line: Some(12),
         auto_fixable: true,
         status: "open".to_string(),
-        created_at: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
     };
 
     let alert2 = AlertDocument {
@@ -320,7 +320,7 @@ async fn test_alert_storage() -> Result<()> {
         line: Some(1),
         auto_fixable: true,
         status: "open".to_string(),
-        created_at: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
     };
 
     client.insert_alert(alert1).await?;
@@ -463,8 +463,8 @@ async fn test_bulk_insert_performance() -> Result<()> {
             url: format!("https://github.com/test/repo-{}", i),
             default_branch: "main".to_string(),
             languages: vec!["Rust".to_string()],
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: jiff::Timestamp::now().to_string(),
+            updated_at: jiff::Timestamp::now().to_string(),
         };
         client.insert_repository(repo).await?;
     }

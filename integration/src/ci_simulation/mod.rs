@@ -43,7 +43,7 @@ pub mod assertions;
 pub mod scenarios;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -312,13 +312,13 @@ pub struct SimulatedBuild {
     /// Build logs (accumulated)
     pub logs: Vec<LogEntry>,
     /// Build start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Build completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Created timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// Last updated timestamp
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// Security findings from the build
     pub security_findings: Vec<SecurityFinding>,
     /// Custom metadata
@@ -328,7 +328,7 @@ pub struct SimulatedBuild {
 impl SimulatedBuild {
     /// Create a new simulated build from configuration
     pub fn from_config(config: &BuildConfig, build_number: u64) -> Self {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             id: Uuid::new_v4().to_string(),
             number: build_number,
@@ -352,10 +352,10 @@ impl SimulatedBuild {
     }
 
     /// Calculate build duration
-    pub fn duration(&self) -> Option<Duration> {
+    pub fn duration(&self) -> Option<SignedDuration> {
         match (self.started_at, self.completed_at) {
-            (Some(start), Some(end)) => Some(end - start),
-            (Some(start), None) => Some(Utc::now() - start),
+            (Some(start), Some(end)) => Some(end.duration_since(start)),
+            (Some(start), None) => Some(Timestamp::now().duration_since(start)),
             _ => None,
         }
     }
@@ -405,9 +405,9 @@ pub struct SimulatedJob {
     /// Runner information
     pub runner: Option<RunnerInfo>,
     /// Job start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Job completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Job logs
     pub logs: Vec<LogEntry>,
     /// Matrix combination for this job (if part of matrix)
@@ -440,10 +440,10 @@ impl SimulatedJob {
     }
 
     /// Calculate job duration
-    pub fn duration(&self) -> Option<Duration> {
+    pub fn duration(&self) -> Option<SignedDuration> {
         match (self.started_at, self.completed_at) {
-            (Some(start), Some(end)) => Some(end - start),
-            (Some(start), None) => Some(Utc::now() - start),
+            (Some(start), Some(end)) => Some(end.duration_since(start)),
+            (Some(start), None) => Some(Timestamp::now().duration_since(start)),
             _ => None,
         }
     }
@@ -463,9 +463,9 @@ pub struct SimulatedStep {
     /// Conclusion (when completed)
     pub conclusion: Option<BuildConclusion>,
     /// Step start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Step completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Step logs
     pub logs: Vec<LogEntry>,
 }
@@ -517,7 +517,7 @@ impl Default for RunnerInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     /// Log timestamp
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     /// Log level
     pub level: LogLevel,
     /// Log message
@@ -530,7 +530,7 @@ impl LogEntry {
     /// Create a new log entry
     pub fn new(level: LogLevel, message: impl Into<String>) -> Self {
         Self {
-            timestamp: Utc::now(),
+            timestamp: Timestamp::now(),
             level,
             message: message.into(),
             data: None,
@@ -582,23 +582,23 @@ pub struct SimulatedArtifact {
     /// Artifact content (simulated)
     pub content: Vec<u8>,
     /// Expiration time
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// Created timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl SimulatedArtifact {
     /// Create a new simulated artifact
     pub fn new(name: &str, content: Vec<u8>, content_type: &str) -> Self {
         let size_bytes = content.len() as u64;
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
             size_bytes,
             content_type: content_type.to_string(),
             content,
-            expires_at: now + Duration::days(90),
+            expires_at: now + SignedDuration::from_hours(24 * 90),
             created_at: now,
         }
     }
@@ -1020,8 +1020,8 @@ impl SimulatedCI for MockGitHubActions {
 
         build.status = BuildStatus::Cancelled;
         build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1039,7 +1039,7 @@ impl SimulatedCI for MockGitHubActions {
         // Start the build if it's still queued
         if build.status == BuildStatus::Queued {
             build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
+            build.started_at = Some(Timestamp::now());
         }
 
         if !build.status.can_transition_to(BuildStatus::Completed) {
@@ -1051,15 +1051,15 @@ impl SimulatedCI for MockGitHubActions {
 
         build.status = BuildStatus::Completed;
         build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         // Complete all jobs
         for job in &mut build.jobs {
             if job.status != BuildStatus::Completed {
                 job.status = BuildStatus::Completed;
                 job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
+                job.completed_at = Some(Timestamp::now());
             }
         }
 
@@ -1074,14 +1074,14 @@ impl SimulatedCI for MockGitHubActions {
 
         let new_status = match build.status {
             BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
+                build.started_at = Some(Timestamp::now());
                 BuildStatus::InProgress
             }
             BuildStatus::InProgress => {
                 // Check if all jobs are completed
                 let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
                 if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
+                    build.completed_at = Some(Timestamp::now());
                     // Determine conclusion based on job results
                     let has_failure = build.jobs.iter().any(|job| {
                         job.conclusion
@@ -1111,13 +1111,13 @@ impl SimulatedCI for MockGitHubActions {
                                 job.needs.iter().all(|need| completed_jobs.contains(need));
                             if deps_met {
                                 job.status = BuildStatus::InProgress;
-                                job.started_at = Some(Utc::now());
+                                job.started_at = Some(Timestamp::now());
                                 break;
                             }
                         } else if job.status == BuildStatus::InProgress {
                             job.status = BuildStatus::Completed;
                             job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
+                            job.completed_at = Some(Timestamp::now());
                             break;
                         }
                     }
@@ -1128,7 +1128,7 @@ impl SimulatedCI for MockGitHubActions {
         };
 
         build.status = new_status;
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(new_status)
     }
@@ -1157,9 +1157,9 @@ impl SimulatedCI for MockGitHubActions {
 
         job.status = BuildStatus::Completed;
         job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
+        job.completed_at = Some(Timestamp::now());
 
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1180,7 +1180,7 @@ impl SimulatedCI for MockGitHubActions {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1197,7 +1197,7 @@ impl SimulatedCI for MockGitHubActions {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.logs.push(entry);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1213,7 +1213,7 @@ impl SimulatedCI for MockGitHubActions {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.security_findings.push(finding);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1351,8 +1351,8 @@ impl SimulatedCI for MockGitLabCI {
 
         build.status = BuildStatus::Cancelled;
         build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1369,19 +1369,19 @@ impl SimulatedCI for MockGitLabCI {
 
         if build.status == BuildStatus::Queued {
             build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
+            build.started_at = Some(Timestamp::now());
         }
 
         build.status = BuildStatus::Completed;
         build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         for job in &mut build.jobs {
             if job.status != BuildStatus::Completed {
                 job.status = BuildStatus::Completed;
                 job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
+                job.completed_at = Some(Timestamp::now());
             }
         }
 
@@ -1396,25 +1396,25 @@ impl SimulatedCI for MockGitLabCI {
 
         let new_status = match build.status {
             BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
+                build.started_at = Some(Timestamp::now());
                 BuildStatus::InProgress
             }
             BuildStatus::InProgress => {
                 let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
                 if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
+                    build.completed_at = Some(Timestamp::now());
                     build.conclusion = Some(BuildConclusion::Success);
                     BuildStatus::Completed
                 } else {
                     for job in &mut build.jobs {
                         if job.status == BuildStatus::Queued {
                             job.status = BuildStatus::InProgress;
-                            job.started_at = Some(Utc::now());
+                            job.started_at = Some(Timestamp::now());
                             break;
                         } else if job.status == BuildStatus::InProgress {
                             job.status = BuildStatus::Completed;
                             job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
+                            job.completed_at = Some(Timestamp::now());
                             break;
                         }
                     }
@@ -1425,7 +1425,7 @@ impl SimulatedCI for MockGitLabCI {
         };
 
         build.status = new_status;
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(new_status)
     }
@@ -1454,9 +1454,9 @@ impl SimulatedCI for MockGitLabCI {
 
         job.status = BuildStatus::Completed;
         job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
+        job.completed_at = Some(Timestamp::now());
 
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1477,7 +1477,7 @@ impl SimulatedCI for MockGitLabCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1494,7 +1494,7 @@ impl SimulatedCI for MockGitLabCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.logs.push(entry);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1510,7 +1510,7 @@ impl SimulatedCI for MockGitLabCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.security_findings.push(finding);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1643,8 +1643,8 @@ impl SimulatedCI for MockCircleCI {
 
         build.status = BuildStatus::Cancelled;
         build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1661,19 +1661,19 @@ impl SimulatedCI for MockCircleCI {
 
         if build.status == BuildStatus::Queued {
             build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
+            build.started_at = Some(Timestamp::now());
         }
 
         build.status = BuildStatus::Completed;
         build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
+        build.completed_at = Some(Timestamp::now());
+        build.updated_at = Timestamp::now();
 
         for job in &mut build.jobs {
             if job.status != BuildStatus::Completed {
                 job.status = BuildStatus::Completed;
                 job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
+                job.completed_at = Some(Timestamp::now());
             }
         }
 
@@ -1688,25 +1688,25 @@ impl SimulatedCI for MockCircleCI {
 
         let new_status = match build.status {
             BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
+                build.started_at = Some(Timestamp::now());
                 BuildStatus::InProgress
             }
             BuildStatus::InProgress => {
                 let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
                 if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
+                    build.completed_at = Some(Timestamp::now());
                     build.conclusion = Some(BuildConclusion::Success);
                     BuildStatus::Completed
                 } else {
                     for job in &mut build.jobs {
                         if job.status == BuildStatus::Queued {
                             job.status = BuildStatus::InProgress;
-                            job.started_at = Some(Utc::now());
+                            job.started_at = Some(Timestamp::now());
                             break;
                         } else if job.status == BuildStatus::InProgress {
                             job.status = BuildStatus::Completed;
                             job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
+                            job.completed_at = Some(Timestamp::now());
                             break;
                         }
                     }
@@ -1717,7 +1717,7 @@ impl SimulatedCI for MockCircleCI {
         };
 
         build.status = new_status;
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(new_status)
     }
@@ -1746,9 +1746,9 @@ impl SimulatedCI for MockCircleCI {
 
         job.status = BuildStatus::Completed;
         job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
+        job.completed_at = Some(Timestamp::now());
 
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1769,7 +1769,7 @@ impl SimulatedCI for MockCircleCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1786,7 +1786,7 @@ impl SimulatedCI for MockCircleCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.logs.push(entry);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
@@ -1802,7 +1802,7 @@ impl SimulatedCI for MockCircleCI {
             .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
 
         build.security_findings.push(finding);
-        build.updated_at = Utc::now();
+        build.updated_at = Timestamp::now();
 
         Ok(())
     }
