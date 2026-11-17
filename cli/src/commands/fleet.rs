@@ -9,10 +9,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::info;
@@ -162,8 +162,8 @@ impl std::fmt::Display for BotStatus {
 pub struct BotResult {
     pub bot_id: String,
     pub status: BotStatus,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
+    pub completed_at: Option<Timestamp>,
     pub duration_ms: Option<u64>,
     pub findings_count: usize,
     pub fixes_applied: usize,
@@ -176,8 +176,8 @@ pub struct BotResult {
 pub struct FleetResults {
     pub operation_id: String,
     pub repository_path: PathBuf,
-    pub started_at: DateTime<Utc>,
-    pub completed_at: DateTime<Utc>,
+    pub started_at: Timestamp,
+    pub completed_at: Timestamp,
     pub total_duration_ms: u64,
     pub bot_results: Vec<BotResult>,
     pub summary: FleetSummary,
@@ -209,7 +209,7 @@ pub async fn execute(args: FleetArgs, config: &Config, format: OutputFormat) -> 
 async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat) -> Result<()> {
     let outputter = Outputter::new(format);
     let start_time = std::time::Instant::now();
-    let started_at = Utc::now();
+    let started_at = Timestamp::now();
 
     // Validate repository
     let repo = validate_git_repository(&args.repo_path)?;
@@ -283,13 +283,13 @@ async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat)
         bot_pb.set_message(format!("{}: starting...", bot.name));
 
         let bot_start = std::time::Instant::now();
-        let bot_started_at = Utc::now();
+        let bot_started_at = Timestamp::now();
 
         // Simulate bot execution (in real implementation, this would call the actual bot)
         let result = run_bot(bot, &repo_path, args.auto_fix, &bot_pb).await;
 
         let bot_duration = bot_start.elapsed().as_millis() as u64;
-        let bot_completed_at = Utc::now();
+        let bot_completed_at = Timestamp::now();
 
         let bot_result = match result {
             Ok((findings, fixes)) => {
@@ -377,7 +377,7 @@ async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat)
         total_fixes: bot_results.iter().map(|r| r.fixes_applied).sum(),
     };
 
-    let completed_at = Utc::now();
+    let completed_at = Timestamp::now();
     let total_duration = start_time.elapsed().as_millis() as u64;
 
     let results = FleetResults {

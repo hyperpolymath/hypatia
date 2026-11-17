@@ -8,9 +8,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -185,7 +185,7 @@ pub struct HookStatus {
     /// Installed version (if managed)
     pub version: Option<String>,
     /// Last modified timestamp
-    pub modified_at: Option<DateTime<Utc>>,
+    pub modified_at: Option<Timestamp>,
     /// File path
     pub path: PathBuf,
 }
@@ -764,7 +764,7 @@ fn get_hook_statuses(repo_path: &Path) -> Result<Vec<HookStatus>> {
             std::fs::metadata(&hook_path)
                 .ok()
                 .and_then(|m| m.modified().ok())
-                .map(DateTime::<Utc>::from)
+                .and_then(|t| Timestamp::try_from(t).ok())
         } else {
             None
         };

@@ -12,7 +12,7 @@ use crate::forge::{
     WorkflowState,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::Deserialize;
 
@@ -1248,8 +1248,8 @@ struct GitLabMergeRequestFull {
     target_branch: String,
     web_url: String,
     merge_status: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1267,8 +1267,8 @@ struct GitLabIssue {
     author: GitLabUser,
     labels: Vec<String>,
     web_url: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1277,8 +1277,8 @@ struct GitLabNote {
     body: String,
     author: GitLabUser,
     system: bool,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1289,8 +1289,8 @@ struct GitLabPipeline {
     ref_name: String,
     sha: String,
     web_url: String,
-    created_at: DateTime<Utc>,
-    updated_at: Option<DateTime<Utc>>,
+    created_at: Timestamp,
+    updated_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1300,8 +1300,8 @@ struct GitLabCommitStatus {
     status: String,
     sha: Option<String>,
     target_url: Option<String>,
-    created_at: Option<DateTime<Utc>>,
-    finished_at: Option<DateTime<Utc>>,
+    created_at: Option<Timestamp>,
+    finished_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]
