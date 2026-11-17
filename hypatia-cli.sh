@@ -151,6 +151,9 @@ run_escript() {
         sig=$(( status - 128 ))
         case "$(kill -l "${sig}" 2>/dev/null)" in
             SEGV|BUS|ABRT|ILL) report_vm_crash "${status}" ;;
+            # TERM, INT, HUP, KILL and the rest end a run on purpose (CI
+            # cancellation, timeout): not a crash, so no report.
+            *) ;;
         esac
         trap - "${sig}" 2>/dev/null || true
         kill -"${sig}" $$
