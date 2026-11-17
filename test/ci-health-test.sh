@@ -65,8 +65,8 @@ for fixture in "$ROOT"/test/fixtures/ci-health/allowlist/*.json; do
       and .verified_allowed == $f[0].expect.verified_allowed' <<<"$after" >/dev/null ||
     { echo "FAIL [$name]: result is not current UNION required with flags kept: $after" >&2; exit 1; }
 
-  if [ "$added" -eq 0 ]; then
-    [ ! -s "$STATE_DIR/puts.log" ] || { echo "FAIL [$name]: wrote although nothing was missing" >&2; exit 1; }
+  if [[ "$added" -eq 0 ]]; then
+    [[ ! -s "$STATE_DIR/puts.log" ]] || { echo "FAIL [$name]: wrote although nothing was missing" >&2; exit 1; }
     printf '%s\n' "$out" | grep -q '^SKIP ' || { echo "FAIL [$name]: expected SKIP, got: $out" >&2; exit 1; }
   else
     printf '%s\n' "$out" | grep -q "^FIXED .* added $added, kept all $(jq '.expect.kept' "$fixture")" ||
@@ -76,7 +76,7 @@ for fixture in "$ROOT"/test/fixtures/ci-health/allowlist/*.json; do
   # Idempotent: a second run finds nothing missing and writes nothing.
   : > "$STATE_DIR/puts.log"
   printf '%s\n' "$(remediate)" | grep -q '^SKIP ' || { echo "FAIL [$name]: second run was not a no-op" >&2; exit 1; }
-  [ ! -s "$STATE_DIR/puts.log" ] || { echo "FAIL [$name]: second run wrote" >&2; exit 1; }
+  [[ ! -s "$STATE_DIR/puts.log" ]] || { echo "FAIL [$name]: second run wrote" >&2; exit 1; }
 
   # Converges with detect.sh: B-ALLOWLIST no longer fires.
   if PATH="$MOCK_BIN:$PATH" OWNER=test-owner MOCK_STATE="$STATE_DIR/state.json" MOCK_SCENARIO=converge \
@@ -91,7 +91,7 @@ for fixture in "$ROOT"/test/fixtures/ci-health/allowlist/*.json; do
   grep -A1 -xF -- "$want" "$model" | tail -n1 | grep -qF -- "$eqn" ||
     { echo "FAIL [$name]: the equation under '$want' does not state $eqn" >&2; exit 1; }
 done
-[ "$(grep -c '^-- corpus: ' "$model")" -eq "$(find "$ROOT/test/fixtures/ci-health/allowlist" -name '*.json' | wc -l)" ] ||
+[[ "$(grep -c '^-- corpus: ' "$model")" -eq "$(find "$ROOT/test/fixtures/ci-health/allowlist" -name '*.json' | wc -l)" ]] ||
   { echo "FAIL: the model states a different number of corpus rows than the fixtures" >&2; exit 1; }
 
 # Fail closed: an unreadable allow-list is never overwritten.
@@ -100,7 +100,7 @@ jq -c '.current' "$ROOT/test/fixtures/ci-health/allowlist/extras.json" > "$STATE
 if remediate remediate-unreadable >/dev/null 2>&1; then
   echo "FAIL: remediation proceeded without reading the current allow-list" >&2; exit 1
 fi
-[ ! -s "$STATE_DIR/puts.log" ] || { echo "FAIL: wrote an allow-list it could not read" >&2; exit 1; }
+[[ ! -s "$STATE_DIR/puts.log" ]] || { echo "FAIL: wrote an allow-list it could not read" >&2; exit 1; }
 
 # A read-back that differs from current UNION required is a failure.
 jq -c '.current' "$ROOT/test/fixtures/ci-health/allowlist/empty.json" > "$STATE_DIR/state.json"

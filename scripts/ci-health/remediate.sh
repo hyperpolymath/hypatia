@@ -49,8 +49,8 @@ case "$CLASS" in
       + (if has("verified_allowed") then {verified_allowed} else {} end)')
     added=$(printf '%s' "$cur" | jq --argjson req "$req" '($req - (.patterns_allowed // [])) | unique | length')
     kept=$(printf '%s' "$cur" | jq '(.patterns_allowed // []) | unique | length')
-    if [ "$added" -eq 0 ]; then echo "SKIP $R/B-ALLOWLIST already covers the required set ($kept patterns)"; exit 0; fi
-    if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would add $added pattern(s), keeping all $kept current"; exit 0; fi
+    if [[ "$added" -eq 0 ]]; then echo "SKIP $R/B-ALLOWLIST already covers the required set ($kept patterns)"; exit 0; fi
+    if [[ "$DRY" = "true" ]]; then echo "DRYRUN $R/B-ALLOWLIST would add $added pattern(s), keeping all $kept current"; exit 0; fi
     printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
     expected=$(printf '%s' "$body" | jq -cS '.patterns_allowed |= sort')
     actual=$(gh api "repos/$O/$R/actions/permissions/selected-actions" | jq -cS --argjson b "$body" '
