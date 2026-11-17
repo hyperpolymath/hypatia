@@ -107,7 +107,7 @@ checks out the current one (#1004).
 |===
 | Item | Owner | Evidence / next step
 
-| Rotate `HYPATIA_DISPATCH_PAT`
+| Replace `HYPATIA_DISPATCH_PAT` with the Hypatia GitHub App
 | *Repository owner*
 | Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
   `HTTP 401: Bad credentials` at `repos to scan: 0` (e.g. runs 40266651942
@@ -118,8 +118,8 @@ checks out the current one (#1004).
   cannot run from CI. After replacing either secret, run
   `credential-read-check.yml` to authenticate the scanner and dispatch
   credentials separately. A remediation-sweep `dry_run: true` now reads
-  `HYPATIA_SCAN_PAT` and skips dispatch; it cannot validate a rotated
-  `HYPATIA_DISPATCH_PAT`. The credential read check proves only the reads
+  `HYPATIA_SCAN_PAT` and skips dispatch; it cannot validate the
+  App credentials. The credential read check proves only the reads
   named in its summary. Validate the intended write/dispatch operation and
   its egress policy separately before claiming rotation complete. See
   xref:credential-roles.adoc[credential roles and validation limits].
@@ -188,7 +188,7 @@ WF027 and WF028 as well.
 
 == When to update this memo
 
-* When `HYPATIA_DISPATCH_PAT` is rotated, or the sweep's first dry run
+* When the App credentials are installed or rotated, or the sweep's first dry run
   reports its results.
 * When a D transfer batch lands: add its rows to
   `Hypatia.Rules.MovedRepositories`, and record the batch here.

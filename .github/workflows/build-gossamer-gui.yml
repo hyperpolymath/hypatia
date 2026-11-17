@@ -112,18 +112,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7.1.0
-        with:
-          node-version: '22'
+      # Estate policy: no Node.js/npm; JS runs Bun > Deno > pnpm.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Run loader smoke tests
-        # Shell-glob picks up every *.test.mjs in test/gossamer/, so
+        # `bun test <dir>` picks up every *.test.mjs in test/gossamer/, so
         # adding a new harness (e.g. the panel-surface
-        # `browser_smoke.test.mjs` added in #220) doesn't need a second
-        # workflow edit. Node 22's `--test` does not yet support a
-        # directory argument directly.
-        run: node --test test/gossamer/*.test.mjs
+        # `browser_smoke.test.mjs` added in #220) needs no second workflow
+        # edit. The files import `node:test`, which Bun implements.
+        run: bun test test/gossamer/
 
   build-ephapax:
     name: Build Ephapax toolchain (pinned)
