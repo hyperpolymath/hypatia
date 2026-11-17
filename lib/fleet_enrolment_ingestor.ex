@@ -14,10 +14,15 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   section 6). `scripts/fix-script-registry.json` in gitbot-fleet maps this
   category to that script.
 
-  The finding is routed at review confidence (0.88, the 0.85-0.94 tier): the
-  fixer edits workflows, so its change always reaches the repository as a
-  pull request for a person to review, never as a direct commit. The fixer
-  itself refuses to rewrite an existing manifest and never edits a lockfile.
+  The finding is routed at review confidence (0.88, the 0.85-0.94 tier),
+  because the fixer edits workflows and must never be applied unreviewed. In
+  gitbot-fleet's `dispatch-runner.sh` that tier does not run the fixer: it
+  records the finding under `shared-context/findings/pending/` with
+  `needs_pr: true`, and `process-review-findings.sh` turns pending findings
+  into one GitHub issue per repository. As of 2026-11-17 nothing in the fleet
+  turns a pending finding into a pull request, so a person (or a future
+  pull-request step) runs the fixer. The fixer itself refuses to rewrite an
+  existing manifest and never edits a lockfile.
 
   Not flagged:
 
