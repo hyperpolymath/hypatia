@@ -632,8 +632,9 @@ Mathesis bridge: Mathesis bridge endpoints are theory provers only
 (Agda, Rocq, Lean) and this is an Idris2 engineering proof.
 |Ledger row `allowlist-remediation`: proven, derived by Verify Proofs
 (`+idris2 --check+`, Idris 2 0.7.0, `+%default total+`, no
-`+believe_me+`, `+assert_total+` or `+postulate+`). Receipt run: pending
-its first run on main.
+`+believe_me+`, `+assert_total+` or `+postulate+`). Receipt: Verify
+Proofs run 44154561700, idris2 --check job 134291680073, at commit
+a5acb963f2666e9af0127640fa6de2c64520442e (Idris2 v0.7.0).
 
 |`+scripts/ci-health/remediate.sh+` and `+detect.sh+` against the model
 |Bash, via ExUnit |On each corpus allow-list, through a mock `+gh+` that
