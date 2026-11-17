@@ -6,9 +6,22 @@ set -euo pipefail
 shift
 endpoint="${1:-}"
 
+# Allow-list state: MOCK_STATE is a JSON file holding the repo's current
+# selected-actions object. A PUT replaces it (so the read-back is real), unless
+# MOCK_SCENARIO=remediate-mismatch, which drops the write to model a concurrent
+# change. MOCK_SCENARIO=remediate-unreadable makes the GET fail.
+jq_filter=""
+args=("$@")
+for i in "${!args[@]}"; do
+  [ "${args[$i]}" = "--jq" ] && jq_filter="${args[$((i + 1))]}"
+done
+
 if printf ' %s ' "$*" | grep -q ' -X PUT '; then
-  # Consume the body just like gh api --input - and accept the mock mutation.
-  read -r _body || true
+  body=$(cat)
+  if [ -n "${MOCK_STATE:-}" ] && [ "${MOCK_SCENARIO:-}" != "remediate-mismatch" ]; then
+    printf '%s\n' "$body" > "$MOCK_STATE"
+  fi
+  [ -n "${MOCK_PUT_LOG:-}" ] && printf '%s\n' "$body" >> "$MOCK_PUT_LOG"
   exit 0
 fi
 
@@ -30,14 +43,13 @@ case "$endpoint" in
     fi
     ;;
   repos/test-owner/test-repo/actions/permissions)
-    printf 'all\n'
+    if [ -n "${MOCK_STATE:-}" ]; then printf 'selected\n'; else printf 'all\n'; fi
     ;;
   repos/test-owner/test-repo/actions/permissions/selected-actions)
-    if [ "${MOCK_SCENARIO:-}" = "remediate-ok" ]; then
-      jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + . | sort' "$MOCK_SUPERSET_FILE"
-    else
-      printf '[]\n'
-    fi
+    [ "${MOCK_SCENARIO:-}" = "remediate-unreadable" ] && { echo "HTTP 403" >&2; exit 1; }
+    state='{"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":[]}'
+    [ -n "${MOCK_STATE:-}" ] && state=$(cat "$MOCK_STATE")
+    if [ -n "$jq_filter" ]; then printf '%s' "$state" | jq -r "$jq_filter"; else printf '%s\n' "$state"; fi
     ;;
   'repos/test-owner/test-repo/actions/runs?per_page=30')
     case "${MOCK_SCENARIO:-lockfile}" in
