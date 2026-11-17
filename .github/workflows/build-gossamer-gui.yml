@@ -115,6 +115,8 @@ jobs:
       # Estate policy: no Node.js/npm; JS runs Bun > Deno > pnpm.
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4  # the release the gossamer tests were run against
 
       - name: Run loader smoke tests
         # `bun test <dir>` picks up every *.test.mjs in test/gossamer/, so

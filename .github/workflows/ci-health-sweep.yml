@@ -66,6 +66,8 @@ jobs:
           app-id: ${{ secrets.HYPATIA_APP_ID }}
           private-key: ${{ secrets.HYPATIA_APP_PRIVATE_KEY }}
           owner: ${{ inputs.owner || 'hyperpolymath' }}
+          permission-actions: read           # detect.sh lists workflow runs and jobs
+          permission-checks: read            # detect.sh reads check-run annotations
           permission-administration: write   # allow-list PUT
           permission-contents: write         # fix branches
           permission-pull-requests: write    # PR create

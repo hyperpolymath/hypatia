@@ -94,7 +94,7 @@ from the conclusion alone.
 
 * Needs the GitHub App secrets `HYPATIA_APP_ID` and `HYPATIA_APP_PRIVATE_KEY`.
   The workflow mints a short-lived installation token with Administration,
-  Contents, Pull requests, Issues and Workflows write (allow-list PUT, PR
+  Contents, Pull requests, Issues and Workflows write, plus Actions and Checks read (allow-list PUT, PR
   create, issue upsert). See `docs/operations/credential-roles.adoc`.
 * Scheduled runs remediate **live**; manual `workflow_dispatch` defaults to
   **dry-run**. To pause auto-remediation, set the schedule run to dry-run or
