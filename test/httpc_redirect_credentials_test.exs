@@ -29,7 +29,8 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
     :ok
   end
 
-  # :other_port keeps the host (127.0.0.1) and changes the port; :other_host
+  # :other_port keeps the host (127.0.0.1) and changes the port, so a runtime
+  # that compared hosts only would fail it. :other_host keeps the port and
   # moves to 127.0.0.2, so a runtime that compared ports only would fail it.
   for where <- [:other_port, :other_host],
       status <- [301, 302, 303, 307, 308],
@@ -82,10 +83,14 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
   end
 
   defp follow(method, status, where, cred \\ :header) do
-    back_ip = if where == :other_host, do: {127, 0, 0, 2}, else: {127, 0, 0, 1}
     {:ok, front} = listen({127, 0, 0, 1})
-    {:ok, back} = listen(back_ip)
     {:ok, front_port} = :inet.port(front)
+
+    {:ok, back} =
+      if where == :other_host,
+        do: listen({127, 0, 0, 2}, front_port),
+        else: listen({127, 0, 0, 1})
+
     {:ok, back_port} = :inet.port(back)
     target = if where == :same_origin, do: front, else: back
     target_port = if where == :same_origin, do: front_port, else: back_port
@@ -139,8 +144,8 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
     {line, auth}
   end
 
-  defp listen(ip) do
-    :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: ip])
+  defp listen(ip, port \\ 0) do
+    :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true, ip: ip])
   end
 
   # Reads up to the end of the headers, then any Content-Length body.

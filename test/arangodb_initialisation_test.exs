@@ -124,6 +124,25 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
     end)
   end
 
+  # A gateway or proxy in front of ArangoDB can answer with a JSON 4xx that
+  # has no `"error": true`. Only a 2xx, or an existing-resource 4xx (1207,
+  # 1925), counts as success.
+  test "schema 4xx without the error flag enters degraded mode" do
+    serve(fn
+      "GET", _ -> {200, %{"server" => "arango"}}
+      "POST", _ -> {403, %{"message" => "forbidden"}}
+    end)
+
+    log =
+      capture_log(fn ->
+        assert {:ok, state} = ArangoDB.init([])
+        refute state.connected
+        assert state.sync_timer == nil
+      end)
+
+    refute log =~ "schema ensured"
+  end
+
   defp serve(respond) do
     pid = start_supervised!({Bandit, plug: {Stub, respond}, ip: {127, 0, 0, 1}, port: 0})
     {:ok, {_, port}} = ThousandIsland.listener_info(pid)

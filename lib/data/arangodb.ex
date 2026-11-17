@@ -361,18 +361,26 @@ defmodule Hypatia.Data.ArangoDB do
 
     # Create database if it doesn't exist
     database =
-      http_post("#{state.base_url}/_api/database", state.auth_header, %{"name" => state.database})
+      http_post_status("#{state.base_url}/_api/database", state.auth_header, %{
+        "name" => state.database
+      })
 
     # Create document collections
     documents =
       Enum.map(@document_collections, fn name ->
-        http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 2})
+        http_post_status("#{db_url}/_api/collection", state.auth_header, %{
+          "name" => name,
+          "type" => 2
+        })
       end)
 
     # Create edge collections
     edges =
       Enum.map(@edge_collections, fn name ->
-        http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 3})
+        http_post_status("#{db_url}/_api/collection", state.auth_header, %{
+          "name" => name,
+          "type" => 3
+        })
       end)
 
     # Create indices for common queries
@@ -389,7 +397,7 @@ defmodule Hypatia.Data.ArangoDB do
 
     # Create named graph
     graph =
-      http_post("#{db_url}/_api/gharial", state.auth_header, %{
+      http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
         "name" => "hypatia_graph",
         "edgeDefinitions" => [
           %{
@@ -427,18 +435,22 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
-  # Repeated initialisation may encounter resources that already exist.
-  defp schema_result_ok?({:ok, %{"error" => true, "errorNum" => number}})
-       when number in [1207, 1925], do: true
+  # A schema step succeeds on a 2xx, or on a 4xx that says the resource
+  # already exists (1207 duplicate name, 1925 duplicate graph), which happens
+  # on every initialisation after the first. Any other status fails, even with
+  # a JSON body: a gateway's `{"message": "forbidden"}` is not a success.
+  defp schema_result_ok?({:ok, status, _}) when status in 200..299, do: true
 
-  defp schema_result_ok?({:ok, %{"error" => true}}), do: false
-  defp schema_result_ok?({:ok, _}), do: true
+  defp schema_result_ok?({:ok, status, %{"errorNum" => number}})
+       when status in 400..499 and number in [1207, 1925],
+       do: true
+
   defp schema_result_ok?(_), do: false
 
   defp create_index(state, collection, fields) do
     db_url = "#{state.base_url}/_db/#{state.database}"
 
-    http_post("#{db_url}/_api/index?collection=#{collection}", state.auth_header, %{
+    http_post_status("#{db_url}/_api/index?collection=#{collection}", state.auth_header, %{
       "type" => "persistent",
       "fields" => fields
     })
@@ -630,7 +642,18 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
+  # Decoded body on a 2xx or 4xx (ArangoDB reports its errors as JSON 4xx);
+  # `{:error, {status, body}}` on any other status, a 3xx included.
   defp http_post(url, auth_header, body) do
+    case http_post_status(url, auth_header, body) do
+      {:ok, _status, decoded} -> {:ok, decoded}
+      error -> error
+    end
+  end
+
+  # As http_post/3, but keeps the status, so a caller can tell a 2xx from a
+  # 4xx whose body does not use ArangoDB's error shape.
+  defp http_post_status(url, auth_header, body) do
     :inets.start()
     :ssl.start()
 
@@ -647,11 +670,10 @@ defmodule Hypatia.Data.ArangoDB do
            [{:timeout, 10_000}, {:autoredirect, false}],
            []
          ) do
-      {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->
-        Jason.decode(to_string(resp_body))
-
-      {:ok, {{_, code, _}, _, resp_body}} when code in 400..499 ->
-        Jason.decode(to_string(resp_body))
+      {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 or code in 400..499 ->
+        with {:ok, decoded} <- Jason.decode(to_string(resp_body)) do
+          {:ok, code, decoded}
+        end
 
       {:ok, {{_, status, _}, _, resp_body}} ->
         {:error, {status, to_string(resp_body)}}
