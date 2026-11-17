@@ -123,6 +123,25 @@ defmodule Hypatia.FleetEnrolmentIngestorTest do
     assert stats == %{total_repos: 2, total_findings: 1}
   end
 
+  test "the finding names the path that was inspected", %{dir: dir} do
+    write(dir, ".github/workflows/hypatia-scan.yml", @caller)
+    assert {:ok, [p]} = FE.local_scan(dir, "some-repo")
+    assert p["repo_paths"] == %{"some-repo" => dir}
+  end
+
+  test "a manifest that cannot be inspected is skipped, not reported missing", %{dir: dir} do
+    write(dir, ".github/workflows/hypatia-scan.yml", @caller)
+    # A self-referencing link: lstat of a path under it fails with :eloop,
+    # an inspection error that holds even for root (a chmod would not).
+    File.ln_s!(".gitbot-fleet", Path.join(dir, ".gitbot-fleet"))
+    assert {:unreadable, :eloop} = FE.manifest_state(dir)
+    assert {:ok, []} = FE.local_scan(dir, "some-repo")
+  end
+
+  test "a missing manifest directory is absent, not unreadable", %{dir: dir} do
+    assert FE.manifest_state(dir) == :absent
+  end
+
   test "the category has a fix recipe" do
     assert Hypatia.RecipeGenerator.fix_script_for(FE.category()) == "fix-fleet-enrolment.sh"
   end

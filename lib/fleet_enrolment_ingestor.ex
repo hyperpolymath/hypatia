@@ -15,19 +15,16 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   category to that script.
 
   The finding is routed at review confidence (0.88, the 0.85-0.94 tier),
-  because the fixer edits workflows and must never be applied unreviewed. In
-  gitbot-fleet's `dispatch-runner.sh` that tier does not run the fixer: it
-  records the finding under `shared-context/findings/pending/` with
-  `needs_pr: true`, and `process-review-findings.sh` turns pending findings
-  into one GitHub issue per repository. As of 2026-11-17 nothing in the fleet
-  turns a pending finding into a pull request, so a person (or a future
-  pull-request step) runs the fixer. The fixer itself refuses to rewrite an
-  existing manifest and never edits a lockfile.
-
-  Also as of 2026-11-17, that whole path is quarantined: `dispatch-runner.sh`
-  and live issue publication exit 78 until directive enforcement is qualified
-  (gitbot-fleet `docs/AUTOMATION-QUARANTINE.adoc`). This check only emits the
-  finding; it authorises no write.
+  because the fixer edits workflows and must never be applied unreviewed.
+  `FleetDispatcher` sends that tier to rhodibot: it always appends the entry
+  to the dispatch manifest (`pending.jsonl`), and when `HYPATIA_RHODIBOT_URL`
+  or `HYPATIA_FLEET_URL` is set it also posts rhodibot's `suggestFix`
+  mutation, which may open a pull request. The manifest's only reader,
+  gitbot-fleet's `dispatch-runner.sh`, would queue the finding under
+  `shared-context/findings/pending/` without running the fixer, but as of
+  2026-11-17 it is quarantined and exits 78, as is live issue publication
+  (gitbot-fleet `docs/AUTOMATION-QUARANTINE.adoc`). The fixer itself refuses
+  to rewrite an existing manifest and never edits a lockfile.
 
   The fixer puts the producing job only in `fork-governance.yml`. A repository
   that calls the grid reusable directly is still flagged, but as not
@@ -41,6 +38,8 @@ defmodule Hypatia.FleetEnrolmentIngestor do
     * the `007` repository, which estate policy puts out of scope for every
       scan (standards CLAUDE.md, licence category 2).
   """
+
+  require Logger
 
   @category "MissingFleetEnrolment"
   @confidence 0.88
@@ -60,9 +59,9 @@ defmodule Hypatia.FleetEnrolmentIngestor do
     cond do
       repo_name in @out_of_scope -> {:ok, []}
       not File.dir?(repo_path) -> {:ok, []}
-      enrolled?(repo_path) -> {:ok, []}
+      manifest_state(repo_path) != :absent -> {:ok, []}
       not grid_lane?(repo_path) -> {:ok, []}
-      true -> {:ok, [pattern(repo_name, governed?(repo_path))]}
+      true -> {:ok, [pattern(repo_name, repo_path, governed?(repo_path))]}
     end
   end
 
@@ -84,12 +83,31 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   True when the manifest is a regular file. A directory, a dangling path or a
   symlink to elsewhere is not a manifest the grid can read.
   """
-  def enrolled?(repo_path) do
+  def enrolled?(repo_path), do: manifest_state(repo_path) == :enrolled
+
+  @doc """
+  `:enrolled` for a regular-file manifest; `:absent` when nothing is there, or
+  when what is there is a directory or a symlink; `{:unreadable, reason}` when
+  the path cannot be inspected (a permission or I/O error). An unreadable
+  manifest is not reported as missing: the check skips the repository and
+  logs why.
+  """
+  def manifest_state(repo_path) do
     path = Path.join(repo_path, @manifest)
 
     case File.lstat(path) do
-      {:ok, %File.Stat{type: :regular}} -> true
-      _ -> false
+      {:ok, %File.Stat{type: :regular}} ->
+        :enrolled
+
+      {:ok, _not_regular} ->
+        :absent
+
+      {:error, reason} when reason in [:enoent, :enotdir] ->
+        :absent
+
+      {:error, reason} ->
+        Logger.warning("fleet enrolment: cannot inspect #{path}: #{inspect(reason)}; skipped")
+        {:unreadable, reason}
     end
   end
 
@@ -132,8 +150,9 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   # and an enrolment without a producer would turn every row orange.
   defp governed?(repo_path), do: File.regular?(Path.join(repo_path, @governance_workflow))
 
-  defp pattern(repo_name, governed?) do
+  defp pattern(repo_name, repo_path, governed?) do
     %{
+      "repo_paths" => %{repo_name => repo_path},
       "id" => "FE-001-#{fingerprint(repo_name)}",
       "category" => @category,
       "severity" => "Low",
