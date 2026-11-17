@@ -81,7 +81,7 @@ expect_msg "a receipt with no file is refused" 2 "receipt needs at least one fil
 mutate blank-name '.names = [" "]' abi-types
 expect_msg "a blank witness name is refused" 1 "names and axioms hold non-blank strings" env PROOF_LEDGER="$work/blank-name.jsonl" bash "$script" check
 
-mutate blank-leg-axiom '.legs = [{"prover": "rocq", "route": "re-proved", "status": "proven-with-postulates", "correspondence": "reconciled", "axioms": [""]}]' logtalk-migration
+mutate blank-leg-axiom '.legs = [{"prover": "rocq", "route": "re-proved", "status": "proven-with-postulates", "correspondence": "reconciled", "axioms": [""]}]' pagerank-convergence
 expect_msg "a blank axiom on a proof leg is refused" 1 "a leg names each axiom with a non-blank string" env PROOF_LEDGER="$work/blank-leg-axiom.jsonl" bash "$script" check
 
 # A file inside the checkout that git does not track: a runner could create it.
