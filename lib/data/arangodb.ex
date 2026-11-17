@@ -359,11 +359,19 @@ defmodule Hypatia.Data.ArangoDB do
   defp ensure_schema(state) do
     db_url = "#{state.base_url}/_db/#{state.database}"
 
-    # Create database if it doesn't exist
+    # Create the database only when it is absent. Creating one needs
+    # Administrate on `_system`; a least-privilege user that administers only
+    # a pre-provisioned target database gets a 403 there, so probe first.
     database =
-      http_post_status("#{state.base_url}/_api/database", state.auth_header, %{
-        "name" => state.database
-      })
+      case http_get("#{db_url}/_api/database/current", state.auth_header) do
+        {:ok, %{} = current} ->
+          {:ok, 200, current}
+
+        _absent_or_unreadable ->
+          http_post_status("#{state.base_url}/_api/database", state.auth_header, %{
+            "name" => state.database
+          })
+      end
 
     # Create document collections
     documents =

@@ -10,7 +10,15 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
 
     def call(conn, respond) do
       {:ok, _body, conn} = Plug.Conn.read_body(conn)
-      {status, body} = respond.(conn.method, conn.request_path)
+      # A route the test does not describe answers 404, as ArangoDB does for
+      # an unknown database or path, so the probe of the target database
+      # falls through to creating it.
+      {status, body} =
+        try do
+          respond.(conn.method, conn.request_path)
+        rescue
+          FunctionClauseError -> {404, %{"error" => true, "errorNum" => 1228}}
+        end
 
       conn
       |> Plug.Conn.put_resp_header("location", "/redirect-target")
@@ -141,6 +149,66 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
       end)
 
     refute log =~ "schema ensured"
+  end
+
+  # A user with Administrate on a pre-provisioned target database but not on
+  # `_system` cannot create databases. The client must see that the target
+  # exists and not ask `_system` to create it.
+  test "existing target database is not recreated through _system" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", path ->
+        if String.ends_with?(path, "/_api/database/current"),
+          do: {200, %{"error" => false, "result" => %{"name" => "hypatia"}}},
+          else: {404, %{"error" => true}}
+
+      "POST", "/_api/database" ->
+        send(parent, :created_database)
+        {403, %{"error" => true, "errorNum" => 11}}
+
+      "POST", _ ->
+        {201, %{"error" => false}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      assert state.connected
+      Process.cancel_timer(state.sync_timer)
+    end)
+
+    refute_received :created_database
+  end
+
+  # Without a readable target database the client still creates it, and a
+  # refused creation leaves it degraded.
+  test "absent target database is created, and a refusal degrades" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", _ ->
+        {404, %{"error" => true, "errorNum" => 1228}}
+
+      "POST", "/_api/database" ->
+        send(parent, :created_database)
+        {403, %{"error" => true, "errorNum" => 11}}
+
+      "POST", _ ->
+        {201, %{"error" => false}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      refute state.connected
+    end)
+
+    assert_received :created_database
   end
 
   defp serve(respond) do
