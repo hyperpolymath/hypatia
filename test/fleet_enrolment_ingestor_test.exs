@@ -99,6 +99,38 @@ defmodule Hypatia.FleetEnrolmentIngestorTest do
     assert {:ok, [_]} = FE.local_scan(dir, "some-repo")
   end
 
+  test "a reusable call written inside a run script is not a grid lane", %{dir: dir} do
+    write(dir, ".github/workflows/ci.yml", """
+    jobs:
+      docs:
+        runs-on: ubuntu-latest
+        steps:
+          - run: |
+              cat > example.yml <<'YAML'
+              jobs:
+                hypatia:
+                  uses: o/standards/.github/workflows/hypatia-scan-reusable.yml@abc
+              YAML
+    """)
+
+    assert {:ok, []} = FE.local_scan(dir, "some-repo")
+  end
+
+  test "a hypatia job beside a separate grid caller is not auto-fixable", %{dir: dir} do
+    write(dir, ".github/workflows/fork-governance.yml", """
+    jobs:
+      hypatia:
+        runs-on: ubuntu-latest
+        steps:
+          - run: echo not the reusable
+      grid:
+        uses: o/standards/.github/workflows/hypatia-scan-reusable.yml@abc
+    """)
+
+    assert {:ok, [p]} = FE.local_scan(dir, "some-repo")
+    assert p["auto_fixable"] == false
+  end
+
   test "a commented-out call is not a grid lane", %{dir: dir} do
     write(
       dir,

@@ -131,7 +131,7 @@ Elixir pipeline:
         |
 dispatch-runner.sh (gitbot-fleet; quarantined since 2026-09-26, exits 78: docs/AUTOMATION-QUARANTINE.adoc there)
   ├── auto_execute (>=0.95 confidence): robot-repo-automaton
-  ├── review (0.85-0.94): rhodibot — always appended to pending.jsonl (this reader is quarantined; it would queue the finding under shared-context/findings/pending/, and process-review-findings.sh's live publication is quarantined too); with HYPATIA_RHODIBOT_URL or HYPATIA_FLEET_URL set, Hypatia also posts rhodibot suggestFix, which may open a PR
+  ├── review (0.85-0.94): rhodibot — an append to pending.jsonl is attempted (a failed write leaves no record; this reader is quarantined; it would queue the finding under shared-context/findings/pending/, and process-review-findings.sh's live publication is quarantined too); with HYPATIA_RHODIBOT_URL or HYPATIA_FLEET_URL set, Hypatia also posts rhodibot suggestFix, which may open a PR, whether or not the append succeeded
   └── report_only (<0.85): sustainabot advisory
         |
 OutcomeTracker.record_outcome()         -- Feedback loop

@@ -16,7 +16,7 @@ defmodule Hypatia.FleetEnrolmentIngestor do
 
   The finding is routed at review confidence (0.88, the 0.85-0.94 tier),
   because the fixer edits workflows and must never be applied unreviewed.
-  `FleetDispatcher` sends that tier to rhodibot: it always appends the entry
+  `FleetDispatcher` sends that tier to rhodibot: it attempts to append the entry
   to the dispatch manifest (`pending.jsonl`), and when `HYPATIA_RHODIBOT_URL`
   or `HYPATIA_FLEET_URL` is set it also posts rhodibot's `suggestFix`
   mutation, which may open a pull request. The manifest's only reader,
@@ -43,6 +43,8 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   """
 
   require Logger
+
+  alias Hypatia.Workflow
 
   @category "MissingFleetEnrolment"
   @confidence 0.88
@@ -116,53 +118,55 @@ defmodule Hypatia.FleetEnrolmentIngestor do
 
   @doc """
   True when the repository's pull requests render the verdict grid: some
-  workflow calls the Hypatia grid reusable. A fork governance workflow alone
-  is not enough; one that carries only the DEED and K9 lanes renders no grid.
+  workflow has a job whose `uses:` calls the Hypatia grid reusable. A fork
+  governance workflow alone is not enough; one that carries only the DEED and
+  K9 lanes renders no grid.
+
+  Workflows are read through `Hypatia.Workflow` (#971), so only a job-level
+  `uses:` value counts: a comment, a step, or YAML written inside a `run:`
+  script never does. A workflow the reader refuses is logged and counts as no
+  lane.
   """
   def grid_lane?(repo_path) do
     repo_path
     |> Path.join(".github/workflows/*.{yml,yaml}")
     |> Path.wildcard()
-    |> Enum.any?(&calls_grid_reusable?/1)
+    |> Enum.any?(fn path -> Enum.any?(jobs(path), &calls_grid_reusable?/1) end)
   end
 
-  defp calls_grid_reusable?(workflow) do
-    case File.read(workflow) do
-      {:ok, text} ->
-        text
-        |> String.split("\n")
-        |> Enum.any?(&uses_grid_reusable?/1)
+  defp jobs(path) do
+    case File.read(path) do
+      {:ok, bytes} ->
+        case Workflow.parse(bytes, path) do
+          {:ok, %Workflow{jobs: jobs}} ->
+            jobs
+
+          {:ok, nil} ->
+            []
+
+          {:error, error} ->
+            Logger.warning("fleet enrolment: cannot read #{path}: #{inspect(error)}; skipped")
+            []
+        end
 
       _ ->
-        false
+        []
     end
   end
 
-  # Only the value of a `uses:` key counts, never a comment: `uses: x@v4 #
-  # hypatia-scan-reusable.yml` and `# uses: ...` are not grid lanes.
-  defp uses_grid_reusable?(line) do
-    case Regex.run(~r/^\s*(?:-\s+)?uses:\s*["']?([^\s"'#]+)/, line) do
-      [_, value] -> value |> String.split("@") |> hd() |> String.ends_with?("/" <> @grid_reusable)
-      _ -> false
-    end
-  end
+  defp calls_grid_reusable?(%Workflow.Job{uses: uses}) when is_binary(uses),
+    do: uses |> String.split("@") |> hd() |> String.ends_with?("/" <> @grid_reusable)
 
-  # The fixer inserts the producing job into fork-governance.yml only; a repo
-  # that calls the grid reusable directly must adopt fork governance first,
-  # and an enrolment without a producer would turn every row orange.
+  defp calls_grid_reusable?(_), do: false
+
+  # The fixer inserts the producing job before fork-governance.yml's `hypatia`
+  # job, so only a `hypatia` job that itself calls the grid reusable is the
+  # shape it can wire; any other grid caller is flagged as not auto-fixable.
   defp governed?(repo_path) do
-    workflow = Path.join(repo_path, @governance_workflow)
-
-    case File.read(workflow) do
-      {:ok, text} ->
-        lines = String.split(text, "\n")
-
-        Enum.any?(lines, &(&1 =~ ~r/^  hypatia:\s*$/)) and
-          Enum.any?(lines, &uses_grid_reusable?/1)
-
-      _ ->
-        false
-    end
+    repo_path
+    |> Path.join(@governance_workflow)
+    |> jobs()
+    |> Enum.any?(&(&1.id == "hypatia" and calls_grid_reusable?(&1)))
   end
 
   defp pattern(repo_name, repo_path, governed?) do
