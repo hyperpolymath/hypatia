@@ -29,6 +29,10 @@ defmodule Hypatia.FleetEnrolmentIngestor do
   (gitbot-fleet `docs/AUTOMATION-QUARANTINE.adoc`). This check only emits the
   finding; it authorises no write.
 
+  The fixer puts the producing job only in `fork-governance.yml`. A repository
+  that calls the grid reusable directly is still flagged, but as not
+  auto-fixable, with a remediation that names fork governance adoption first.
+
   Not flagged:
 
     * a repository with no grid lane (nothing would read the manifest);
@@ -58,7 +62,7 @@ defmodule Hypatia.FleetEnrolmentIngestor do
       not File.dir?(repo_path) -> {:ok, []}
       enrolled?(repo_path) -> {:ok, []}
       not grid_lane?(repo_path) -> {:ok, []}
-      true -> {:ok, [pattern(repo_name)]}
+      true -> {:ok, [pattern(repo_name, governed?(repo_path))]}
     end
   end
 
@@ -119,7 +123,12 @@ defmodule Hypatia.FleetEnrolmentIngestor do
     end
   end
 
-  defp pattern(repo_name) do
+  # The fixer inserts the producing job into fork-governance.yml only; a repo
+  # that calls the grid reusable directly must adopt fork governance first,
+  # and an enrolment without a producer would turn every row orange.
+  defp governed?(repo_path), do: File.regular?(Path.join(repo_path, @governance_workflow))
+
+  defp pattern(repo_name, governed?) do
     %{
       "id" => "FE-001-#{fingerprint(repo_name)}",
       "category" => @category,
@@ -128,10 +137,8 @@ defmodule Hypatia.FleetEnrolmentIngestor do
         "#{repo_name} renders the Hypatia verdict grid but has no #{@manifest}: " <>
           "no gitbot-fleet member can report back on its pull requests",
       "pa_rule" => "FE001",
-      "remediation" =>
-        "Run gitbot-fleet scripts/fix-fleet-enrolment.sh on the branch that bumps the " <>
-          "standards pins; review the manifest it writes (docs/REPORT-BACK.adoc section 6).",
-      "auto_fixable" => true,
+      "remediation" => remediation(governed?),
+      "auto_fixable" => governed?,
       "confidence" => @confidence,
       "repos_affected_list" => [repo_name],
       "repos_affected" => 1,
@@ -139,6 +146,18 @@ defmodule Hypatia.FleetEnrolmentIngestor do
       "source" => "fleet-enrolment",
       "triangle_tier" => "eliminate"
     }
+  end
+
+  defp remediation(true) do
+    "Run gitbot-fleet scripts/fix-fleet-enrolment.sh on the branch that bumps the " <>
+      "standards pins; review the manifest it writes (docs/REPORT-BACK.adoc section 6)."
+  end
+
+  defp remediation(false) do
+    "Adopt fork governance first (standards 3-practice/fork-governance/ADOPTION.adoc): " <>
+      "the fleet job that produces report-backs lives in fork-governance.yml, and a manifest " <>
+      "without that job would show every enrolled row as missing. Then run " <>
+      "gitbot-fleet scripts/fix-fleet-enrolment.sh."
   end
 
   defp fingerprint(text) do

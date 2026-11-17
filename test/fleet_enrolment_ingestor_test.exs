@@ -30,12 +30,18 @@ defmodule Hypatia.FleetEnrolmentIngestorTest do
     assert p["repos_affected_list"] == ["some-repo"]
     # 0.85-0.94 is the review tier: a pull request, never a direct commit.
     assert p["confidence"] >= 0.85 and p["confidence"] < 0.95
-    assert p["auto_fixable"] == true
+    # A direct caller has no fork-governance.yml for the fixer to put the
+    # producing job in, so the fixer cannot finish: not auto-fixable.
+    assert p["auto_fixable"] == false
+    assert p["remediation"] =~ "Adopt fork governance first"
   end
 
-  test "the fork governance workflow alone is a grid lane", %{dir: dir} do
+  test "the fork governance workflow alone is a grid lane, and is auto-fixable", %{dir: dir} do
     write(dir, ".github/workflows/fork-governance.yml", "name: Fork governance\n")
-    assert {:ok, [_]} = FE.local_scan(dir, "some-repo")
+    assert {:ok, [p]} = FE.local_scan(dir, "some-repo")
+    assert p["auto_fixable"] == true
+    assert p["remediation"] =~ "fix-fleet-enrolment.sh"
+    refute p["remediation"] =~ "Adopt fork governance"
   end
 
   test "an enrolled repository is not flagged, whatever it enrols", %{dir: dir} do
