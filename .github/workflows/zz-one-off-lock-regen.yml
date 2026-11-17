@@ -8,7 +8,7 @@
 name: one-off actions.lock regeneration
 on:
   push:
-    branches: [claude/new-session-th4e9w-lockregen]
+    branches: [claude/remove-one-off-lockregen-scratch]
 permissions:
   contents: read
 jobs:
@@ -18,15 +18,15 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
-      STANDARDS_REGEN_SHA: 333b06a01db1874ffedb2de1bfabb195640927c7
-      STANDARDS_GATE_SHA: 333b06a01db1874ffedb2de1bfabb195640927c7
+      STANDARDS_REGEN_SHA: 7641c7fdb01420696b5420ab85d88f599f32f609
+      STANDARDS_GATE_SHA: 7641c7fdb01420696b5420ab85d88f599f32f609
     steps:
       - name: Regenerate the repair branch's actions.lock and check it with the gate
         run: |
           set -uo pipefail
-          git clone --quiet --branch claude/new-session-th4e9w-lock-repair "https://github.com/$REPO.git" pb
+          git clone --quiet --branch claude/remove-one-off-lock-regen "https://github.com/$REPO.git" pb
           git -C pb log --oneline -1
-          git clone --quiet https://github.com/hyperpolymath/standards.git std
+          git clone --quiet https://github.com/metadatastician/standards.git std
           git -C std worktree add --quiet --detach ../std-regen "$STANDARDS_REGEN_SHA"
           git -C std worktree add --quiet --detach ../std-gate "$STANDARDS_GATE_SHA"
           sudo apt-get install -y -qq gawk >/dev/null
