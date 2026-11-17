@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
+use jiff::Timestamp;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -129,7 +129,7 @@ pub struct ScanResults {
     /// Repository path that was scanned
     pub repository_path: PathBuf,
     /// Timestamp of the scan
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     /// Duration of the scan in milliseconds
     pub duration_ms: u64,
     /// All findings
@@ -278,7 +278,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     // Build results
     let results = ScanResults {
         repository_path: repo_path.clone(),
-        timestamp: Utc::now(),
+        timestamp: Timestamp::now(),
         duration_ms: start_time.elapsed().as_millis() as u64,
         findings,
         summary,
