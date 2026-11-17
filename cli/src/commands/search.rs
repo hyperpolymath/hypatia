@@ -6,9 +6,9 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -131,7 +131,7 @@ pub struct SearchResultItem {
     /// Star count
     pub stars: u64,
     /// Last updated
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// Whether this is private
     pub private: bool,
     /// License
@@ -337,7 +337,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["both".to_string()],
             downloads: 15420,
             stars: 234,
-            updated_at: Utc::now() - chrono::Duration::days(2),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 2),
             private: false,
             license: "MPL-2.0".to_string(),
         },
@@ -358,7 +358,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["both".to_string()],
             downloads: 12340,
             stars: 189,
-            updated_at: Utc::now() - chrono::Duration::days(5),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 5),
             private: false,
             license: "MPL-2.0".to_string(),
         },
@@ -383,7 +383,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["both".to_string()],
             downloads: 8765,
             stars: 156,
-            updated_at: Utc::now() - chrono::Duration::days(10),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 10),
             private: false,
             license: "MIT".to_string(),
         },
@@ -405,7 +405,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["check".to_string()],
             downloads: 23456,
             stars: 567,
-            updated_at: Utc::now() - chrono::Duration::days(1),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24),
             private: false,
             license: "Apache-2.0".to_string(),
         },
@@ -426,7 +426,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["check".to_string(), "fix".to_string()],
             downloads: 5432,
             stars: 87,
-            updated_at: Utc::now() - chrono::Duration::days(7),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 7),
             private: false,
             license: "MPL-2.0".to_string(),
         },
@@ -447,7 +447,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["both".to_string()],
             downloads: 9876,
             stars: 145,
-            updated_at: Utc::now() - chrono::Duration::days(3),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 3),
             private: false,
             license: "MPL-2.0".to_string(),
         },
@@ -468,7 +468,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["check".to_string()],
             downloads: 7654,
             stars: 123,
-            updated_at: Utc::now() - chrono::Duration::days(14),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 14),
             private: false,
             license: "MIT".to_string(),
         },
@@ -489,7 +489,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             effects: vec!["check".to_string()],
             downloads: 4321,
             stars: 76,
-            updated_at: Utc::now() - chrono::Duration::days(21),
+            updated_at: Timestamp::now() - jiff::SignedDuration::from_hours(24 * 21),
             private: false,
             license: "MIT".to_string(),
         },

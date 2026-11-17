@@ -41,7 +41,7 @@ tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Date/time
-chrono = { workspace = true }
+jiff = { workspace = true }
 
 # File system operations
 walkdir = "2.5"

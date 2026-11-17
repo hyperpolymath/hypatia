@@ -4,8 +4,9 @@
 # Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
 # remediate.sh — apply the SAFE auto-remediations for the CI failure classes.
-#   B-ALLOWLIST  -> PUT curated allow-list superset (hyperpolymath/* + pinned
-#                   third-party), keep github-owned/verified/sha-pinning.
+#   B-ALLOWLIST  -> PUT current allow-list UNION the curated superset
+#                   (hyperpolymath/* + pinned third-party); additive only, the
+#                   github-owned/verified flags and sha-pinning are untouched.
 #   D-BURN       -> open an idempotent, signed burn-cut PR (scope push to the
 #                   default branch + add concurrency-cancel) via the API.
 #   A-BILLING    -> NEVER auto-fixed (account-level, owner-only); the driver
@@ -31,20 +32,36 @@ read -r isfork isarch <<<"$meta"
 
 case "$CLASS" in
   B-ALLOWLIST)
-    # Build body: hyperpolymath/* + each superset action as owner/repo@*
-    body=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | (["hyperpolymath/*"] + .) as $pats | {"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":$pats}' "$HERE/action-superset.txt")
-    if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would PUT $(printf '%s' "$body" | jq '.patterns_allowed | length') patterns"; exit 0; fi
-    printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
-    expected=$(printf '%s' "$body" | jq -c '.patterns_allowed | sort')
-    actual=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '(.patterns_allowed // []) | sort | @json')
-    if [ "$actual" != "$expected" ]; then
-      expected_n=$(printf '%s' "$expected" | jq 'length')
-      actual_n=$(printf '%s' "$actual" | jq 'length')
-      echo "VERIFY-FAIL $R/B-ALLOWLIST expected $expected_n curated patterns, observed $actual_n; possible concurrent wipe" >&2
+    # Additive only: the new list is the repo's current patterns UNION the
+    # required set (hyperpolymath/* + each superset line as owner/repo@*), and
+    # github_owned_allowed / verified_allowed are written back exactly as read.
+    # Nothing a repo allows today is ever removed and no trust flag is widened
+    # (model and proofs: verification/proofs/idris2/AllowlistRemediation.idr).
+    # The current state must be read first; if it cannot be, nothing is written.
+    if ! cur=$(gh api "repos/$O/$R/actions/permissions/selected-actions" 2>/dev/null); then
+      echo "REFUSE $R/B-ALLOWLIST cannot read the current allow-list; nothing written" >&2
       exit 1
     fi
-    n=$(printf '%s' "$actual" | jq 'length')
-    echo "FIXED $R/B-ALLOWLIST -> $n patterns (sha-pinning unchanged, exact set verified)"
+    req=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + .' "$HERE/action-superset.txt")
+    body=$(printf '%s' "$cur" | jq -c --argjson req "$req" '
+      {patterns_allowed: (((.patterns_allowed // []) + $req) | unique)}
+      + (if has("github_owned_allowed") then {github_owned_allowed} else {} end)
+      + (if has("verified_allowed") then {verified_allowed} else {} end)')
+    added=$(printf '%s' "$cur" | jq --argjson req "$req" '($req - (.patterns_allowed // [])) | unique | length')
+    kept=$(printf '%s' "$cur" | jq '(.patterns_allowed // []) | unique | length')
+    if [[ "$added" -eq 0 ]]; then echo "SKIP $R/B-ALLOWLIST already covers the required set ($kept patterns)"; exit 0; fi
+    if [[ "$DRY" = "true" ]]; then echo "DRYRUN $R/B-ALLOWLIST would add $added pattern(s), keeping all $kept current"; exit 0; fi
+    printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
+    expected=$(printf '%s' "$body" | jq -cS '.patterns_allowed |= sort')
+    actual=$(gh api "repos/$O/$R/actions/permissions/selected-actions" | jq -cS --argjson b "$body" '
+      {patterns_allowed: ((.patterns_allowed // []) | sort)}
+      + (if ($b | has("github_owned_allowed")) then {github_owned_allowed} else {} end)
+      + (if ($b | has("verified_allowed")) then {verified_allowed} else {} end)')
+    if [ "$actual" != "$expected" ]; then
+      echo "VERIFY-FAIL $R/B-ALLOWLIST read-back differs from current+required; possible concurrent change" >&2
+      exit 1
+    fi
+    echo "FIXED $R/B-ALLOWLIST -> added $added, kept all $kept (trust flags unchanged, exact set verified)"
     ;;
   D-BURN)
     if gh api "repos/$O/$R/branches/$BR" --jq '.name' >/dev/null 2>&1; then echo "SKIP $R/D-BURN branch-exists"; exit 0; fi
