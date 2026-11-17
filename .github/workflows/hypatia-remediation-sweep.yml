@@ -92,41 +92,59 @@ jobs:
           OWNER: ${{ steps.cfg.outputs.owner }}
         run: |
           set -euo pipefail
-          CURSOR="null"
           : > /tmp/repos.jsonl
+          : > /tmp/unreadable.txt
 
-          while :; do
-            RESP=$(gh api graphql -f query="
-              query(\$c: String) {
-                user(login: \"$OWNER\") {
-                  repositories(first: 100, after: \$c, isFork: false, ownerAffiliations: OWNER) {
-                    pageInfo { hasNextPage endCursor }
-                    nodes {
-                      name
-                      isArchived
-                      vulnerabilityAlerts(first: 100, states: [OPEN]) {
-                        totalCount
-                        nodes {
-                          createdAt
-                          securityVulnerability {
-                            severity
-                            package { name ecosystem }
-                            advisory { ghsaId summary }
-                            vulnerableVersionRange
-                            firstPatchedVersion { identifier }
-                          }
-                        }
-                      }
-                    }
+          # One REST call per repository. The single GraphQL query this
+          # replaces asked for 100 repositories with 100 alerts each per page
+          # and GitHub answered it with HTTP 502 (runs 43988746284 and its
+          # re-run). Each line of /tmp/repos.jsonl keeps the shape that query
+          # gave, so the filter below is unchanged. REST names severities
+          # low/medium/high/critical; GraphQL named them LOW/MODERATE/HIGH/
+          # CRITICAL, so medium becomes MODERATE.
+          gh api --paginate "users/$OWNER/repos?type=owner&per_page=100" \
+            --jq '.[] | select(.fork == false) | [.name, .archived] | @tsv' > /tmp/owned.tsv
+
+          while IFS=$'\t' read -r NAME ARCHIVED; do
+            [[ "$ARCHIVED" == "true" ]] && continue
+            if ! gh api --paginate "repos/$OWNER/$NAME/dependabot/alerts?state=open&per_page=100" \
+                --jq '.[]' > /tmp/alerts.json 2> /tmp/alerts.err; then
+              # Alerts that cannot be read are not "no alerts": keep the repo
+              # and its error, and report both below.
+              printf '%s\t%s\n' "$NAME" "$(tr '\n' ' ' < /tmp/alerts.err)" >> /tmp/unreadable.txt
+              continue
+            fi
+            jq -cs --arg name "$NAME" '{
+              name: $name,
+              isArchived: false,
+              vulnerabilityAlerts: {
+                totalCount: length,
+                nodes: map({
+                  createdAt: .created_at,
+                  securityVulnerability: {
+                    severity: (.security_advisory.severity | ascii_upcase
+                               | if . == "MEDIUM" then "MODERATE" else . end),
+                    package: .security_vulnerability.package,
+                    advisory: {ghsaId: .security_advisory.ghsa_id,
+                               summary: .security_advisory.summary},
+                    vulnerableVersionRange: .security_vulnerability.vulnerable_version_range,
+                    firstPatchedVersion: .security_vulnerability.first_patched_version
                   }
-                }
+                })
               }
-            " -F c="$CURSOR")
-            echo "$RESP" | jq -c '.data.user.repositories.nodes[]' >> /tmp/repos.jsonl
-            HAS=$(echo "$RESP" | jq -r '.data.user.repositories.pageInfo.hasNextPage')
-            [[ "$HAS" != "true" ]] && break
-            CURSOR=$(echo "$RESP" | jq -r '.data.user.repositories.pageInfo.endCursor')
-          done
+            }' /tmp/alerts.json >> /tmp/repos.jsonl
+          done < /tmp/owned.tsv
+
+          READ=$(wc -l < /tmp/repos.jsonl)
+          UNREADABLE=$(wc -l < /tmp/unreadable.txt)
+          echo "Read Dependabot alerts for $READ repositories; $UNREADABLE could not be read."
+          if [[ "$UNREADABLE" -gt 0 ]]; then
+            echo "::warning title=Dependabot alerts not readable::$UNREADABLE repositories (listed in the step summary)"
+          fi
+          if [[ "$READ" -eq 0 ]]; then
+            echo "::error title=No Dependabot alerts read::not one repository could be read, so this sweep would report nothing"
+            exit 1
+          fi
 
           # Filter: non-archived, has alerts, at least one alert at/above floor.
           FLOOR='${{ steps.cfg.outputs.floor }}'
@@ -168,6 +186,14 @@ jobs:
           echo "- Owner: \`$OWNER\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Severity floor: \`$FLOOR\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Target repos: **$COUNT**" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "- Repos read: **$READ**; not readable: **$UNREADABLE**"
+            if [[ "$UNREADABLE" -gt 0 ]]; then
+              echo ""
+              echo "Not readable (Dependabot alerts off, or no access):"
+              cut -f1 /tmp/unreadable.txt | sed 's/^/- /'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           if [[ "$COUNT" -gt 0 ]]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "| Repo | Alerts | Top |" >> "$GITHUB_STEP_SUMMARY"
