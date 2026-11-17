@@ -35,10 +35,16 @@ this page is the estate view.
   then decide", A4 on standards#1234) applied to this incident.
 
 | Stopgap until D lands
-| *Narrow per-repository allow-list PUT*: `remediate.sh` B-ALLOWLIST adds
-  the exact `metadatastician/standards/.github/workflows/*-reusable.yml@*`
-  paths from `scripts/ci-health/action-superset.txt`. No owner-wide
-  `metadatastician/*` pattern.
+| *Narrow, additive per-repository allow-list PUT*: `remediate.sh`
+  B-ALLOWLIST writes the repository's current patterns plus any required
+  ones it lacks, among them the exact
+  `metadatastician/standards/.github/workflows/*-reusable.yml@*` paths from
+  `scripts/ci-health/action-superset.txt`. No owner-wide
+  `metadatastician/*` pattern. `github_owned_allowed` and `verified_allowed`
+  are written back as read. Nothing a repository allows today is removed
+  (owner ruling 2026-11-17; proved over a model in
+  `verification/proofs/idris2/AllowlistRemediation.idr`, ledger rows
+  `allowlist-remediation` and `allowlist-remediation-corpus`).
 
 | D pilot
 | *A leaf repository*, one that no other repository calls via `uses:`,
@@ -173,7 +179,11 @@ These cases are not detected; each one was weighed on the PR and left:
 
 They share one root cause: hand-written YAML parsing. A parsed workflow
 model (tracked in #971 for RE001) would close all of them at once, for
-WF027 and WF028 as well.
+WF027 and WF028 as well. Owner ruling 2026-11-17: WF028 gets no separate
+formal model. Its call extraction moves onto that parsed model, and the
+parse-to-call step is modelled once there, for RE001, WF027 and WF028
+together. Until then its evidence is the ExUnit suite in
+`test/rules/workflow_audit_pins_test.exs`.
 
 == Acceptance criteria (closes CI-9)
 
