@@ -113,9 +113,13 @@ checks out the current one (#1004).
 |===
 | Item | Owner | Evidence / next step
 
-| Rotate `HYPATIA_DISPATCH_PAT`
-| *Repository owner*
-| Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
+| Unblock the sweep's credential
+| *Repository owner*, via #1197
+| Owner ruling 2026-11-17: the rollout follows #1197, which replaces
+  `HYPATIA_DISPATCH_PAT` with GitHub App installation tokens; the PAT is not
+  rotated for this. Once #1197 merges and the App is installed, run one
+  `ci-health-sweep` dispatch with `dry_run: true`, then the stopgap and the
+  census below. Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
   `HTTP 401: Bad credentials` at `repos to scan: 0` (e.g. runs 40266651942
   and 41574487070). `hypatia-remediation-sweep` fails the same way. The
   run on 2026-11-04 (41769485545) ended in `startup_failure` on
@@ -131,7 +135,7 @@ checks out the current one (#1004).
   xref:credential-roles.adoc[credential roles and validation limits].
 
 | Census of old-owner callers
-| Sweep, after the rotation
+| Sweep, once its credential works (#1197)
 | Code search found about 764 workflow files under `hyperpolymath` still
   naming `hyperpolymath/standards/.github/workflows`, echidna among them.
   Code search caps at 1,000 results and its index lags, so the census of
@@ -198,7 +202,7 @@ together. Until then its evidence is the ExUnit suite in
 
 == When to update this memo
 
-* When `HYPATIA_DISPATCH_PAT` is rotated, or the sweep's first dry run
+* When #1197 merges and the App is installed, or the sweep's first dry run
   reports its results.
 * When a D transfer batch lands: add its rows to
   `Hypatia.Rules.MovedRepositories`, and record the batch here.
