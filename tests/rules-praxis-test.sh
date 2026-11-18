@@ -85,10 +85,10 @@ expect_broken "an un-retired tombstone is refused" "$work/tomb.deed" "tombstone 
 # Facts the code states, read back from the registry (review of #1070): a
 # provenance table is not a severity table, `severity: :advisory` is advisory,
 # and a rule that fires at several severities keeps the highest.
-row() { awk -v t="\"$1\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
+row() { local id=$1; awk -v t="\"$id\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
 # Whether a rule-def carries a fact. Captured, then matched: `row | grep -q`
 # loses a match to SIGPIPE under pipefail when awk is still writing (RE011).
-row_has() { grep -q -- "$2" <<<"$(row "$1")"; }
+row_has() { local id=$1 fact=$2; grep -q -- "$fact" <<<"$(row "$id")"; }
 if row_has hypatia/branch_protection/BP001 ':severity high' && row_has hypatia/supply_chain/SC001 ':status active'; then ok "opt-in scanner rules are registered"; else bad "BP001/SC001 missing or wrong"; fi
 if row_has hypatia/git_state/GS007 ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
 if row_has hypatia/code_scanning_alerts/CSA006 ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi

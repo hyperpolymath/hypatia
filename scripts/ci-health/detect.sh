@@ -23,6 +23,8 @@
 set -euo pipefail
 O="${OWNER:-hyperpolymath}"; R="$1"
 HERE="$(cd "$(dirname "$0")" && pwd)"   # for action-superset.txt (allow-list coverage)
+# shellcheck source=SCRIPTDIR/burn-trigger.sh
+. "$HERE/burn-trigger.sh"   # BURN_TRIGGER_ERE (D-BURN)
 emit(){ printf '%s\t%s\t%s\t%s\n' "$R" "$1" "$2" "$3"; }
 api() {
   local out
@@ -64,7 +66,7 @@ for fail_id in "${fail_ids[@]}"; do
       billing_seen=true
     fi
     if [ "$lockfile_seen" = false ] && grep -qiE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg"; then
-      first_lock_msg=$(printf '%s\n' "$msg" | grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin')
+      first_lock_msg=$(grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg")
       emit B-LOCKFILE HIGH "Actions lockfile verification failed (${first_lock_msg}) → run gh actions-lock --verify, repair, then commit actions.lock"
       lockfile_seen=true
     fi
@@ -109,7 +111,7 @@ for path in $(api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.na
   # Captured, then matched: piping into `grep -q` under pipefail can read a
   # match as no match (SIGPIPE, RE011). A failed fetch or decode is no match.
   if wf_text=$(api "repos/$O/$R/contents/$path" --jq '.content' | base64 -d) \
-       && grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]' <<<"$wf_text"; then
+       && grep -qE "$BURN_TRIGGER_ERE" <<<"$wf_text"; then
     emit D-BURN MEDIUM "ERR-WF-014: $path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
   fi
 done

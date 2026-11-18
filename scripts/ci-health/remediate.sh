@@ -23,7 +23,40 @@ set -euo pipefail
 O="${OWNER:-hyperpolymath}"; R="$1"; CLASS="$2"; DRY="${3:-true}"
 BR="ci/ci-health-auto-remediation"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=SCRIPTDIR/burn-trigger.sh
+. "$HERE/burn-trigger.sh"   # BURN_TRIGGER_ERE (D-BURN), shared with detect.sh
 DENYLIST="${CI_HEALTH_DENYLIST:-007}"   # space-separated repo names to never touch
+
+# D-BURN rewrite of one workflow text: the first line on the bare trigger
+# becomes push scoped to the default branches plus pull_request, and a
+# concurrency-cancel block is added when the file has none. A text with no
+# such line comes back unchanged.
+burn_patch() {
+  local text=$1
+  local blk="on:
+  push:
+    branches: [main, master]
+  pull_request:"
+
+  if ! grep -q '^[[:space:]]*concurrency:' <<<"$text"; then
+    blk="$blk
+
+# Estate guardrail: scope push to default branches (PR fires once, not
+# push+PR) and cancel superseded runs. Safe — read-only PR check.
+concurrency:
+  group: \${{ github.workflow }}-\${{ github.ref }}
+  cancel-in-progress: true"
+  fi
+
+  printf '%s' "$text" | RE="$BURN_TRIGGER_ERE" awk -v blk="$blk" '
+    $0 ~ ENVIRON["RE"] && !done {
+      print blk
+      done = 1
+      next
+    }
+    { print }
+  '
+}
 
 for d in $DENYLIST; do [ "$R" = "$d" ] && { echo "SKIP $R/$CLASS denylisted"; exit 0; }; done
 meta=$(gh api "repos/$O/$R" --jq '"\(.fork) \(.archived)"' 2>/dev/null || echo "false false")
@@ -66,48 +99,28 @@ case "$CLASS" in
   D-BURN)
     if gh api "repos/$O/$R/branches/$BR" --jq '.name' >/dev/null 2>&1; then echo "SKIP $R/D-BURN branch-exists"; exit 0; fi
     def=$(gh api "repos/$O/$R" --jq '.default_branch'); sha=$(gh api "repos/$O/$R/git/ref/heads/$def" --jq '.object.sha')
-    targets=(); for p in $(gh api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' 2>/dev/null); do
-      # Captured, then matched (RE011); a failed fetch or decode is no match.
-      wf_text=$(gh api "repos/$O/$R/contents/$p?ref=$def" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null) \
-        && grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request' <<<"$wf_text" && targets+=("$p")
+    # Every patch is computed before anything is written, from the commit the
+    # branch will start at. A file is a target only when its patch changes it,
+    # so the PR and the FIXED count name only files that really change.
+    targets=(); patches=(); shas=()
+    for p in $(gh api "repos/$O/$R/contents/.github/workflows?ref=$sha" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' 2>/dev/null); do
+      # A failed fetch or decode, or an empty file, is not a target.
+      cur=$(gh api "repos/$O/$R/contents/$p?ref=$sha" 2>/dev/null) || continue
+      ccontent=$(jq -r '.content' <<<"$cur" | tr -d '\n' | base64 -d 2>/dev/null) || continue
+      [ -n "$ccontent" ] || continue
+      patched=$(burn_patch "$ccontent")
+      [ "$patched" != "$ccontent" ] || continue
+      targets+=("$p"); patches+=("$patched"); shas+=("$(jq -r '.sha' <<<"$cur")")
     done
     [ "${#targets[@]}" -eq 0 ] && { echo "SKIP $R/D-BURN no-targets"; exit 0; }
     if [ "$DRY" = "true" ]; then echo "DRYRUN $R/D-BURN would patch ${#targets[@]} file(s) + open PR"; exit 0; fi
     gh api -X POST "repos/$O/$R/git/refs" -f ref="refs/heads/$BR" -f sha="$sha" >/dev/null
-    for p in "${targets[@]}"; do
-      cur=$(gh api "repos/$O/$R/contents/$p?ref=$BR")
-      ccontent=$(printf '%s' "$cur" | jq -r '.content' | tr -d '\n' | base64 -d)
-      csha=$(printf '%s' "$cur" | jq -r '.sha')
-      if [ -z "$ccontent" ]; then echo "SKIP $R/$p empty-decode (refusing to PUT an empty file)" >&2; continue; fi
-
-      blk="on:
-  push:
-    branches: [main, master]
-  pull_request:"
-
-      if ! grep -q '^[[:space:]]*concurrency:' <<<"$ccontent"; then
-        blk="$blk
-
-# Estate guardrail: scope push to default branches (PR fires once, not
-# push+PR) and cancel superseded runs. Safe — read-only PR check.
-concurrency:
-  group: \${{ github.workflow }}-\${{ github.ref }}
-  cancel-in-progress: true"
-      fi
-
-      patched=$(printf '%s' "$ccontent" | awk -v blk="$blk" '
-        /^on:[ \t]*\[[ \t]*push[ \t]*,[ \t]*pull_request[ \t]*\][ \t]*$/ && !done {
-          print blk
-          done = 1
-          next
-        }
-        { print }
-      ')
-
+    for i in "${!targets[@]}"; do
+      p=${targets[$i]}
       # printf '%s\n' restores the final newline the $( ) captures strip
-      newc=$(printf '%s\n' "$patched" | base64 | tr -d '\n')
+      newc=$(printf '%s\n' "${patches[$i]}" | base64 | tr -d '\n')
       gh api -X PUT "repos/$O/$R/contents/$p" -f message="ci: cut Actions burn in $p (scope push + concurrency-cancel)" \
-        -f content="$newc" -f sha="$csha" -f branch="$BR" >/dev/null
+        -f content="$newc" -f sha="${shas[$i]}" -f branch="$BR" >/dev/null
     done
     url=$(gh api "repos/$O/$R/pulls" -X POST -f title="ci: cut Actions burn — scope push triggers + concurrency-cancel" \
       -f head="$BR" -f base="$def" -f body="Automated by hypatia ci-health-sweep. Scopes \`push\` to the default branch (kills push+PR double-runs) and adds \`concurrency: cancel-in-progress\` to read-only PR checks. No SPDX/logic changes." --jq '.html_url')

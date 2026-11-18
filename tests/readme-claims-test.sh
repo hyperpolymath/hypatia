@@ -27,7 +27,12 @@ copy() {
   git ls-files -z README.adoc EXPLAINME.adoc docs Justfile contractile.just lib/rules lib/mix/tasks lib/hypatia/cli.ex \
     | xargs -0 -I{} sh -c 'mkdir -p "$1/$(dirname "$2")" && cp "$2" "$1/$2"' _ "$work/tree" {}
   # Every link target, so the copy resolves what the real tree resolves.
-  git ls-files | while IFS= read -r f; do [ -e "$work/tree/$f" ] || { mkdir -p "$work/tree/$(dirname "$f")"; : > "$work/tree/$f"; }; done
+  # AsciiDoc targets are copied whole, so their anchors resolve as well.
+  git ls-files | while IFS= read -r f; do
+    [ -e "$work/tree/$f" ] && continue
+    mkdir -p "$work/tree/$(dirname "$f")"
+    case "$f" in *.adoc) cp "$f" "$work/tree/$f" ;; *) : > "$work/tree/$f" ;; esac
+  done
 }
 
 expect_msg "the committed tree passes" 0 "match the tree" bash "$script"
@@ -46,6 +51,16 @@ expect_msg "a recipe the README does not count is refused" 1 "Just recipes is" \
 
 copy; sed -i '/^\[\[proof-ledger\]\]$/d' "$work/tree/EXPLAINME.adoc"
 expect_msg "a link to an anchor the target no longer defines is refused" 1 "defines no anchor proof-ledger" \
+  env README_CLAIMS_ROOT="$work/tree" bash "$script"
+
+# A target with no explicit ID still has its section IDs. Under `set -e` a
+# first grep with no match must not end the anchor list before them (#1208).
+copy; printf '= Planted Title\n\n== Planted Section\n\ntext\n' > "$work/tree/docs/planted-title-only.adoc"
+printf '\nlink:docs/planted-title-only.adoc#_planted_section[planted]\n' >> "$work/tree/README.adoc"
+expect_msg "a section ID in a target with no explicit ID resolves" 0 "match the tree" \
+  env README_CLAIMS_ROOT="$work/tree" bash "$script"
+sed -i 's/#_planted_section\[/#_no_such_section[/' "$work/tree/README.adoc"
+expect_msg "a missing section ID in such a target is refused" 1 "defines no anchor _no_such_section" \
   env README_CLAIMS_ROOT="$work/tree" bash "$script"
 
 copy; touch "$work/tree/lib/mix/tasks/hypatia.planted.ex"
