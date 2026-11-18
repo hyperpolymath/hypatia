@@ -107,9 +107,9 @@ case "$CLASS" in
       # A failed fetch or decode, or an empty file, is not a target.
       cur=$(gh api "repos/$O/$R/contents/$p?ref=$sha" 2>/dev/null) || continue
       ccontent=$(jq -r '.content' <<<"$cur" | tr -d '\n' | base64 -d 2>/dev/null) || continue
-      [ -n "$ccontent" ] || continue
+      [[ -n "$ccontent" ]] || continue
       patched=$(burn_patch "$ccontent")
-      [ "$patched" != "$ccontent" ] || continue
+      [[ "$patched" != "$ccontent" ]] || continue
       targets+=("$p"); patches+=("$patched"); shas+=("$(jq -r '.sha' <<<"$cur")")
     done
     [ "${#targets[@]}" -eq 0 ] && { echo "SKIP $R/D-BURN no-targets"; exit 0; }

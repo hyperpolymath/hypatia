@@ -61,11 +61,11 @@ for fail_id in "${fail_ids[@]}"; do
       emit B-TRACKER-TOKEN HIGH "Pin updater reports missing write credential (run $fail_id) → compare pins read-only before provisioning repository-scoped write access"
       tracker_token_seen=true
     fi
-    if [ "$billing_seen" = false ] && grep -qiE 'payments have failed|spending limit' <<<"$msg"; then
+    if [[ "$billing_seen" = false ]] && grep -qiE 'payments have failed|spending limit' <<<"$msg"; then
       emit A-BILLING CRITICAL "Actions billing/spending-limit wall blocks all billable jobs → OWNER: GitHub Settings -> Billing & plans"
       billing_seen=true
     fi
-    if [ "$lockfile_seen" = false ] && grep -qiE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg"; then
+    if [[ "$lockfile_seen" = false ]] && grep -qiE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg"; then
       first_lock_msg=$(grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg")
       emit B-LOCKFILE HIGH "Actions lockfile verification failed (${first_lock_msg}) → run gh actions-lock --verify, repair, then commit actions.lock"
       lockfile_seen=true

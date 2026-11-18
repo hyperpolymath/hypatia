@@ -118,7 +118,7 @@ fi
 # would leave unchanged is never a target, never written and never counted.
 burn() { # <fixture dir> <detect|remediate> [dry_run]
   local dir=$1 tool=$2
-  if [ "$tool" = detect ]; then
+  if [[ "$tool" = detect ]]; then
     PATH="$MOCK_BIN:$PATH" OWNER=test-owner MOCK_SCENARIO=burn MOCK_BURN_DIR="$dir" \
       MOCK_WRITE_LOG="$STATE_DIR/writes.log" "$ROOT/scripts/ci-health/detect.sh" test-repo 2>/dev/null
   else
@@ -130,19 +130,19 @@ mixed="$ROOT/test/fixtures/ci-health/burn/mixed"
 : > "$STATE_DIR/writes.log"
 burn_detect=$(burn "$mixed" detect) || { echo "FAIL [D-BURN]: detect.sh failed" >&2; exit 1; }
 reported=$(grep $'\tD-BURN\t' <<<"$burn_detect" | grep -oE '\.github/workflows/[^ ]+' | sort | paste -sd' ') || true
-[ "$reported" = ".github/workflows/commented.yml .github/workflows/has-concurrency.yml" ] ||
+[[ "$reported" = ".github/workflows/commented.yml .github/workflows/has-concurrency.yml" ]] ||
   { echo "FAIL [D-BURN]: detect.sh reported '$reported'" >&2; exit 1; }
 
 dry=$(burn "$mixed" remediate true)
-[ "$dry" = "DRYRUN test-repo/D-BURN would patch 2 file(s) + open PR" ] ||
+[[ "$dry" = "DRYRUN test-repo/D-BURN would patch 2 file(s) + open PR" ]] ||
   { echo "FAIL [D-BURN]: dry run said '$dry'" >&2; exit 1; }
 [[ ! -s "$STATE_DIR/writes.log" ]] || { echo "FAIL [D-BURN]: the dry run wrote" >&2; exit 1; }
 
 live=$(burn "$mixed" remediate)
-[ "$live" = "FIXED test-repo/D-BURN -> https://github.com/test-owner/test-repo/pull/1 (2 file(s))" ] ||
+[[ "$live" = "FIXED test-repo/D-BURN -> https://github.com/test-owner/test-repo/pull/1 (2 file(s))" ]] ||
   { echo "FAIL [D-BURN]: live run said '$live'" >&2; exit 1; }
 put_paths=$(grep '^PUT ' "$STATE_DIR/writes.log" | cut -d' ' -f2 | sort | paste -sd' ')
-[ "$put_paths" = "repos/test-owner/test-repo/contents/.github/workflows/commented.yml repos/test-owner/test-repo/contents/.github/workflows/has-concurrency.yml" ] ||
+[[ "$put_paths" = "repos/test-owner/test-repo/contents/.github/workflows/commented.yml repos/test-owner/test-repo/contents/.github/workflows/has-concurrency.yml" ]] ||
   { echo "FAIL [D-BURN]: wrote '$put_paths'" >&2; exit 1; }
 grep -qx 'POST repos/test-owner/test-repo/git/refs | ref=refs/heads/ci/ci-health-auto-remediation | sha=cafe0001' "$STATE_DIR/writes.log" ||
   { echo "FAIL [D-BURN]: the branch was not cut from the commit the patches were read at" >&2; exit 1; }
@@ -157,7 +157,7 @@ for f in commented.yml has-concurrency.yml; do
   if grep -qE "$(sed -n "s/^BURN_TRIGGER_ERE='\(.*\)'$/\1/p" "$ROOT/scripts/ci-health/burn-trigger.sh")" <<<"$written"; then
     echo "FAIL [D-BURN]: $f still has the bare trigger after the rewrite" >&2; exit 1
   fi
-  [ "$(grep -c '^concurrency:' <<<"$written")" -eq 1 ] ||
+  [[ "$(grep -c '^concurrency:' <<<"$written")" -eq 1 ]] ||
     { echo "FAIL [D-BURN]: $f does not have exactly one concurrency block" >&2; exit 1; }
   grep -qx '    branches: \[main, master\]' <<<"$written" ||
     { echo "FAIL [D-BURN]: $f push is not scoped to the default branches" >&2; exit 1; }
@@ -167,7 +167,7 @@ grep -q 'sha=sha-commented.yml | branch=ci/ci-health-auto-remediation' "$STATE_D
 
 : > "$STATE_DIR/writes.log"
 none=$(burn "$ROOT/test/fixtures/ci-health/burn/none" remediate)
-[ "$none" = "SKIP test-repo/D-BURN no-targets" ] || { echo "FAIL [D-BURN]: no-target run said '$none'" >&2; exit 1; }
+[[ "$none" = "SKIP test-repo/D-BURN no-targets" ]] || { echo "FAIL [D-BURN]: no-target run said '$none'" >&2; exit 1; }
 [[ ! -s "$STATE_DIR/writes.log" ]] || { echo "FAIL [D-BURN]: a run with no targets wrote" >&2; exit 1; }
 
 echo "PASS: CI-health classification and remediation fixtures"

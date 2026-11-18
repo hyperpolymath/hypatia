@@ -29,7 +29,7 @@ copy() {
   # Every link target, so the copy resolves what the real tree resolves.
   # AsciiDoc targets are copied whole, so their anchors resolve as well.
   git ls-files | while IFS= read -r f; do
-    [ -e "$work/tree/$f" ] && continue
+    [[ -e "$work/tree/$f" ]] && continue
     mkdir -p "$work/tree/$(dirname "$f")"
     case "$f" in *.adoc) cp "$f" "$work/tree/$f" ;; *) : > "$work/tree/$f" ;; esac
   done
