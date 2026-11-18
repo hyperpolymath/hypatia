@@ -54,6 +54,13 @@ defmodule Hypatia.Safety.BatchRollback do
   from its last position to its first. It is not sorted by `timestamp`, `repo` or `file`:
   none of them is an order, and a tie would revert dependent changes the wrong way round.
 
+  Only one rollback of a batch runs at a time, across VMs and OS processes on the same
+  store: it takes the exclusive lock file `<store>/dispatch/locks/<batch_id>.lock`. When
+  another holder has it, the call returns `{:error, {:locked, holder}}` and writes
+  nothing. `holder` has the holder's `os_pid`, `node`, `acquired_at`, `age_s`, `lock_path`
+  and `stale` (older than 15 minutes). A stale lock is reported, never taken over.
+  A batch id that is not a plain file name returns `{:error, {:invalid_batch_id, id}}`.
+
   A rollback is safe to repeat (E0-25):
 
     * a batch whose status is `rolled_back` returns `{:ok, 0}` and writes nothing;
@@ -66,12 +73,143 @@ defmodule Hypatia.Safety.BatchRollback do
       manifest still lists every original outcome, once.
   """
   def rollback(batch_id, reason) do
-    # One rollback of a batch at a time, in this VM: the status check, the outcome
-    # snapshot, the writes and the status write are one critical section, so that two
-    # callers cannot both read `pending` and both append rows and a manifest. The
-    # status is read again inside the lock. (A lock between VMs or OS processes is not
-    # taken: the module has one writer node.)
-    :global.trans({{__MODULE__, batch_id}, self()}, fn -> locked_rollback(batch_id, reason) end)
+    # Two locks, for two scopes. The outer `:global.trans` queues the callers in this VM
+    # (and in connected nodes), so that overlapping callers wait their turn and each sees
+    # the status the one before it wrote. The inner lock file is the one that holds between
+    # separate VMs and OS processes on the same store: an exclusive create (O_EXCL) that
+    # the filesystem makes atomic. Without the outer lock, same-VM callers would fail
+    # with `{:error, {:locked, _}}` instead of waiting. The status is read again inside both.
+    # The lock is not held across hosts: a store that two hosts write through separate
+    # checkouts is out of scope (git is what merges those).
+    with :ok <- check_batch_id(batch_id) do
+      :global.trans({{__MODULE__, batch_id}, self()}, fn ->
+        with_lock_file(batch_id, fn -> locked_rollback(batch_id, reason) end)
+      end)
+    end
+  end
+
+  # The batch id is a file name here, so it must be a plain one.
+  defp check_batch_id(batch_id) do
+    if is_binary(batch_id) and batch_id =~ ~r/\A[A-Za-z0-9][A-Za-z0-9_.-]{0,199}\z/ and
+         not String.contains?(batch_id, "..") do
+      :ok
+    else
+      {:error, {:invalid_batch_id, batch_id}}
+    end
+  end
+
+  # A lock older than this is reported as `"stale" => true`. It is still never taken over:
+  # a rollback can be slow, and the pid of a holder on another VM cannot be checked, so the
+  # age is evidence for the operator, not a licence to steal. To clear a stale lock, read
+  # the holder in the error, confirm that the process is gone, and remove the file at
+  # `"lock_path"`.
+  @stale_after_s 15 * 60
+
+  defp lock_path(batch_id),
+    do: Path.join([Path.expand(@verisimdb_data_path), "dispatch", "locks", "#{batch_id}.lock"])
+
+  # Run `fun` while this process holds the lock file of the batch. Fails closed: when the
+  # lock cannot be taken, `fun` does not run and nothing is written. The lock is removed
+  # in `after` (also when `fun` raises), and only if it still carries our token.
+  defp with_lock_file(batch_id, fun) do
+    path = lock_path(batch_id)
+
+    case acquire_lock(path) do
+      {:ok, token} ->
+        try do
+          fun.()
+        after
+          release_lock(path, token)
+        end
+
+      {:error, _} = error ->
+        fail(batch_id, error)
+    end
+  end
+
+  defp acquire_lock(path) do
+    token = Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
+
+    holder = %{
+      "token" => token,
+      "os_pid" => System.pid(),
+      "node" => Atom.to_string(node()),
+      "acquired_unix" => System.os_time(:second),
+      "acquired_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    with :ok <- mkdir_for_lock(path) do
+      case File.open(path, [:write, :exclusive]) do
+        {:ok, io} -> write_holder(io, path, holder, token)
+        {:error, :eexist} -> {:error, {:locked, read_holder(path)}}
+        {:error, why} -> {:error, {:lock_failed, why}}
+      end
+    end
+  end
+
+  defp mkdir_for_lock(path) do
+    case File.mkdir_p(Path.dirname(path)) do
+      :ok -> :ok
+      {:error, why} -> {:error, {:lock_failed, why}}
+    end
+  end
+
+  # A lock that was created but could not be written is removed again: an empty lock
+  # would block every later rollback of the batch.
+  defp write_holder(io, path, holder, token) do
+    result =
+      try do
+        IO.binwrite(io, Jason.encode!(holder))
+      rescue
+        e -> {:error, e}
+      end
+
+    File.close(io)
+
+    case result do
+      :ok ->
+        {:ok, token}
+
+      other ->
+        File.rm(path)
+        {:error, {:lock_failed, other}}
+    end
+  end
+
+  defp read_holder(path) do
+    info =
+      case File.read(path) do
+        {:ok, content} ->
+          case Jason.decode(content) do
+            {:ok, %{} = holder} -> holder
+            _ -> %{"unreadable" => true}
+          end
+
+        {:error, why} ->
+          %{"unreadable" => true, "read_error" => inspect(why)}
+      end
+
+    age = System.os_time(:second) - (info["acquired_unix"] || 0)
+
+    info
+    |> Map.put("lock_path", path)
+    |> Map.put("age_s", age)
+    |> Map.put("stale", age > @stale_after_s)
+  end
+
+  defp release_lock(path, token) do
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, %{"token" => ^token}} -> File.rm(path)
+          _ -> Logger.error("Lock #{path} is no longer ours; left in place")
+        end
+
+      _ ->
+        Logger.error("Lock #{path} was gone at release")
+    end
+
+    :ok
   end
 
   defp locked_rollback(batch_id, reason) do
