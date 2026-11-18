@@ -505,7 +505,7 @@ pub fn assert_build_cancelled(build: &SimulatedBuild) {
 /// Assert build duration is within expected range
 pub fn assert_build_duration_range(build: &SimulatedBuild, min_seconds: i64, max_seconds: i64) {
     let duration = build.duration().expect("Build should have duration");
-    let seconds = duration.num_seconds();
+    let seconds = duration.as_secs();
 
     if seconds < min_seconds || seconds > max_seconds {
         panic!(
@@ -573,7 +573,7 @@ pub fn assert_jobs_parallel(jobs: &[SimulatedJob], tolerance_seconds: i64) {
 
     let first = start_times[0];
     for time in &start_times[1..] {
-        let diff = (*time - first).num_seconds().abs();
+        let diff = time.duration_since(first).as_secs().abs();
         if diff > tolerance_seconds {
             panic!(
                 "Jobs should start within {}s of each other for parallel execution, but diff was {}s",

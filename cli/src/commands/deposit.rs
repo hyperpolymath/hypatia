@@ -6,9 +6,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::{debug, info};
@@ -188,7 +188,7 @@ pub struct DepositResult {
     /// SHA256 hash of the content
     pub content_hash: String,
     /// Timestamp of deposit
-    pub deposited_at: DateTime<Utc>,
+    pub deposited_at: Timestamp,
     /// Registry URL
     pub registry_url: String,
     /// Validation results
@@ -273,7 +273,7 @@ pub async fn execute(args: DepositArgs, config: &Config, format: OutputFormat) -
             success: false,
             ruleset_id: None,
             content_hash: compute_hash(&content),
-            deposited_at: Utc::now(),
+            deposited_at: Timestamp::now(),
             registry_url: get_registry_url(&args.registry, config),
             validation,
             warnings: vec![],
@@ -311,7 +311,7 @@ pub async fn execute(args: DepositArgs, config: &Config, format: OutputFormat) -
             success: true,
             ruleset_id: Some(format!("dry-run-{}", &content_hash[..8])),
             content_hash,
-            deposited_at: Utc::now(),
+            deposited_at: Timestamp::now(),
             registry_url: get_registry_url(&args.registry, config),
             validation,
             warnings: vec!["This was a dry run - nothing was actually deposited".to_string()],
@@ -332,7 +332,7 @@ pub async fn execute(args: DepositArgs, config: &Config, format: OutputFormat) -
         success: true,
         ruleset_id: Some(ruleset_id.clone()),
         content_hash,
-        deposited_at: Utc::now(),
+        deposited_at: Timestamp::now(),
         registry_url: registry_url.clone(),
         validation,
         warnings: vec![],

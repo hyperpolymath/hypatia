@@ -10,28 +10,114 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Added
+
+==== RE011: a pipe into a quiet grep, flag-only (2026-11-18)
+
+`research_extensions` gains RE011. It reports `writer | grep -q PATTERN` in
+shell sources (`*.sh`, files under `.githooks/`, files with a shell shebang)
+and in workflow `run:` blocks. Under `set -o pipefail` the form is unsound:
+`grep -q` exits at its first match, a writer that is still writing is killed
+by SIGPIPE, the pipeline's status is 141, and a match reads as "no match". In
+a gate written `if writer | grep -q BAD; then fail`, that is a fail-open. It
+was reproduced in metadatastician/standards on 2026-11-17, and the owner ruled
+"A Hypatia rule, estate-wide".
+
+* The detector is a port of standards' `scripts/check-pipe-grep-q.sh`. On two
+  trees of standards it reports the same `path:line` set as that gate
+  (444 of 444 on `main` at 940a27a, 182 of 182 on the head of standards#1667).
+  It also reads two forms the gate misses: a cluster with a digit or an
+  argument after the `q` (`-qm1`), and a flag after a bare `--color`.
+* A finding is _exposed_ (`:warn`) where pipefail is in force: the script sets
+  it, or the step's shell is `bash` (GitHub runs `bash -eo pipefail`), from the
+  step or from `defaults.run.shell`. Elsewhere it is _latent_ (`:info`).
+* The rule is flag-only: action `:review`, every finding `advisory: true`, no
+  recipe and no fix script. The research-extensions normalizer in
+  `Hypatia.CLI.collect_findings/2` now carries `:advisory`, so an RE011 finding
+  never counts toward exit 1.
+* One gate does not read the class yet: standards `scripts/apply-baseline.sh`
+  in `blocking` mode at threshold `info` (governance "Baseline validation").
+  It rejects an exposed RE011 finding like any other unbaselined finding until
+  the caller runs a standards revision that exempts `advisory: true`.
+
+Tests: `test/research_extensions_re011_test.exs`.
+
 === Changed
 
-==== RE001 post-merge review corrections (2026-11-16)
+==== RSR 3.2.2 is the verdict of the capability reader (2026-11-16)
 
-RE001 excludes workflow environment secrets overridden by a job, including
-when deciding whether fetched code shares a step with a credential. Existing
-alias-use locations and job traversal order are preserved.
+Criterion 3.2.2 (profile present) now passes exactly when
+`declared_capabilities/1` finds a profile, the same reader behind the
+scorecard's `profile_present`. Before, a repository with no deed
+`(rsr-profile …)` clause passed 3.2.2 whenever
+`<machine tree>/rsr-profile.a2ml` existed, even when that file did not parse
+or carried no `capabilities` list. In that case the scorecard reported no
+profile. The Idris2 model (`src/Hypatia/ABI/RsrProfile.idr`, from #1033)
+proved that this was the only case where the two disagreed. With the fix it
+proves they agree for every source (`profilePresentAgrees`), and
+`tests/reject/EmptyA2mlPassesProfileCriterion.idr` guards against the old
+behaviour returning.
 
-Endpoint discovery distinguishes numeric loopback addresses from `127.*`
-hostnames, keeps full punycode names and explicit Docker registry hosts, and
-treats hashes in environment and action-input values as data. Run scripts now
-use `Workflow.shell_mask/1`, including its command-substitution handling,
-instead of a second shell-comment walker. GitHub wildcard allow entries stay
-within the GitHub exemption; unknown runtime ports cannot establish an
-allowance for every port.
+Effect on scores: a deedless repository whose `rsr-profile.a2ml` declares no
+capabilities now fails 3.2.2. It was already scored as having no profile, so
+gated criteria were already `:na` for it.
 
-Ten new regression tests reproduce the eight outstanding #1036 findings on
-the previous implementation. The repaired implementation passes 189 focused
-tests, including the existing located-diagnostic, representation-equivalence
-and bounded Egress decision tests. RE001 findings are unchanged on snapshots
-of Hypatia `b93f0615`, standards `305743d2` and Echidna `478b7519` (zero before
-and after on each). These checks do not complete #971 or prove runtime egress.
+==== WH013 reads the canonical workflow model; `Hypatia.WorkflowYaml` is gone (2026-11-16)
+
+WH013 now reads `Hypatia.Workflow`, as RE001, RE002 and WH014 do. With that,
+nothing reads `Hypatia.WorkflowYaml`, the line reader the hardening rules
+shared, and it is deleted. Each change below has a test in
+`test/workflow_hardening_test.exs` ("WH013 reads the parsed workflow model
+(#971)") that fails on the line reader:
+
+* **A grant is a `permissions:` value.** `permissions: {contents: write}`,
+  the form WH013's own fix text recommends, now counts as a grant. Text that
+  only looks like one, such as a `run:` script that writes `contents: write`
+  into a file, no longer does.
+* **Writes, masks and credentials are read from values and keys, not
+  lines.** A YAML comment naming `git push origin main` is not a write. A
+  `GH_TOKEN:` line that a script writes into a file is not the job's
+  credential. A workflow-level `env:` written after `jobs:` is inherited like
+  one written before it.
+* **Flow-style jobs are judged per job.** The line reader could not split
+  `jobs: { … }`, so it judged the whole file as one body: never credentialed,
+  and never masked by a step's `continue-on-error`.
+* **An unreadable workflow is reported, not guessed at.** As RE001 and WH014
+  do, a workflow the reader refuses gets a `:warn` finding at the error's
+  line if its text names a write. Otherwise it is skipped.
+
+The tests also gain six WH014 cases (KYAML, flow `with:`, folded and quoted
+run scripts, `defaults` placement, expression working directories and
+unreadable files). They pass on the WH014 above.
+
+RE003, RE005 and `WorkflowAudit.check_sha_pinned_toolchain_without_input/1`
+still read lines. Their KYAML view, `ResearchExtensions.flow_to_block/1`,
+moves back into that module unchanged, so their findings, and the line
+numbers the toolchain fixer rewrites by, do not move. Moving them onto the
+model stays under #971.
+
+Measured on 2026-11-16 with Elixir 1.19.4 on OTP 27.3.4.19, comparing main
+(6f3f16f) with this change on snapshots of hyperpolymath/hypatia,
+rsr-template-repo, choreographic-types and mathesis, and
+metadatastician/standards and kyq. Every workflow rule (WorkflowAudit,
+WorkflowHardening and ResearchExtensions) gives the same findings before and
+after. WH013 does not fire on these trees, so the comparison was repeated on
+perturbed copies that make it fire (every `contents: write` narrowed to
+`read`, 12 WH013 findings), again with the same findings.
+
+==== WH014 reads the canonical workflow model (2026-11-16)
+
+The masked-report/SARIF-upload rule reads jobs, steps, inputs and working
+directory defaults through `Hypatia.Workflow`, replacing its own YAML text
+readers. Flow mappings, quoted keys, aliases and folded/quoted run values
+now share the KYAML semantics already used by RE001/RE002. A `run` key in
+step environment data is no longer treated as a shell script. Findings
+identify the affected job's source line; unreadable YAML produces a located
+incomplete-analysis warning.
+
+The shell analysis remains bounded to literal report paths within one job;
+absence of a finding does not establish scanner completion. This is one
+part of #971, not completion of the remaining workflow-reader migrations.
 
 ==== The oracle and CI toolchain move back to OTP 27.3.4.19 (2026-11-13)
 

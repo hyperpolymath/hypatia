@@ -75,7 +75,13 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   ## Implementation note
 
-  We use regex-on-YAML-text rather than full YAML parsing because:
+  WH013 and WH014 read job/step structure and scalar values through
+  `Hypatia.Workflow`: they judge a job by its own keys and values, and a
+  workflow the reader refuses is reported, not guessed at. WH014's shell
+  analysis remains a bounded literal-path analysis. The remaining rules still
+  use the legacy readers below; their migration is tracked in #971.
+
+  Those remaining rules use regex-on-YAML-text rather than full YAML parsing because:
 
   1. The scanning corpus is ~370 repos × ~5 workflow files each ≈ 1800
      files. Regex is acceptably fast and easy to reason about.
@@ -92,7 +98,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   require Logger
 
-  alias Hypatia.WorkflowYaml
+  alias Hypatia.{Kyaml, Workflow}
+  alias Hypatia.Workflow.Step
 
   # ─── Workflow-file discovery ────────────────────────────────────────
 
@@ -1132,77 +1139,155 @@ defmodule Hypatia.Rules.WorkflowHardening do
   Masking stays a defect there: `git push … 2>/dev/null || echo` cannot turn
   the job red when the credential expires or loses scope. That shape is
   reported at `:warn` with its own fix recipe, because no grant is missing.
+
+  ## Reading the workflow
+
+  The workflow is read through `Hypatia.Workflow`: grants are `permissions:`
+  values, writes and masks are read from the jobs' string values, a
+  credential from their `token:`/`GH_TOKEN:`/`GITHUB_TOKEN:` keys, and a
+  step's own `continue-on-error: true`, in any layout. A workflow the reader
+  refuses is reported at `:warn`, at the error's line, when its text names a
+  write, and skipped otherwise.
   """
   def wh013_permission_starved_write(repo_path) do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = WorkflowYaml.read_workflow(path)
+      bytes = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      {credentialed, token_writes} =
-        content
-        |> writing_jobs()
-        |> Enum.split_with(& &1.credentialed?)
+      case Workflow.parse(bytes, rel) do
+        {:ok, nil} ->
+          []
 
-      masked_credentialed =
-        if Enum.any?(credentialed, &masked_job?/1),
-          do: [wh013_masked_credentialed_finding(rel)],
-          else: []
+        {:ok, workflow} ->
+          wh013_workflow(rel, workflow)
 
-      wh013_starved_findings(rel, content, token_writes) ++ masked_credentialed
+        # A workflow the reader refuses is reported when its text names a
+        # write, and skipped otherwise: its grants and jobs cannot be read,
+        # and a silent skip of a writing workflow would read as a pass.
+        {:error, error} ->
+          if performs_contents_write?(bytes), do: [wh013_unreadable(rel, error)], else: []
+      end
     end)
   end
 
-  # Each job that performs a write, as `%{text, steps, credentialed?}`, read
-  # by the shared workflow reader: comment lines dropped, aliases expanded,
-  # steps only under the job's own `steps:` key. A job is credentialed by its
-  # own text or by a workflow-level `env:` it inherits. A file whose jobs the
-  # reader cannot split is judged as one body and is never credentialed: one
-  # job's PAT must not excuse another job's write.
-  defp writing_jobs(content) do
-    case content |> WorkflowYaml.active_lines() |> WorkflowYaml.workflow_job_lines() do
-      [] ->
-        if performs_contents_write?(content),
-          do: [%{text: content, steps: [], credentialed?: false}],
-          else: []
+  defp wh013_workflow(rel, workflow) do
+    {credentialed, token_writes} =
+      workflow
+      |> writing_jobs()
+      |> Enum.split_with(& &1.credentialed?)
 
-      jobs ->
-        inherited? = own_credential_job?(workflow_preamble(content))
+    masked_credentialed =
+      if Enum.any?(credentialed, &masked_job?/1),
+        do: [wh013_masked_credentialed_finding(rel)],
+        else: []
 
-        for job <- jobs, text = lines_text(job), performs_contents_write?(text) do
-          %{
-            text: text,
-            steps: WorkflowYaml.job_steps(job),
-            credentialed?: inherited? or own_credential_job?(text)
-          }
-        end
+    wh013_starved_findings(rel, workflow, token_writes) ++ masked_credentialed
+  end
+
+  defp wh013_unreadable(rel, error) do
+    %{
+      rule: "WH013",
+      file: rel,
+      severity: :warn,
+      line: error.line,
+      reason:
+        "#{rel} could not be read as KYAML (#{error.code} at line #{error.line}, column " <>
+          "#{error.column}: #{error.message}), so WH013 cannot check that its writes " <>
+          "(push/commit/release/PR) are granted `contents: write`",
+      action: :report,
+      detail: %{
+        line: error.line,
+        fix:
+          "Rewrite the construct the reader names in the KYAML subset (kyq " <>
+            "docs/KYAML_SPEC.adoc; standards YAML-POLICY). GitHub Actions refuses some of " <>
+            "these too, such as the `<<` merge key."
+      }
+    }
+  end
+
+  # Each job that performs a write, as `%{values, steps, credentialed?}`, read
+  # from the parsed model (`Hypatia.Workflow`): `values` are the job's string
+  # values (YAML values, so a comment is never one; in a block scalar, lines
+  # that open with `#` are dropped as shell comments), `steps` its own steps.
+  # A job is credentialed by its own keys or by a workflow-level key it
+  # inherits (`env:`). A workflow with no jobs is judged as one body and is
+  # never credentialed: one job's PAT must not excuse another job's write.
+  defp writing_jobs(%Workflow{jobs: [], doc: doc}) do
+    values = scalar_values(doc)
+
+    if writes?(values),
+      do: [%{values: values, steps: [], credentialed?: false}],
+      else: []
+  end
+
+  defp writing_jobs(%Workflow{doc: doc, jobs: jobs}) do
+    inherited? =
+      doc
+      |> Workflow.entries()
+      |> Enum.reject(&(&1.key.value == "jobs"))
+      |> Enum.flat_map(&entry_key_lines/1)
+      |> Enum.any?(&own_credential_job?/1)
+
+    for job <- jobs, values = scalar_values(job.node), writes?(values) do
+      %{
+        values: values,
+        steps: job.steps,
+        credentialed?: inherited? or Enum.any?(key_lines(job.node), &own_credential_job?/1)
+      }
     end
   end
 
-  defp lines_text(lines), do: Enum.map_join(lines, "\n", &elem(&1, 0))
+  defp writes?(values), do: Enum.any?(values, &performs_contents_write?/1)
 
-  # The text of each step of one job body (header line first, as the job
-  # extractor gives it), read by the shared reader: only the items of the
-  # job's own `steps:` key, comment lines dropped.
-  defp job_step_texts(body) do
-    body
+  # The string values under a node in document order, aliases read through.
+  # The workflow was read within kyq's node budget, so the walk is bounded.
+  defp scalar_values(nil), do: []
+
+  defp scalar_values(node) do
+    case Kyaml.deref(node) do
+      %{kind: :map, entries: entries} -> Enum.flat_map(entries, &scalar_values(&1.value))
+      %{kind: :seq, items: items} -> Enum.flat_map(items, &scalar_values/1)
+      %{kind: :string, style: :block, value: value} -> [drop_comment_lines(value)]
+      %{kind: :string, value: value} -> [value]
+      _ -> []
+    end
+  end
+
+  defp drop_comment_lines(text) do
+    text
     |> String.split("\n")
-    |> Enum.with_index(1)
-    |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
-    |> WorkflowYaml.job_steps()
-    |> Enum.map(&lines_text/1)
+    |> Enum.reject(&String.starts_with?(String.trim_leading(&1), "#"))
+    |> Enum.join("\n")
   end
 
-  defp blank_or_comment?(line) do
-    trimmed = String.trim(line)
-    trimmed == "" or String.starts_with?(trimmed, "#")
+  # The keys a job (or the workflow) supplies a credential in, as one line of
+  # text each (`token: ${{ secrets.FARM_PAT }}`) for `own_credential_job?/1`,
+  # aliases read through. Keys are YAML keys, quoted or not, at any depth
+  # (`with:`, `env:`); text inside a scalar (a `run:` script that writes a
+  # file) is not a key.
+  @credential_keys ~w(token GH_TOKEN GITHUB_TOKEN)
+
+  defp key_lines(node) do
+    case node && Kyaml.deref(node) do
+      %{kind: :map, entries: entries} -> Enum.flat_map(entries, &entry_key_lines/1)
+      %{kind: :seq, items: items} -> Enum.flat_map(items, &key_lines/1)
+      _ -> []
+    end
   end
 
-  # Everything above the top-level `jobs:` key (name, on, permissions, env).
-  # The key may be quoted (`"jobs":`, `'jobs':`), as WorkflowYaml reads it.
-  defp workflow_preamble(content) do
-    content |> String.split(~r/^(?:jobs|"jobs"|'jobs')\s*:/m, parts: 2) |> hd()
+  defp entry_key_lines(%{key: key, value: value}) do
+    own =
+      case {key, Workflow.text(value)} do
+        {%{kind: :string, value: name}, text} when name in @credential_keys and is_binary(text) ->
+          ["#{name}: #{text}"]
+
+        _ ->
+          []
+      end
+
+    own ++ key_lines(value)
   end
 
   # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
@@ -1246,17 +1331,18 @@ defmodule Hypatia.Rules.WorkflowHardening do
     }
   end
 
-  # The grant is judged file-wide (`content`); starvation and masking only
+  # The grant is judged workflow-wide; starvation and masking only
   # over the jobs whose writes ride on GITHUB_TOKEN (`token_writes`).
-  defp wh013_starved_findings(rel, content, token_writes) do
+  defp wh013_starved_findings(rel, workflow, token_writes) do
     cond do
       token_writes == [] ->
         []
 
       # A grant exists at either level. This rule deliberately does not try
-      # to prove the grant is on the RIGHT job — that needs a real YAML
-      # parse, and a false "you are broken" is worse than a missed one.
-      grants_contents_write_anywhere?(content) ->
+      # to prove the grant is on the RIGHT job (a job-level block replaces
+      # the workflow-level one, and an absent block inherits it): a false
+      # "you are broken" is worse than a missed one.
+      grants_contents_write_anywhere?(workflow) ->
         []
 
       # No grant anywhere, and the write is masked so it can never go red.
@@ -1310,12 +1396,31 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   @doc """
   Return true when `contents: write` (or `write-all`) is granted at the
-  workflow level or at any job level.
+  workflow level or at any job level: a `permissions:` value of `write-all`,
+  or a `permissions:` mapping whose `contents` is `write`, in any layout
+  (`permissions: {contents: write}` is the same grant as the block form).
+  Text that only looks like a grant, such as a `run:` script that writes a
+  workflow file, is not one.
+
+  It takes the parsed model or workflow text. Text the reader refuses grants
+  nothing.
   """
   def grants_contents_write_anywhere?(content) when is_binary(content) do
-    Regex.match?(~r/^[ \t]*contents:\s*write\b/m, content) or
-      Regex.match?(~r/^[ \t]*permissions:\s*write-all\b/m, content) or
-      Regex.match?(~r/^[ \t]*write-all:\s*true\b/m, content)
+    case Workflow.parse(content) do
+      {:ok, %Workflow{} = workflow} -> grants_contents_write_anywhere?(workflow)
+      _ -> false
+    end
+  end
+
+  def grants_contents_write_anywhere?(%Workflow{permissions: permissions, jobs: jobs}) do
+    Enum.any?([permissions | Enum.map(jobs, & &1.permissions)], &grants_contents_write?/1)
+  end
+
+  defp grants_contents_write?(nil), do: false
+
+  defp grants_contents_write?(permissions) do
+    Workflow.text(permissions) == "write-all" or
+      Workflow.text(Kyaml.get(permissions, "contents")) == "write"
   end
 
   # A write whose failure is swallowed: stderr redirected away, or the
@@ -1327,11 +1432,6 @@ defmodule Hypatia.Rules.WorkflowHardening do
     ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
 
-  # `continue-on-error: true` as a key of the step, quoted or not. The prefix
-  # (indent, plus `- ` on the step's opening line) is captured so the key's
-  # column can be compared with the step's own key column.
-  @step_continue_on_error ~r/^(\s*(?:-\s+)?)(?:continue-on-error|"continue-on-error"|'continue-on-error')\s*:\s*true\b/
-
   @doc """
   Return true when a write operation's failure is masked, so a denied write
   cannot turn the job red: a shell mask on the write itself, or
@@ -1341,40 +1441,33 @@ defmodule Hypatia.Rules.WorkflowHardening do
   (standards' github-backup-mirror-reusable.yml documents and surfaces it).
 
   `content` is a workflow (or a fragment of one). Its steps are read with
-  `Hypatia.WorkflowYaml`, so only the items of each job's own `steps:` count;
-  a fragment without `jobs:` is judged by its shell masks alone.
+  `Hypatia.Workflow`, so only the items of each job's own `steps:` count; a
+  fragment the reader cannot read as a workflow is judged by its shell masks
+  alone.
   """
   def masked_write?(content) when is_binary(content) do
     shell_masked_write?(content) or
-      content
-      |> WorkflowYaml.active_lines()
-      |> WorkflowYaml.workflow_job_lines()
-      |> Enum.flat_map(&WorkflowYaml.job_steps/1)
-      |> Enum.any?(&masked_step?/1)
+      case Workflow.parse(content) do
+        {:ok, %Workflow{jobs: jobs}} ->
+          Enum.any?(jobs, fn job -> Enum.any?(job.steps, &masked_step?/1) end)
+
+        _ ->
+          false
+      end
   end
 
-  defp masked_job?(%{text: text, steps: steps}) do
-    shell_masked_write?(text) or Enum.any?(steps, &masked_step?/1)
+  defp masked_job?(%{values: values, steps: steps}) do
+    Enum.any?(values, &shell_masked_write?/1) or Enum.any?(steps, &masked_step?/1)
   end
 
   defp shell_masked_write?(text), do: Enum.any?(@write_masks, &Regex.match?(&1, text))
 
-  defp masked_step?(step) do
-    step_continue_on_error?(step) and performs_contents_write?(lines_text(step))
-  end
-
-  # `continue-on-error: true` at the step's own key column. Deeper text (a
-  # `run: |` script that writes a workflow file, a `with:` value) is not the
-  # step's flag.
-  defp step_continue_on_error?(step) do
-    key_column = WorkflowYaml.step_key_column(step)
-
-    Enum.any?(step, fn {line, _} ->
-      case Regex.run(@step_continue_on_error, line) do
-        [_, prefix] -> String.length(prefix) == key_column
-        nil -> false
-      end
-    end)
+  # `continue-on-error: true` as a key of the step itself, on a step that
+  # writes. Text deeper in the step (a `run: |` script that writes a workflow
+  # file, a `with:` value) is not the step's flag.
+  defp masked_step?(%Step{node: node}) do
+    match?(%{kind: :bool, value: true}, Kyaml.deref(Kyaml.get(node, "continue-on-error"))) and
+      writes?(scalar_values(node))
   end
 
   # ─── Internals ──────────────────────────────────────────────────────
@@ -1602,47 +1695,31 @@ defmodule Hypatia.Rules.WorkflowHardening do
   @wh014_upload ~r/\Agithub\/codeql-action\/upload-sarif@[^ \t]+\z/
   @wh014_workspace "/__wh014_workspace__"
 
-  defp wh014_masked_upload?(body, inherited_directory) do
-    # The job's keys above its `steps` key, quoted or not, as the shared
-    # reader recognises it.
-    [preamble | _] = String.split(body, ~r/^[ \t]*(?:steps|"steps"|'steps')[ \t]*:/m, parts: 2)
-    directory = wh014_default_directory(preamble, inherited_directory)
+  defp wh014_masked_upload?(%Workflow.Job{} = job, inherited_directory) do
+    directory = wh014_default_directory(job.node, inherited_directory)
 
-    body
-    |> job_step_texts()
+    job.steps
     |> Enum.reduce_while(MapSet.new(), fn step, tainted ->
-      upload = wh014_step_value(step, "uses")
-      report = wh014_step_input(step, "sarif_file")
-      report = wh014_path(report, @wh014_workspace)
+      report = wh014_path(Workflow.input(step, "sarif_file"), @wh014_workspace)
 
-      if is_binary(upload) and Regex.match?(@wh014_upload, upload) and
+      if is_binary(step.uses) and Regex.match?(@wh014_upload, step.uses) and
            not is_nil(report) and MapSet.member?(tainted, report) do
         {:halt, :masked_upload}
       else
         step_directory =
-          case wh014_step_value(step, "working-directory") do
+          case Kyaml.get(step.node, "working-directory") do
             nil -> directory
-            value -> wh014_directory(value, @wh014_workspace)
+            node -> wh014_directory(Workflow.text(node), @wh014_workspace)
           end
 
         next =
           if is_nil(step_directory) do
             tainted
           else
-            step
-            |> scan_run_blocks()
-            |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-            |> Enum.sort_by(&elem(&1, 0))
-            |> Enum.reduce(tainted, fn {_line, runs}, paths ->
-              # scan_run_blocks returns the scalar header and its body at
-              # the same line. Use the complete body once, in source order.
-              run = Enum.max_by(runs, &byte_size/1)
-
-              case wh014_run_tokens(run) do
-                {:ok, tokens} -> wh014_follow_commands(tokens, paths, step_directory)
-                :unknown -> paths
-              end
-            end)
+            case wh014_run_tokens(step.run) do
+              {:ok, tokens} -> wh014_follow_commands(tokens, tainted, step_directory)
+              :unknown -> tainted
+            end
           end
 
         {:cont, next}
@@ -1651,84 +1728,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
     |> Kernel.==(:masked_upload)
   end
 
-  defp wh014_step_lines(step) do
-    [item | rest] = String.split(step, "\n")
-
-    if Regex.match?(~r/^[ \t]*-[ \t]*(?:#.*)?$/, item) do
-      # A bare sequence marker has no key column. Read it from the first
-      # real mapping entry, keeping nested scalar text at its own indentation.
-      case Enum.reject(rest, &blank_or_comment?/1) do
-        [first | _] ->
-          column = indent_of(first)
-          if column > indent_of(item), do: {column, rest}, else: {nil, []}
-
-        [] ->
-          {nil, []}
-      end
-    else
-      case Regex.run(~r/^([ \t]*-[ \t]+)(.*)$/, item) do
-        [_, prefix, value] ->
-          column = String.length(prefix)
-          {column, [String.duplicate(" ", column) <> value | rest]}
-
-        _ ->
-          {nil, []}
-      end
-    end
-  end
-
-  defp wh014_step_value(step, key) do
-    {column, lines} = wh014_step_lines(step)
-    wh014_yaml_value(lines, column, key)
-  end
-
-  defp wh014_step_input(step, key) do
-    {column, lines} = wh014_step_lines(step)
-
-    case Enum.drop_while(lines, fn line ->
-           indent_of(line) != column or not Regex.match?(~r/^[ \t]*with:[ \t]*$/, line)
-         end) do
-      [_with | rest] ->
-        inputs = Enum.take_while(rest, &(blank_or_comment?(&1) or indent_of(&1) > column))
-
-        case Enum.reject(inputs, &blank_or_comment?/1) do
-          [first | _] -> wh014_yaml_value(inputs, indent_of(first), key)
-          [] -> nil
-        end
-
-      [] ->
-        nil
-    end
-  end
-
-  defp wh014_yaml_value(lines, column, key) do
-    pattern = Regex.compile!("^[ \\t]*" <> Regex.escape(key) <> ":[ \\t]*(.*)$")
-
-    Enum.find_value(lines, fn line ->
-      if indent_of(line) == column do
-        case Regex.run(pattern, line) do
-          [_, value] -> wh014_literal_scalar(value)
-          _ -> nil
-        end
-      end
-    end)
-  end
-
-  defp wh014_literal_scalar(value) do
-    case Regex.run(~r/\A(?:"([^"]*)"|'([^']*)'|([^ \t#]+))[ \t]*(?:#.*)?\z/, String.trim(value)) do
-      nil -> nil
-      captures -> captures |> tl() |> Enum.find(&(&1 != ""))
-    end
-  end
-
-  defp wh014_default_directory(content, inherited) do
-    if Regex.match?(~r/^[ \t]*working-directory:/m, content) do
-      case Regex.run(@working_directory, content) do
-        [_, value] -> wh014_directory(value, @wh014_workspace)
-        _ -> nil
-      end
-    else
-      inherited
+  defp wh014_default_directory(node, inherited) do
+    case node |> Kyaml.get("defaults") |> Kyaml.get("run") |> Kyaml.get("working-directory") do
+      nil -> inherited
+      value -> wh014_directory(Workflow.text(value), @wh014_workspace)
     end
   end
 
@@ -1744,29 +1747,16 @@ defmodule Hypatia.Rules.WorkflowHardening do
       else: nil
   end
 
-  defp wh014_run_tokens(run) do
-    [header | lines] = String.split(run, "\n")
-
-    with [_, value] <- Regex.run(~r/^[ \t]*(?:-[ \t]+)?run:[ \t]*(.*)$/, header) do
-      script =
-        cond do
-          Regex.match?(~r/\A\|[-+]?[ \t]*(?:#.*)?\z/, value) -> Enum.join(lines, "\n")
-          String.starts_with?(value, [">", "'", "\""]) -> nil
-          true -> value
-        end
-
-      if is_binary(script) do
-        case wh014_lex(script, :plain, nil, [], false) do
-          {:ok, tokens, ""} -> {:ok, tokens}
-          _ -> :unknown
-        end
-      else
-        :unknown
-      end
-    else
+  # The YAML reader already decoded/folded/chomped the scalar. Only this
+  # step's own run value enters the bounded shell tokenizer.
+  defp wh014_run_tokens(script) when is_binary(script) do
+    case wh014_lex(script, :plain, nil, [], false) do
+      {:ok, tokens, ""} -> {:ok, tokens}
       _ -> :unknown
     end
   end
+
+  defp wh014_run_tokens(_), do: :unknown
 
   defp wh014_flush(tokens, nil), do: tokens
   defp wh014_flush(tokens, word), do: [{:word, word} | tokens]
@@ -2089,8 +2079,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
   directories are resolved relative to the workspace.
 
   This is deliberately bounded: dynamic paths, external script internals,
-  cross-job artefacts, arithmetic expansions, here-documents, folded or quoted
-  YAML run scalars and general shell control flow are not analysed. Missing literal-flow evidence
+  cross-job artefacts, arithmetic expansions, here-documents and general shell
+  control flow are not analysed. Workflow structure and scalar values come from the
+  canonical Workflow model, including aliases and folded/quoted scalars. Missing literal-flow evidence
   means this rule cannot establish its pattern; it is never a scan-completion
   or safety verdict. Do not treat absence of WH014 as assurance.
   """
@@ -2101,45 +2092,67 @@ defmodule Hypatia.Rules.WorkflowHardening do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      affected_jobs =
-        content
-        |> extract_job_blocks()
-        |> Enum.filter(fn {_job, _line, body} ->
-          directory = wh014_default_directory(workflow_preamble(content), @wh014_workspace)
-          wh014_masked_upload?(body, directory)
-        end)
-
-      if affected_jobs != [] do
-        [
-          %{
-            rule: "WH014",
-            file: rel,
-            severity: :high,
-            reason:
-              "workflow #{rel} has a literal report path from a masked JSON/SARIF-producing " <>
-                "command or findings count (`|| true` / `|| echo 0`) to a SARIF upload. A failed or " <>
-                "incomplete scan can become an empty SARIF upload that closes existing " <>
-                "alerts. An unrelated assertion or non-empty findings array does not " <>
-                "establish scanner completion.",
-            action: :report,
-            fix_recipe: "assert-findings-before-sarif-upload",
-            detail: %{
-              jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
-              analysis_scope:
-                "literal report paths in the same job; not scan-completion evidence",
-              fix:
-                "Preserve the scanner exit status and reject execution or coverage " <>
-                  "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
-                  "exit 1 carries findings, and exit 2 is an error; retain real findings. " <>
-                  "Then validate `jq -e 'type == \"array\"' findings.json`, allowing an " <>
-                  "empty array from a complete scan. Remove `|| true` / `|| echo 0`; " <>
-                  "never turn a scanner or parsing failure into zero findings."
-            }
-          }
-        ]
-      else
-        []
+      case Workflow.parse(content, rel) do
+        {:ok, nil} -> []
+        {:ok, workflow} -> wh014_findings(rel, workflow)
+        {:error, error} -> [wh014_unreadable(rel, error)]
       end
     end)
+  end
+
+  defp wh014_findings(rel, workflow) do
+    directory = wh014_default_directory(workflow.doc, @wh014_workspace)
+    affected_jobs = Enum.filter(workflow.jobs, &wh014_masked_upload?(&1, directory))
+
+    if affected_jobs != [] do
+      [
+        %{
+          rule: "WH014",
+          line: hd(affected_jobs).line,
+          file: rel,
+          severity: :high,
+          reason:
+            "workflow #{rel} has a literal report path from a masked JSON/SARIF-producing " <>
+              "command or findings count (`|| true` / `|| echo 0`) to a SARIF upload. A failed or " <>
+              "incomplete scan can become an empty SARIF upload that closes existing " <>
+              "alerts. An unrelated assertion or non-empty findings array does not " <>
+              "establish scanner completion.",
+          action: :report,
+          fix_recipe: "assert-findings-before-sarif-upload",
+          detail: %{
+            jobs: Enum.map(affected_jobs, & &1.id),
+            analysis_scope: "literal report paths in the same job; not scan-completion evidence",
+            fix:
+              "Preserve the scanner exit status and reject execution or coverage " <>
+                "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
+                "exit 1 carries findings, and exit 2 is an error; retain real findings. " <>
+                "Then validate `jq -e 'type == \"array\"' findings.json`, allowing an " <>
+                "empty array from a complete scan. Remove `|| true` / `|| echo 0`; " <>
+                "never turn a scanner or parsing failure into zero findings."
+          }
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp wh014_unreadable(rel, error) do
+    %{
+      rule: "WH014",
+      file: rel,
+      severity: :warn,
+      line: error.line,
+      reason:
+        "#{rel} could not be read as KYAML (#{error.code} at line #{error.line}, " <>
+          "column #{error.column}: #{error.message}), so WH014 cannot check its report uploads",
+      action: :report,
+      detail: %{
+        analysis_status: :unreadable,
+        parse_error: error.code,
+        column: error.column,
+        fix: "Correct the located KYAML error and rerun the scan; this is incomplete analysis."
+      }
+    }
   end
 end
