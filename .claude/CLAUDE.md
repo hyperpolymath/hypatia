@@ -13,7 +13,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ## Architecture
 
 ```
-Hypatia                       # 171 Elixir source files under lib/ (recursive tree count, 2026-11-16)
+Hypatia                       # 172 Elixir source files under lib/ (recursive tree count, 2026-11-17)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
@@ -129,9 +129,9 @@ Elixir pipeline:
         |
   DispatchManifest.write()              -- JSONL for execution layer
         |
-dispatch-runner.sh (gitbot-fleet)
+dispatch-runner.sh (gitbot-fleet; quarantined since 2026-09-26, exits 78: docs/AUTOMATION-QUARANTINE.adoc there)
   ├── auto_execute (>=0.95 confidence): robot-repo-automaton
-  ├── review (0.85-0.94): rhodibot creates PR
+  ├── review (0.85-0.94): rhodibot — an append to pending.jsonl is attempted (a failed write leaves no record; this reader is quarantined; it would queue the finding under shared-context/findings/pending/, and process-review-findings.sh's live publication is quarantined too); with HYPATIA_RHODIBOT_URL or HYPATIA_FLEET_URL set, Hypatia also posts rhodibot suggestFix, which may open a PR, whether or not the append succeeded
   └── report_only (<0.85): sustainabot advisory
         |
 OutcomeTracker.record_outcome()         -- Feedback loop
