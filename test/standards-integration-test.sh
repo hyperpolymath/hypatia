@@ -17,7 +17,7 @@ expect_outcome() { # name expected_exit expected_outcome root extra...
   local name="$1" want_rc="$2" want_outcome="$3"; shift 3
   local out rc=0
   out=$("$CHECK" "$@" 2>&1) || rc=$?
-  if [ "$rc" != "$want_rc" ] || ! printf '%s' "$out" | grep -q "outcome=$want_outcome"; then
+  if [ "$rc" != "$want_rc" ] || ! grep -q "outcome=$want_outcome" <<<"$out"; then
     echo "FAIL($name): want rc=$want_rc outcome=$want_outcome, got rc=$rc: $out" >&2
     exit 1
   fi
@@ -91,11 +91,11 @@ for t in bash grep sed awk sort head env; do
 done
 rc=0
 out=$(PATH="$TMP/nogh" "$TMP/nogh/bash" "$CHECK" --root "$ROOT" --verify-remote 2>&1) || rc=$?
-if [ "$rc" != "3" ] || ! printf '%s' "$out" | grep -q 'outcome=unavailable'; then
+if [ "$rc" != "3" ] || ! grep -q 'outcome=unavailable' <<<"$out"; then
   echo "FAIL(unavailable-tool): want rc=3 outcome=unavailable, got rc=$rc: $out" >&2
   exit 1
 fi
-if printf '%s' "$out" | grep -q 'outcome=pass'; then
+if grep -q 'outcome=pass' <<<"$out"; then
   echo "FAIL(unavailable-tool): unavailable was reported as pass" >&2
   exit 1
 fi
@@ -109,7 +109,7 @@ for t in bash grep sed awk head env; do
 done
 rc=0
 out=$(PATH="$TMP/nosort" "$TMP/nosort/bash" "$CHECK" --root "$ROOT" 2>&1) || rc=$?
-if [ "$rc" != "3" ] || ! printf '%s' "$out" | grep -q 'outcome=unavailable'; then
+if [ "$rc" != "3" ] || ! grep -q 'outcome=unavailable' <<<"$out"; then
   echo "FAIL(unavailable-sort): want rc=3 outcome=unavailable, got rc=$rc: $out" >&2
   exit 1
 fi

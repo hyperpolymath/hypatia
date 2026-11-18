@@ -74,7 +74,7 @@ for f in "${CALLERS[@]}"; do
   [ -n "$uses_lines" ] || fail "$f declares no metadatastician/standards reusable"
   while IFS= read -r line; do
     ref=$(printf '%s' "$line" | sed -E 's/.*uses:[[:space:]]*//; s/[[:space:]].*$//')
-    if ! printf '%s' "$ref" | grep -qE '^metadatastician/standards/\.github/workflows/[A-Za-z0-9._-]+\.yml@[0-9a-f]{40}$'; then
+    if ! grep -qE '^metadatastician/standards/\.github/workflows/[A-Za-z0-9._-]+\.yml@[0-9a-f]{40}$' <<<"$ref"; then
       fail "$f has a non-immutable standards ref (must be a full 40-hex SHA): $ref"
     fi
     pins+=("${ref##*@}")
@@ -97,7 +97,7 @@ for f in "${CALLERS[@]}"; do
   # Every pin used by this caller (normally exactly one) must be locked.
   while IFS= read -r line; do
     ref=$(printf '%s' "$line" | sed -E 's/.*uses:[[:space:]]*//; s/[[:space:]].*$//')
-    printf '%s\n' "$block" | grep -qF "metadatastician/standards@${ref##*@}" \
+    grep -qF "metadatastician/standards@${ref##*@}" <<<"$block" \
       || fail "actions.lock workflows entry for $f does not record ${ref}"
   done <<EOF_LOCK
 $(standards_uses "$WF/$f")
@@ -105,7 +105,7 @@ EOF_LOCK
 done
 grep -qF "'metadatastician/standards@$PIN':" "$LOCK" \
   || fail "actions.lock has no dependency entry for metadatastician/standards@$PIN"
-grep -A2 -F "'metadatastician/standards@$PIN':" "$LOCK" | grep -qF "commit: 'sha1-$PIN'" \
+grep -qF "commit: 'sha1-$PIN'" <<<"$(grep -A2 -F "'metadatastician/standards@$PIN':" "$LOCK")" \
   || fail "actions.lock dependency for standards@$PIN does not resolve to sha1-$PIN"
 
 # --- Lock transitive closure: every workflow ref and every transitive
@@ -155,7 +155,7 @@ for f in governance.yml hypatia-scan.yml; do
   [ -n "$raw" ] || fail "$f does not pass hypatia-ref explicitly (scanner source would float)"
   value=$(printf '%s' "$raw" | sed -E 's/^[[:space:]]*hypatia-ref:[[:space:]]*//; s/[[:space:]]+#.*$//; s/[[:space:]]+$//')
   if [ "$value" != '${{ github.event.pull_request.base.sha || github.sha }}' ] \
-     && ! printf '%s' "$value" | grep -qE '^[0-9a-f]{40}$'; then
+     && ! grep -qE '^[0-9a-f]{40}$' <<<"$value"; then
     fail "$f hypatia-ref is neither the base/event SHA expression nor a 40-hex SHA: $value"
   fi
 done

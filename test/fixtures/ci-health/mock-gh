@@ -16,7 +16,7 @@ for i in "${!args[@]}"; do
   [ "${args[$i]}" = "--jq" ] && jq_filter="${args[$((i + 1))]}"
 done
 
-if printf ' %s ' "$*" | grep -q ' -X PUT '; then
+if grep -q ' -X PUT ' <<<" $* "; then
   body=$(cat)
   if [ -n "${MOCK_STATE:-}" ] && [ "${MOCK_SCENARIO:-}" != "remediate-mismatch" ]; then
     printf '%s\n' "$body" > "$MOCK_STATE"

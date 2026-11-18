@@ -80,7 +80,7 @@ for doc in "$readme" EXPLAINME.adoc docs/README.adoc; do
     if [ ! -e "$dir/$path" ]; then say "$doc links $target, which does not exist"; continue; fi
     if [ "$target" != "$path" ] && [[ "$path" == *.adoc ]]; then
       frag=${target#*#}
-      anchors "$dir/$path" | grep -qxF -- "$frag" || say "$doc links $target, and $path defines no anchor $frag"
+      grep -qxF -- "$frag" < <(anchors "$dir/$path") || say "$doc links $target, and $path defines no anchor $frag"
     fi
   done < <(grep -oE 'link:[^[ ]+\[' "$doc" | sed -E 's/^link:(.*)\[$/\1/')
 done

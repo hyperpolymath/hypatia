@@ -67,8 +67,9 @@ case "$CLASS" in
     if gh api "repos/$O/$R/branches/$BR" --jq '.name' >/dev/null 2>&1; then echo "SKIP $R/D-BURN branch-exists"; exit 0; fi
     def=$(gh api "repos/$O/$R" --jq '.default_branch'); sha=$(gh api "repos/$O/$R/git/ref/heads/$def" --jq '.object.sha')
     targets=(); for p in $(gh api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' 2>/dev/null); do
-      gh api "repos/$O/$R/contents/$p?ref=$def" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null \
-        | grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request' && targets+=("$p")
+      # Captured, then matched (RE011); a failed fetch or decode is no match.
+      wf_text=$(gh api "repos/$O/$R/contents/$p?ref=$def" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null) \
+        && grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request' <<<"$wf_text" && targets+=("$p")
     done
     [ "${#targets[@]}" -eq 0 ] && { echo "SKIP $R/D-BURN no-targets"; exit 0; }
     if [ "$DRY" = "true" ]; then echo "DRYRUN $R/D-BURN would patch ${#targets[@]} file(s) + open PR"; exit 0; fi
@@ -84,7 +85,7 @@ case "$CLASS" in
     branches: [main, master]
   pull_request:"
 
-      if ! printf '%s' "$ccontent" | grep -q '^[[:space:]]*concurrency:'; then
+      if ! grep -q '^[[:space:]]*concurrency:' <<<"$ccontent"; then
         blk="$blk
 
 # Estate guardrail: scope push to default branches (PR fires once, not
