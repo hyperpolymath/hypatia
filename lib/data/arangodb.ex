@@ -57,13 +57,33 @@ defmodule Hypatia.Data.ArangoDB do
     "contributor_fixes"
   ]
 
+  @graph_name "hypatia_graph"
+
+  @graph_edge_definitions [
+    %{
+      "collection" => "trusts",
+      "from" => ["repos", "bots", "recipes", "contributors"],
+      "to" => ["repos", "bots", "recipes", "contributors"]
+    },
+    %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
+    %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
+    %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
+    %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
+    %{"collection" => "finding_matches_pattern", "from" => ["findings"], "to" => ["patterns"]},
+    %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
+    %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
+    %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
+  ]
+
   defstruct [
     :base_url,
     :database,
     :auth_header,
     connected: false,
     last_sync: nil,
-    sync_timer: nil
+    sync_timer: nil,
+    setup_timer: nil,
+    setup_attempts: 0
   ]
 
   # --- GenServer API ---
@@ -86,34 +106,58 @@ defmodule Hypatia.Data.ArangoDB do
       auth_header: "Basic #{auth}"
     }
 
-    # Try to connect, but don't crash if ArangoDB isn't available
-    state = try_connect(state)
+    # Never crashes when ArangoDB is unavailable: setup/1 degrades and retries.
+    {:ok, setup(state)}
+  end
 
-    state =
-      if state.connected do
-        case ensure_schema(state) do
-          :ok ->
-            state
-
-          {:error, reason} ->
-            Logger.warning("ArangoDB schema initialisation failed: #{inspect(reason)}")
-            %{state | connected: false}
-        end
+  # Connects and ensures the schema. The client counts as connected only once
+  # both succeed; until then it stays in degraded mode and retries with an
+  # exponential backoff (`:arango_setup_retry_base_ms` doubling up to
+  # `:arango_setup_retry_max_ms`), so a transient failure such as a 503
+  # during setup does not leave it disconnected for good. A retry repeats
+  # every step; a collection or index created by an earlier attempt answers
+  # 1207 and is accepted, and an existing graph (1925) is accepted once
+  # check_existing_graph/1 has verified it. The sync timer starts only after
+  # setup succeeds.
+  defp setup(state) do
+    result =
+      if reachable?(state) do
+        with {:error, reason} <- ensure_schema(state),
+             do: {:error, "ArangoDB schema initialisation failed: #{inspect(reason)}"}
       else
-        state
+        {:error, "ArangoDB not available at #{state.base_url}"}
       end
 
-    if state.connected do
-      timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
-      Logger.info("ArangoDB connected: #{url}/#{db}")
-      {:ok, %{state | sync_timer: timer}}
-    else
-      Logger.warning(
-        "ArangoDB not available at #{url} -- running in degraded mode (flat files only)"
-      )
+    case result do
+      :ok ->
+        timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
+        Logger.info("ArangoDB connected: #{state.base_url}/#{state.database}")
+        %{state | connected: true, sync_timer: timer, setup_timer: nil, setup_attempts: 0}
 
-      {:ok, state}
+      {:error, message} ->
+        delay = setup_retry_delay(state.setup_attempts)
+        level = if state.setup_attempts == 0, do: :warning, else: :debug
+
+        Logger.log(
+          level,
+          "#{message} -- running in degraded mode (flat files only); retrying setup in #{delay} ms"
+        )
+
+        timer = Process.send_after(self(), :retry_setup, delay)
+
+        %{
+          state
+          | connected: false,
+            setup_timer: timer,
+            setup_attempts: state.setup_attempts + 1
+        }
     end
+  end
+
+  defp setup_retry_delay(attempts) do
+    base = Application.get_env(:hypatia, :arango_setup_retry_base_ms, 5_000)
+    cap = Application.get_env(:hypatia, :arango_setup_retry_max_ms, 5 * 60 * 1_000)
+    min(base * Integer.pow(2, min(attempts, 20)), cap)
   end
 
   # --- Public API ---
@@ -334,6 +378,10 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
+  def handle_info(:retry_setup, state) do
+    {:noreply, setup(%{state | setup_timer: nil})}
+  end
+
   def handle_info(:sync_from_verisimdb, state) do
     if state.connected do
       do_sync(state)
@@ -347,31 +395,72 @@ defmodule Hypatia.Data.ArangoDB do
 
   # --- HTTP Client ---
 
-  defp try_connect(state) do
-    url = "#{state.base_url}/_api/version"
+  # Probes the target database first, so a user who administers only that
+  # database (and cannot read `_system`) still connects. A 404 database-not-
+  # found there means the database is not created yet: fall back to the
+  # `_system` version probe, so that setup can try to create it.
+  defp reachable?(state) do
+    target = http_get("#{db_url(state)}/_api/version", state.auth_header)
 
-    case http_get(url, state.auth_header) do
-      {:ok, %{"server" => "arango"}} -> %{state | connected: true}
-      _ -> %{state | connected: false}
+    cond do
+      arango_version?(target) ->
+        true
+
+      database_not_found?(target) ->
+        arango_version?(http_get("#{state.base_url}/_api/version", state.auth_header))
+
+      true ->
+        false
     end
   end
 
+  defp arango_version?({:ok, %{"server" => "arango"}}), do: true
+  defp arango_version?(_), do: false
+
+  # ArangoDB answers a request for a database that does not exist with a 404
+  # and errorNum 1228 (ERROR_ARANGO_DATABASE_NOT_FOUND).
+  defp database_not_found?({:error, {404, body}}) do
+    match?({:ok, %{"errorNum" => 1228}}, Jason.decode(body))
+  end
+
+  defp database_not_found?(_), do: false
+
+  defp db_url(state), do: "#{state.base_url}/_db/#{state.database}"
+
   defp ensure_schema(state) do
-    db_url = "#{state.base_url}/_db/#{state.database}"
+    # Every later step depends on the database, so stop here if it fails.
+    database = ensure_database(state)
 
-    # Create the database only when it is absent. Creating one needs
-    # Administrate on `_system`; a least-privilege user that administers only
-    # a pre-provisioned target database gets a 403 there, so probe first.
-    database =
-      case http_get("#{db_url}/_api/database/current", state.auth_header) do
-        {:ok, %{} = current} ->
-          {:ok, 200, current}
+    if schema_result_ok?(database),
+      do: ensure_collections_and_graph(state),
+      else: {:error, database}
+  end
 
-        _absent_or_unreadable ->
+  # Creates the database only when the probe says it does not exist (404,
+  # errorNum 1228). Creating one needs Administrate on `_system`; a
+  # least-privilege user that administers only a pre-provisioned target
+  # database gets a 403 there. Any other probe failure (a timeout, a 3xx, a
+  # 5xx) is no evidence of absence and is returned as it is.
+  defp ensure_database(state) do
+    probe = http_get("#{db_url(state)}/_api/database/current", state.auth_header)
+
+    case probe do
+      {:ok, %{} = current} ->
+        {:ok, 200, current}
+
+      _ ->
+        if database_not_found?(probe) do
           http_post_status("#{state.base_url}/_api/database", state.auth_header, %{
             "name" => state.database
           })
-      end
+        else
+          probe
+        end
+    end
+  end
+
+  defp ensure_collections_and_graph(state) do
+    db_url = db_url(state)
 
     # Create document collections
     documents =
@@ -405,30 +494,18 @@ defmodule Hypatia.Data.ArangoDB do
 
     # Create named graph
     graph =
-      http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
-        "name" => "hypatia_graph",
-        "edgeDefinitions" => [
-          %{
-            "collection" => "trusts",
-            "from" => ["repos", "bots", "recipes", "contributors"],
-            "to" => ["repos", "bots", "recipes", "contributors"]
-          },
-          %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
-          %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
-          %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
-          %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
-          %{
-            "collection" => "finding_matches_pattern",
-            "from" => ["findings"],
-            "to" => ["patterns"]
-          },
-          %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
-          %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
-          %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
-        ]
-      })
+      case http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
+             "name" => @graph_name,
+             "edgeDefinitions" => @graph_edge_definitions
+           }) do
+        {:ok, status, %{"errorNum" => 1925}} when status in 400..499 ->
+          check_existing_graph(state)
 
-    results = [database] ++ documents ++ edges ++ indices ++ [graph]
+        created ->
+          created
+      end
+
+    results = documents ++ edges ++ indices ++ [graph]
 
     case Enum.find(results, &(not schema_result_ok?(&1))) do
       nil ->
@@ -443,15 +520,51 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
+  # A duplicate-graph answer (1925) says only that a graph of that name
+  # exists, not that it is ours. It is accepted when, for every required
+  # edge definition, the existing graph has an edge definition on the same
+  # collection whose `from` and `to` vertex collections are exactly the
+  # required ones (as sets: order and duplicates do not matter). Extra edge
+  # definitions and orphan collections in the existing graph are allowed.
+  # A mismatch is a schema failure; the graph is never replaced.
+  defp check_existing_graph(state) do
+    case http_get("#{db_url(state)}/_api/gharial/#{@graph_name}", state.auth_header) do
+      {:ok, %{"graph" => %{"edgeDefinitions" => existing}} = body} when is_list(existing) ->
+        case graph_mismatches(existing) do
+          [] -> {:ok, 200, body}
+          mismatches -> {:error, {:graph_mismatch, mismatches}}
+        end
+
+      other ->
+        {:error, {:graph_unreadable, other}}
+    end
+  end
+
+  defp graph_mismatches(existing) do
+    by_collection = Map.new(existing, &{&1["collection"], &1})
+
+    @graph_edge_definitions
+    |> Enum.reject(&same_vertices?(&1, Map.get(by_collection, &1["collection"])))
+    |> Enum.map(& &1["collection"])
+  end
+
+  defp same_vertices?(required, %{} = actual) do
+    Enum.all?(["from", "to"], fn side ->
+      is_list(actual[side]) and MapSet.new(actual[side]) == MapSet.new(required[side])
+    end)
+  end
+
+  defp same_vertices?(_required, nil), do: false
+
   # A schema step succeeds on a 2xx, or on a 4xx that says the resource
-  # already exists (1207 duplicate name, 1925 duplicate graph), which happens
-  # on every initialisation after the first. Any other status fails, even with
-  # a JSON body: a gateway's `{"message": "forbidden"}` is not a success.
+  # already exists (1207 duplicate name), which happens on every
+  # initialisation after the first. A duplicate graph (1925) is checked by
+  # check_existing_graph/1 instead. Any other status fails, even with a JSON
+  # body: a gateway's `{"message": "forbidden"}` is not a success.
   defp schema_result_ok?({:ok, status, _}) when status in 200..299, do: true
 
-  defp schema_result_ok?({:ok, status, %{"errorNum" => number}})
-       when status in 400..499 and number in [1207, 1925],
-       do: true
+  defp schema_result_ok?({:ok, status, %{"errorNum" => 1207}}) when status in 400..499,
+    do: true
 
   defp schema_result_ok?(_), do: false
 

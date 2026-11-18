@@ -51,8 +51,11 @@ defmodule Hypatia.Data.ArangoDBRedirectStatusTest do
 
         reply =
           cond do
-            String.starts_with?(head, "GET /_api/version") ->
+            String.starts_with?(head, "GET ") and String.contains?(head, "/_api/version ") ->
               respond(200, ~s({"server":"arango","version":"3.12.0"}), "")
+
+            String.starts_with?(head, "GET ") ->
+              respond(200, ~s({"error":false,"result":{"name":"hypatia"}}), "")
 
             String.starts_with?(head, "POST ") and String.contains?(head, "/_api/cursor ") ->
               respond(307, "{}", "Location: http://127.0.0.1:1/elsewhere\r\n")

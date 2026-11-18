@@ -6,13 +6,26 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
   alias Hypatia.Data.ArangoDB
 
   defmodule Stub do
-    def init(respond), do: respond
+    def init(arg), do: arg
 
-    def call(conn, respond) do
+    # Every response carries `location: /redirect-target`, and that path
+    # answers a terminal 200 that would read as success, so a client that
+    # followed a redirect would pass a 3xx test. Any request to it is
+    # reported to the test process.
+    def call(%{request_path: "/redirect-target"} = conn, {parent, _respond}) do
+      send(parent, {:redirect_target, conn.method})
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(200, Jason.encode!(%{"error" => false, "result" => []}))
+    end
+
+    def call(conn, {_parent, respond}) do
       {:ok, _body, conn} = Plug.Conn.read_body(conn)
-      # A route the test does not describe answers 404, as ArangoDB does for
-      # an unknown database or path, so the probe of the target database
-      # falls through to creating it.
+      # A route the test does not describe answers 404 database-not-found
+      # (errorNum 1228), as ArangoDB does for an unknown database, so the
+      # probes of the target database fall through to `_system` and to
+      # creating it.
       {status, body} =
         try do
           respond.(conn.method, conn.request_path)
@@ -52,6 +65,8 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
 
       assert {:reply, {:error, {unquote(status), _}}, ^state} =
                ArangoDB.handle_call({:query, "RETURN 1", %{}}, nil, state)
+
+      refute_received {:redirect_target, _}
     end
   end
 
@@ -92,6 +107,7 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
       assert log =~ "schema initialisation failed"
       refute log =~ "schema ensured"
       refute log =~ "ArangoDB connected:"
+      refute_received {:redirect_target, _}
     end
   end
 
@@ -108,6 +124,9 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
           else
             {201, %{"error" => false}}
           end
+
+        "GET", "/_db/hypatia/_api/gharial/hypatia_graph" ->
+          {200, graph(required_edge_definitions())}
       end)
 
       capture_log(fn ->
@@ -161,6 +180,9 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
       "GET", "/_api/version" ->
         {200, %{"server" => "arango"}}
 
+      "GET", "/_db/hypatia/_api/version" ->
+        {200, %{"server" => "arango"}}
+
       "GET", path ->
         if String.ends_with?(path, "/_api/database/current"),
           do: {200, %{"error" => false, "result" => %{"name" => "hypatia"}}},
@@ -211,8 +233,296 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
     assert_received :created_database
   end
 
+  # The connectivity probe asks the target database, so a user who
+  # administers only that database connects although `_system` refuses it.
+  test "connectivity is probed on the target database, not _system" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_db/hypatia/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", "/_api/version" ->
+        send(parent, :probed_system)
+        {403, %{"error" => true, "errorNum" => 11}}
+
+      "GET", "/_db/hypatia/_api/database/current" ->
+        {200, %{"error" => false, "result" => %{"name" => "hypatia"}}}
+
+      "POST", _ ->
+        {201, %{"error" => false}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      assert state.connected
+      Process.cancel_timer(state.sync_timer)
+    end)
+
+    refute_received :probed_system
+  end
+
+  # Only a 404 database-not-found on the target falls back to `_system`; any
+  # other failure leaves the client disconnected.
+  test "a failing target probe other than 404 does not fall back to _system" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_db/hypatia/_api/version" ->
+        {503, %{"error" => true, "errorNum" => 503}}
+
+      "GET", "/_api/version" ->
+        send(parent, :probed_system)
+        {200, %{"server" => "arango"}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      refute state.connected
+      cancel(state.setup_timer)
+    end)
+
+    refute_received :probed_system
+  end
+
+  # A failed probe of the target database is no evidence that it is absent:
+  # only a 404 with errorNum 1228 leads to creating it.
+  for status <- [307, 500, 503] do
+    test "a #{status} from the database probe fails setup without creating it" do
+      parent = self()
+
+      serve(fn
+        "GET", "/_db/hypatia/_api/version" ->
+          {200, %{"server" => "arango"}}
+
+        "GET", "/_db/hypatia/_api/database/current" ->
+          {unquote(status), %{"error" => true, "errorNum" => 1228}}
+
+        "POST", path ->
+          send(parent, {:post, path})
+          {201, %{"error" => false}}
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, state} = ArangoDB.init([])
+          refute state.connected
+          cancel(state.setup_timer)
+        end)
+
+      assert log =~ "schema initialisation failed"
+      refute_received {:post, _}
+      refute_received {:redirect_target, _}
+    end
+  end
+
+  # When the database step fails, none of the collection, index or graph
+  # requests is sent.
+  test "a failed database step stops setup before the dependent requests" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "POST", "/_api/database" ->
+        {403, %{"error" => true, "errorNum" => 11}}
+
+      "POST", path ->
+        send(parent, {:post, path})
+        {201, %{"error" => false}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      refute state.connected
+      cancel(state.setup_timer)
+    end)
+
+    refute_received {:post, _}
+  end
+
+  # A duplicate graph (1925) is accepted only when the existing graph has
+  # the required edge definitions; order within from/to and extra edge
+  # definitions do not matter.
+  test "an existing graph with the required edge definitions is accepted" do
+    existing =
+      [%{"collection" => "extra", "from" => ["repos"], "to" => ["bots"]}] ++
+        Enum.map(required_edge_definitions(), fn d ->
+          %{d | "from" => Enum.reverse(d["from"]), "to" => Enum.reverse(d["to"])}
+        end)
+
+    serve_existing_graph(existing)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      assert state.connected
+      Process.cancel_timer(state.sync_timer)
+    end)
+
+    assert_received {:graph_write, "POST"}
+    refute_received {:graph_write, _}
+  end
+
+  for {name, change} <- [
+        {"different vertex collections",
+         quote(
+           do: fn d ->
+             if d["collection"] == "dispatches", do: %{d | "to" => ["repos"]}, else: d
+           end
+         )},
+        {"a missing edge collection",
+         quote(do: fn d -> if d["collection"] == "trusts", do: nil, else: d end)}
+      ] do
+    test "an existing graph with #{name} is a schema failure, not replaced" do
+      existing =
+        required_edge_definitions()
+        |> Enum.map(unquote(change))
+        |> Enum.reject(&is_nil/1)
+
+      serve_existing_graph(existing)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, state} = ArangoDB.init([])
+          refute state.connected
+          assert state.sync_timer == nil
+          cancel(state.setup_timer)
+        end)
+
+      assert log =~ "graph_mismatch"
+      refute log =~ "schema ensured"
+      assert_received {:graph_write, "POST"}
+      refute_received {:graph_write, _}
+    end
+  end
+
+  # A transient failure during setup leaves the client disconnected, with a
+  # retry scheduled and no sync timer; the retry accepts what the first
+  # attempt created (1207) and then connects and starts syncing.
+  test "a transient schema failure is retried until setup succeeds" do
+    put_retry_env(10, 40)
+    first = :atomics.new(1, [])
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", "/_db/hypatia/_api/database/current" ->
+        {200, %{"error" => false, "result" => %{"name" => "hypatia"}}}
+
+      "POST", "/_db/hypatia/_api/collection" ->
+        if :atomics.exchange(first, 1, 1) == 0,
+          do: {503, %{"error" => true, "errorNum" => 503}},
+          else: {409, %{"error" => true, "errorNum" => 1207}}
+
+      "POST", _ ->
+        {201, %{"error" => false}}
+    end)
+
+    capture_log(fn ->
+      {:ok, pid} = GenServer.start(ArangoDB, [])
+      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+      assert %{connected: false, sync_timer: nil, setup_timer: retry} = :sys.get_state(pid)
+      assert is_reference(retry)
+
+      assert eventually(fn -> GenServer.call(pid, :connected?) end)
+      assert %{sync_timer: sync, setup_timer: nil, setup_attempts: 0} = :sys.get_state(pid)
+      assert is_reference(sync)
+    end)
+  end
+
+  test "an unreachable server keeps retrying with backoff and never syncs" do
+    put_retry_env(5, 20)
+    serve(fn "GET", _ -> {503, %{"error" => true}} end)
+
+    capture_log(fn ->
+      {:ok, pid} = GenServer.start(ArangoDB, [])
+      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+      assert eventually(fn -> :sys.get_state(pid).setup_attempts >= 4 end)
+      assert %{connected: false, sync_timer: nil} = :sys.get_state(pid)
+    end)
+  end
+
+  defp serve_existing_graph(existing) do
+    parent = self()
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", "/_db/hypatia/_api/gharial/hypatia_graph" ->
+        {200, graph(existing)}
+
+      method, "/_db/hypatia/_api/gharial" <> _ when method != "GET" ->
+        send(parent, {:graph_write, method})
+        {409, %{"error" => true, "errorNum" => 1925}}
+
+      "POST", _ ->
+        {201, %{"error" => false}}
+    end)
+  end
+
+  defp graph(edge_definitions) do
+    %{
+      "error" => false,
+      "code" => 200,
+      "graph" => %{
+        "name" => "hypatia_graph",
+        "edgeDefinitions" => edge_definitions,
+        "orphanCollections" => []
+      }
+    }
+  end
+
+  defp required_edge_definitions do
+    vertices = ["repos", "bots", "recipes", "contributors"]
+
+    [
+      %{"collection" => "trusts", "from" => vertices, "to" => vertices},
+      %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
+      %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
+      %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
+      %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
+      %{"collection" => "finding_matches_pattern", "from" => ["findings"], "to" => ["patterns"]},
+      %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
+      %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
+      %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
+    ]
+  end
+
+  defp put_retry_env(base, max) do
+    for {key, value} <- [arango_setup_retry_base_ms: base, arango_setup_retry_max_ms: max] do
+      previous = Application.fetch_env(:hypatia, key)
+      Application.put_env(:hypatia, key, value)
+
+      on_exit(fn ->
+        case previous do
+          {:ok, old} -> Application.put_env(:hypatia, key, old)
+          :error -> Application.delete_env(:hypatia, key)
+        end
+      end)
+    end
+  end
+
+  defp eventually(check, tries \\ 100) do
+    cond do
+      check.() -> true
+      tries == 0 -> false
+      true -> Process.sleep(10) && eventually(check, tries - 1)
+    end
+  end
+
+  # init/1 called from a test schedules its retry on the test process.
+  defp cancel(timer) when is_reference(timer), do: Process.cancel_timer(timer)
+  defp cancel(_), do: :ok
+
   defp serve(respond) do
-    pid = start_supervised!({Bandit, plug: {Stub, respond}, ip: {127, 0, 0, 1}, port: 0})
+    pid =
+      start_supervised!({Bandit, plug: {Stub, {self(), respond}}, ip: {127, 0, 0, 1}, port: 0})
+
     {:ok, {_, port}} = ThousandIsland.listener_info(pid)
     url = "http://127.0.0.1:#{port}"
     System.put_env("HYPATIA_ARANGO_URL", url)
