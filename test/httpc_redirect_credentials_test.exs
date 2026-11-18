@@ -17,8 +17,10 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
   # do not depend on the pin alone.
   #
   # Each case runs a redirector and a target on loopback. The redirector
-  # answers with STATUS and a Location on the target; the target reports the
-  # request line and any authorization header it receives.
+  # answers with STATUS and a Location on the target, and reports the
+  # authorization header it received, which must be the expected credential
+  # (otherwise an empty list at the target would prove nothing). The target
+  # reports the request line and any authorization header it receives.
   use ExUnit.Case, async: true
 
   @token "Bearer test-dummy-redirect-probe"
@@ -101,7 +103,7 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
     server =
       spawn_link(fn ->
         {:ok, s1} = :gen_tcp.accept(front, 5_000)
-        _ = read_request(s1)
+        send(parent, {:start, s1 |> read_request() |> authorization()})
 
         :ok =
           :gen_tcp.send(
@@ -112,9 +114,9 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
 
         :gen_tcp.close(s1)
         {:ok, s2} = :gen_tcp.accept(target, 5_000)
-        [line | headers] = s2 |> read_request() |> String.split("\r\n")
-        auth = Enum.filter(headers, &String.starts_with?(String.downcase(&1), "authorization:"))
-        send(parent, {:seen, line, auth})
+        request = read_request(s2)
+        [line | _] = String.split(request, "\r\n")
+        send(parent, {:seen, line, authorization(request)})
         :gen_tcp.send(s2, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         :gen_tcp.close(s2)
       end)
@@ -138,10 +140,24 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
     {:ok, {{_, 200, _}, _, _}} =
       :httpc.request(method, request, [timeout: 5_000, autoredirect: true], [])
 
+    # The probe is valid only if the credentials did reach the redirector.
+    assert_receive {:start, start_auth}, 5_000
+    assert start_auth == [expected_authorization(cred)]
     assert_receive {:seen, line, auth}, 5_000
     Process.unlink(server)
     Enum.each([front, back], &:gen_tcp.close/1)
     {line, auth}
+  end
+
+  defp expected_authorization(:header), do: "authorization: #{@token}"
+  defp expected_authorization(:userinfo), do: "authorization: Basic " <> Base.encode64(@userinfo)
+
+  # The authorization header lines of a request head.
+  defp authorization(request) do
+    request
+    |> String.split("\r\n")
+    |> tl()
+    |> Enum.filter(&String.starts_with?(String.downcase(&1), "authorization:"))
   end
 
   defp listen(ip, port \\ 0) do
