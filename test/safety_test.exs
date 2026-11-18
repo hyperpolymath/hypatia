@@ -569,25 +569,30 @@ defmodule Hypatia.Safety.BatchRollbackOrderTest do
     assert instruction_files(manifest) == ["same.txt", "same.txt"]
   end
 
-  test "a failed status write after the manifest was written: the retry adds no second manifest",
+  test "a rollback that left its rows and manifest but no status: the retry adds no second manifest",
        ctx do
     seed(ctx, "a", [row(ctx.batch, "f1.txt"), row(ctx.batch, "f2.txt")])
 
-    # Make batches.jsonl unwritable for the status update only.
-    batches = Path.join(ctx.dispatch, "batches.jsonl")
-    moved = batches <> ".moved-#{ctx.uniq}"
-    File.rename!(batches, moved)
-    File.mkdir_p!(batches)
-
-    try do
-      assert {:error, {:status_write_failed, _}} = BatchRollback.rollback(ctx.batch, "t")
-    after
-      File.rm_rf!(batches)
-      File.rename!(moved, batches)
+    # The state that a rollback leaves when its status write fails (a status write cannot
+    # be made to fail here once an unreadable batch log is an error, and the tests may
+    # run as root): both rollback rows and the manifest are in the logs, the status is
+    # still `pending`.
+    for f <- ["f1.txt", "f2.txt"] do
+      {:ok, _} =
+        Hypatia.OutcomeTracker.record_batch_rollback(
+          "recipe-e0-25-order",
+          "owner/repo",
+          f,
+          ctx.batch
+        )
     end
 
-    assert length(manifests_of(ctx)) == 1
-    assert length(rollback_rows(ctx)) == 2
+    File.write!(
+      ctx.manifests,
+      Jason.encode!(%{"batch_id" => ctx.batch, "instructions" => []}) <> "\n",
+      [:append, :utf8]
+    )
+
     refute status(ctx) == "rolled_back"
 
     assert {:ok, 2} = BatchRollback.rollback(ctx.batch, "t")
@@ -608,5 +613,78 @@ defmodule Hypatia.Safety.BatchRollbackOrderTest do
     assert {:ok, 0} = BatchRollback.rollback(ctx.batch, "again")
     assert length(batch_rows(ctx)) == rows_after_first
     assert length(manifests_of(ctx)) == manifests_after_first
+  end
+
+  test "an unreadable monthly outcome file stops the rollback; the retry reverts every outcome",
+       ctx do
+    seed(ctx, "a", [row(ctx.batch, "f1.txt")])
+    # A directory with a .jsonl name cannot be read as a file (EISDIR); it sorts last.
+    bad = Path.join(ctx.outcomes, "e0-25-#{ctx.uniq}-b.jsonl")
+    File.mkdir_p!(bad)
+
+    try do
+      assert {:error, {:outcome_read_failed, _, _}} = BatchRollback.rollback(ctx.batch, "t")
+      assert manifests_of(ctx) == []
+      assert rollback_rows(ctx) == []
+      refute status(ctx) == "rolled_back"
+    after
+      File.rm_rf!(bad)
+    end
+
+    seed(ctx, "b", [row(ctx.batch, "f2.txt")])
+    assert {:ok, 2} = BatchRollback.rollback(ctx.batch, "t")
+    assert [manifest] = manifests_of(ctx)
+    assert instruction_files(manifest) == ["f2.txt", "f1.txt"]
+    assert status(ctx) == "rolled_back"
+  end
+
+  test "an unreadable manifest log is an error, not proof that no manifest exists", ctx do
+    seed(ctx, "a", [row(ctx.batch, "f1.txt")])
+    restore = break_manifest_log(ctx)
+
+    try do
+      assert {:error, {:manifest_read_failed, _}} = BatchRollback.rollback(ctx.batch, "t")
+      refute status(ctx) == "rolled_back"
+    after
+      restore.()
+    end
+
+    assert {:ok, 1} = BatchRollback.rollback(ctx.batch, "t")
+    assert length(manifests_of(ctx)) == 1
+  end
+
+  test "an unreadable batch log is an error, not proof that the batch is not rolled back",
+       ctx do
+    seed(ctx, "a", [row(ctx.batch, "f1.txt")])
+    assert {:ok, 1} = BatchRollback.rollback(ctx.batch, "t")
+    rows = length(batch_rows(ctx))
+
+    batches = Path.join(ctx.dispatch, "batches.jsonl")
+    moved = batches <> ".moved-#{ctx.uniq}"
+    File.rename!(batches, moved)
+    File.mkdir_p!(batches)
+
+    try do
+      assert {:error, {:batch_log_read_failed, _}} = BatchRollback.rollback(ctx.batch, "again")
+    after
+      File.rm_rf!(batches)
+      File.rename!(moved, batches)
+    end
+
+    assert length(batch_rows(ctx)) == rows
+    assert {:ok, 0} = BatchRollback.rollback(ctx.batch, "again")
+  end
+
+  test "overlapping rollbacks of one batch write one set of rows and one manifest", ctx do
+    seed(ctx, "a", [row(ctx.batch, "f1.txt"), row(ctx.batch, "f2.txt")])
+
+    results =
+      1..8
+      |> Enum.map(fn _ -> Task.async(fn -> BatchRollback.rollback(ctx.batch, "t") end) end)
+      |> Task.await_many(30_000)
+
+    assert Enum.sort(results) == List.duplicate({:ok, 0}, 7) ++ [{:ok, 2}]
+    assert length(rollback_rows(ctx)) == 2
+    assert length(manifests_of(ctx)) == 1
   end
 end

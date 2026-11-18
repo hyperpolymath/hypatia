@@ -66,11 +66,25 @@ defmodule Hypatia.Safety.BatchRollback do
       manifest still lists every original outcome, once.
   """
   def rollback(batch_id, reason) do
-    if batch_status(batch_id) == "rolled_back" do
-      {:ok, 0}
-    else
-      do_rollback(batch_id, reason)
+    # One rollback of a batch at a time, in this VM: the status check, the outcome
+    # snapshot, the writes and the status write are one critical section, so that two
+    # callers cannot both read `pending` and both append rows and a manifest. The
+    # status is read again inside the lock. (A lock between VMs or OS processes is not
+    # taken: the module has one writer node.)
+    :global.trans({{__MODULE__, batch_id}, self()}, fn -> locked_rollback(batch_id, reason) end)
+  end
+
+  defp locked_rollback(batch_id, reason) do
+    case batch_status(batch_id) do
+      {:ok, "rolled_back"} -> {:ok, 0}
+      {:ok, _status} -> do_rollback(batch_id, reason)
+      {:error, _} = error -> fail(batch_id, error)
     end
+  end
+
+  defp fail(batch_id, {:error, why} = error) do
+    Logger.error("Rollback of batch #{batch_id} did not complete: #{inspect(why)}")
+    error
   end
 
   defp do_rollback(batch_id, reason) do
@@ -78,12 +92,10 @@ defmodule Hypatia.Safety.BatchRollback do
 
     # 1. The rows of this batch, in the order of the log. A row that a rollback wrote
     #    is not an outcome of the batch: it is what a rollback did to one.
-    {originals, written} =
-      batch_id
-      |> find_batch_outcomes()
-      |> Enum.split_with(&(Map.get(&1, "caused_by") != "batch_rollback"))
-
-    with :ok <- mark_false_positives(originals, written, batch_id),
+    with {:ok, outcomes} <- find_batch_outcomes(batch_id),
+         {originals, written} =
+           Enum.split_with(outcomes, &(Map.get(&1, "caused_by") != "batch_rollback")),
+         :ok <- mark_false_positives(originals, written, batch_id),
          :ok <- write_manifest(batch_id, reason, originals),
          :ok <- set_status(batch_id, "rolled_back") do
       Logger.warning(
@@ -92,9 +104,7 @@ defmodule Hypatia.Safety.BatchRollback do
 
       {:ok, length(originals)}
     else
-      {:error, why} = error ->
-        Logger.error("Rollback of batch #{batch_id} did not complete: #{inspect(why)}")
-        error
+      {:error, _} = error -> fail(batch_id, error)
     end
   end
 
@@ -144,45 +154,55 @@ defmodule Hypatia.Safety.BatchRollback do
   defp write_manifest(batch_id, reason, originals) do
     rollback_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "rollbacks.jsonl"])
 
-    if manifest_written?(rollback_path, batch_id) do
-      :ok
-    else
-      manifest = %{
-        "batch_id" => batch_id,
-        "reason" => reason,
-        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-        "affected_outcomes" => length(originals),
-        "action" => "revert",
-        "instructions" =>
-          originals
-          |> Enum.reverse()
-          |> Enum.map(fn o ->
-            %{
-              "repo" => Map.get(o, "repo"),
-              "file" => Map.get(o, "file"),
-              "action" => "git revert"
-            }
-          end)
-      }
+    case manifest_written?(rollback_path, batch_id) do
+      {:ok, true} -> :ok
+      {:ok, false} -> append_manifest(rollback_path, batch_id, reason, originals)
+      {:error, _} = error -> error
+    end
+  end
 
-      case File.write(rollback_path, Jason.encode!(manifest) <> "\n", [:append, :utf8]) do
-        :ok -> :ok
-        {:error, why} -> {:error, {:manifest_write_failed, why}}
-      end
+  defp append_manifest(rollback_path, batch_id, reason, originals) do
+    manifest = %{
+      "batch_id" => batch_id,
+      "reason" => reason,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "affected_outcomes" => length(originals),
+      "action" => "revert",
+      "instructions" =>
+        originals
+        |> Enum.reverse()
+        |> Enum.map(fn o ->
+          %{
+            "repo" => Map.get(o, "repo"),
+            "file" => Map.get(o, "file"),
+            "action" => "git revert"
+          }
+        end)
+    }
+
+    case File.write(rollback_path, Jason.encode!(manifest) <> "\n", [:append, :utf8]) do
+      :ok -> :ok
+      {:error, why} -> {:error, {:manifest_write_failed, why}}
     end
   end
 
   defp manifest_written?(path, batch_id) do
     case File.read(path) do
       {:ok, content} ->
-        content
-        |> String.split("\n", trim: true)
-        |> Enum.any?(fn line ->
-          match?({:ok, %{"batch_id" => ^batch_id}}, Jason.decode(line))
-        end)
+        {:ok,
+         content
+         |> String.split("\n", trim: true)
+         |> Enum.any?(fn line ->
+           match?({:ok, %{"batch_id" => ^batch_id}}, Jason.decode(line))
+         end)}
 
-      _ ->
-        false
+      # Only a missing log means that no manifest was written. Any other failure may hide
+      # one, and appending a second would break the idempotency of a retry.
+      {:error, :enoent} ->
+        {:ok, false}
+
+      {:error, why} ->
+        {:error, {:manifest_read_failed, why}}
     end
   end
 
@@ -194,12 +214,30 @@ defmodule Hypatia.Safety.BatchRollback do
   end
 
   # The latest status that the batch log gives for this batch, or nil.
+  # {:error, _} when the log cannot be read: that is not "no status", and a rolled_back
+  # row may be in it. A missing log is no status.
   defp batch_status(batch_id) do
-    list_batches_from_file(:infinity)
-    |> Enum.find(&(Map.get(&1, "batch_id") == batch_id and Map.has_key?(&1, "status")))
-    |> case do
-      nil -> nil
-      entry -> Map.get(entry, "status")
+    batch_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "batches.jsonl"])
+
+    case File.read(batch_path) do
+      {:ok, content} ->
+        status =
+          content
+          |> String.split("\n", trim: true)
+          |> Enum.map(&Jason.decode/1)
+          |> Enum.flat_map(fn
+            {:ok, %{"batch_id" => ^batch_id, "status" => status}} -> [status]
+            _ -> []
+          end)
+          |> List.last()
+
+        {:ok, status}
+
+      {:error, :enoent} ->
+        {:ok, nil}
+
+      {:error, why} ->
+        {:error, {:batch_log_read_failed, why}}
     end
   end
 
@@ -210,6 +248,9 @@ defmodule Hypatia.Safety.BatchRollback do
 
   # --- Internal ---
 
+  # {:ok, rows} in log order, or {:error, _} if the log directory or any monthly file
+  # cannot be read: a partial list would give an incomplete manifest, and the status
+  # that follows would make that final. A missing directory is an empty log.
   defp find_batch_outcomes(batch_id) do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
 
@@ -220,27 +261,36 @@ defmodule Hypatia.Safety.BatchRollback do
         # File.ls/1 has no fixed order. One file for each month, so a name sort is a
         # time sort; the lines of a file keep their order.
         |> Enum.sort()
-        |> Enum.flat_map(fn f ->
+        |> Enum.reduce_while({:ok, []}, fn f, {:ok, acc} ->
           path = Path.join(outcomes_dir, f)
 
           case File.read(path) do
             {:ok, content} ->
-              content
-              |> String.split("\n", trim: true)
-              |> Enum.map(&Jason.decode/1)
-              |> Enum.filter(fn
-                {:ok, o} -> Map.get(o, "batch_id") == batch_id
-                _ -> false
-              end)
-              |> Enum.map(fn {:ok, o} -> o end)
+              rows =
+                content
+                |> String.split("\n", trim: true)
+                |> Enum.map(&Jason.decode/1)
+                |> Enum.flat_map(fn
+                  {:ok, %{"batch_id" => ^batch_id} = o} -> [o]
+                  _ -> []
+                end)
 
-            _ ->
-              []
+              {:cont, {:ok, [rows | acc]}}
+
+            {:error, why} ->
+              {:halt, {:error, {:outcome_read_failed, f, why}}}
           end
         end)
+        |> case do
+          {:ok, chunks} -> {:ok, chunks |> Enum.reverse() |> Enum.concat()}
+          error -> error
+        end
 
-      _ ->
-        []
+      {:error, :enoent} ->
+        {:ok, []}
+
+      {:error, why} ->
+        {:error, {:outcome_read_failed, outcomes_dir, why}}
     end
   end
 
