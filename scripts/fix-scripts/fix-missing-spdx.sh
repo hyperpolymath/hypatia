@@ -67,7 +67,7 @@ fix_file() {
     local header="${COMMENT_STYLE[$ext]}"
 
     # Handle shebang lines — insert after shebang
-    if head -1 "$file" | grep -q "^#!"; then
+    if head -1 "$file" | grep >/dev/null "^#!"; then
       sed -i "1a\\${header}" "$file"
     else
       sed -i "1i\\${header}" "$file"

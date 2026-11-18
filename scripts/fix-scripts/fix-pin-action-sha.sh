@@ -90,7 +90,7 @@ for wf in "${WORKFLOWS_DIR}"/*.yml "${WORKFLOWS_DIR}"/*.yaml; do
     [[ -z "$action_ref" ]] && continue
 
     # Already SHA-pinned (40 hex chars after @) — skip
-    if echo "$action_ref" | grep -qE '@[0-9a-f]{40}'; then
+    if echo "$action_ref" | grep -E >/dev/null '@[0-9a-f]{40}'; then
       continue
     fi
 

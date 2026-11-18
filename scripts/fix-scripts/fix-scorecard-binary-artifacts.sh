@@ -23,7 +23,7 @@ count=0
   echo ""
 
   while IFS= read -r -d '' file; do
-    if file "$file" | grep -qE 'ELF|PE32|Mach-O|compiled|bytecode|binary|data'; then
+    if file "$file" | grep -E >/dev/null 'ELF|PE32|Mach-O|compiled|bytecode|binary|data'; then
       echo "BINARY: ${file#"${REPO}/"}"
       count=$((count + 1))
     fi

@@ -618,7 +618,7 @@ scan_repo_structure() {
     if [[ -d "$dir/.github/workflows" ]]; then
         for wf in "$dir/.github/workflows"/*.yml "$dir/.github/workflows"/*.yaml; do
             [[ -f "$wf" ]] || continue
-            if ! head -1 "$wf" | grep -q '^# SPDX-License-Identifier:'; then
+            if ! head -1 "$wf" | grep '^# SPDX-License-Identifier:' >/dev/null; then
                 emit_finding "medium" "repo_structure" "missing_spdx_header" \
                     "$wf" 1 "Workflow missing SPDX header" "CWE-1059" \
                     "Add '# SPDX-License-Identifier: MPL-2.0' as first line" "true"

@@ -14,7 +14,7 @@ REPO="${1:?Usage: fix-scorecard-ci-tests.sh <repo-path>}"
 WF_DIR="${REPO}/.github/workflows"
 
 # Already has CI if any workflow runs tests
-if ls "${WF_DIR}"/*.yml "${WF_DIR}"/*.yaml 2>/dev/null | xargs grep -l 'mix test\|cargo test\|deno test\|gleam test' 2>/dev/null | grep -q .; then
+if ls "${WF_DIR}"/*.yml "${WF_DIR}"/*.yaml 2>/dev/null | xargs grep -l 'mix test\|cargo test\|deno test\|gleam test' 2>/dev/null | grep >/dev/null .; then
   echo "[fix-scorecard-ci-tests] CI test workflow already present"
   exit 0
 fi

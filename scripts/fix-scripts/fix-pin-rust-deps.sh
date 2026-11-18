@@ -27,7 +27,7 @@ is_binary_crate() {
     find "${REPO}" -name "main.rs" \
       -not -path "*/.git/*" \
       -not -path "*/target/*" \
-      | grep -q . && return 0
+      | grep >/dev/null . && return 0
   fi
   return 1
 }

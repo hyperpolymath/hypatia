@@ -13,7 +13,7 @@ for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
     while IFS= read -r line; do
         if [[ "$line" =~ uses:.*@ ]]; then
             # Check if it has a SHA (40 hex chars)
-            if ! echo "$line" | grep -qE '@[a-f0-9]{40}'; then
+            if ! echo "$line" | grep -E '@[a-f0-9]{40}' >/dev/null; then
                 echo "ERROR: Unpinned action in $workflow"
                 echo "  $line"
                 echo "  Actions must use SHA pins: uses: action/name@SHA # version"
