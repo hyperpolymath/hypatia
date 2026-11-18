@@ -50,6 +50,10 @@ Commit `b660d08`, read on 2026-11-14.
 
 * A test shows: the fixed finding is gone and another finding of the same
   category stays, and the result is `verified`.
+* A test shows: 2 findings of 1 category in the same file that the scanner
+  cannot tell apart, and one is fixed. The result is `incomplete`, recorded as
+  `scan_skipped`: no credit and no blame for the fix (owner ruling of
+  2026-11-18, fail closed; recorded in pull request 1175).
 * A test shows: the fixed finding is still there, and the result is a failure.
 * A test shows: the scanner fails, and no outcome is recorded as verified.
 * `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
