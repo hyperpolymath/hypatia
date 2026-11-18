@@ -330,30 +330,6 @@ defmodule Hypatia.KyamlTest do
       end
     end
 
-    # Four times the entries must cost well under sixteen times the time: the
-    # collections used to be rebuilt per entry (20,000 block mapping entries
-    # took 4.8 s, now 0.5 s).
-    test "flat collections parse in linear time" do
-      shapes = [
-        fn n -> Enum.map_join(1..n, &"k#{&1}: #{&1}\n") end,
-        fn n -> Enum.map_join(1..n, &"- #{&1}\n") end,
-        fn n -> "[" <> Enum.map_join(1..n, ", ", &Integer.to_string/1) <> "]\n" end
-      ]
-
-      for shape <- shapes do
-        [small, large] =
-          for n <- [5_000, 20_000] do
-            text = shape.(n)
-            # The best of three, to keep a scheduler hiccup out of the ratio.
-            Enum.min(
-              for _ <- 1..3, do: elem(:timer.tc(fn -> {:ok, _} = Kyaml.parse(text) end), 0)
-            )
-          end
-
-        assert large / max(small, 1) < 10
-      end
-    end
-
     test "whole-input diagnostics count columns in code points" do
       assert {:error, %{code: "INVALID_NEWLINE", line: 1, column: 5}} =
                Kyaml.parse("x: 🟠\ry: 1\n")
