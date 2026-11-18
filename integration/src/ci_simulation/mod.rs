@@ -1263,7 +1263,18 @@ impl MockGitHubActions {
             .iter()
             .map(|job_def| {
                 let mut job = SimulatedJob::new(&job_def.name);
-                job.needs = job_def.needs.clone();
+                // `needs` names job ids; the lifecycle tracks jobs by name.
+                job.needs = job_def
+                    .needs
+                    .iter()
+                    .map(|need| {
+                        workflow
+                            .jobs
+                            .iter()
+                            .find(|other| &other.id == need)
+                            .map_or_else(|| need.clone(), |other| other.name.clone())
+                    })
+                    .collect();
                 job.runner = Some(RunnerInfo {
                     runner_type: job_def.runs_on.clone(),
                     ..Default::default()
@@ -1709,6 +1720,30 @@ mod tests {
         assert_eq!(
             names(github.get_jobs(&id).await.unwrap()),
             ["Build", "Test"]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_default_workflow_advances_to_completion_through_its_needs() {
+        // Test `needs` the job id "build"; the job is named "Build".
+        let mut ci = MockGitHubActions::new().with_default_ci();
+        let id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+
+        let mut status = BuildStatus::Queued;
+        for _ in 0..10 {
+            status = ci.advance_build(&id).await.unwrap();
+            if status == BuildStatus::Completed {
+                break;
+            }
+        }
+
+        let jobs = ci.get_jobs(&id).await.unwrap();
+        assert_eq!(status, BuildStatus::Completed, "{jobs:?}");
+        assert_eq!(jobs[1].needs, ["Build"]);
+        assert!(jobs.iter().all(|job| job.status == BuildStatus::Completed));
+        assert_eq!(
+            ci.get_build(&id).await.unwrap().conclusion,
+            Some(BuildConclusion::Success)
         );
     }
 }
