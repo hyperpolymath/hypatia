@@ -706,12 +706,13 @@ defmodule Hypatia.Rules do
   defdelegate scan_branch_protection(owner, repo), to: BranchProtection, as: :scan
 
   @doc """
-  Run research-extension checks (RE001-RE010) drawn from Snyk,
+  Run research-extension checks (RE001-RE011) drawn from Snyk,
   StepSecurity, Endor Labs and the academic supply-chain literature:
   absent/audit-only harden-runner, cache-key poisoning via head_ref,
   tag-pinned containers, exit-swallowing test steps, unpinned nested
   composite uses, workflow-level secret env, spoofable bot gates,
-  fromJSON(secrets), and provenance-free workflow_run artifacts.
+  fromJSON(secrets), provenance-free workflow_run artifacts, and (RE011,
+  flag-only) a pipe into a quiet grep in shell sources and `run:` blocks.
   Pure local file scan - no GitHub API.
   """
   defdelegate scan_research_extensions(repo_path, opts \\ []), to: ResearchExtensions, as: :scan
