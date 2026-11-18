@@ -16,7 +16,11 @@ defmodule Hypatia.ReviewerRedirectTest do
     def call(conn, {name, parent, respond}) do
       auth = Plug.Conn.get_req_header(conn, "authorization")
       send(parent, {:hit, name, conn.request_path, auth})
-      {status, location, body} = respond.(conn.request_path)
+
+      {status, location, body} =
+        if is_function(respond, 2),
+          do: respond.(conn.request_path, conn.port),
+          else: respond.(conn.request_path)
 
       conn
       |> then(fn c ->
@@ -58,6 +62,64 @@ defmodule Hypatia.ReviewerRedirectTest do
     hits = for _ <- 1..4, do: assert_received({:hit, :a, "/loop", _})
     assert length(hits) == 4
     refute_received {:hit, :a, _, _}
+  end
+
+  # Only the scheme changes (same host, same explicit port): a downgrade or
+  # upgrade is another origin, so the 301 is returned without a second request.
+  test "a redirect that changes only the scheme is refused" do
+    a = serve(:a, fn "/start", port -> {301, "https://127.0.0.1:#{port}/final", ""} end)
+
+    assert {:error, {:http_status, 301}} = Reviewer.get_same_origin("#{a}/start", @headers)
+    assert_received {:hit, :a, "/start", _}
+    refute_received {:hit, :a, _, _}
+  end
+
+  test "host names compare case-insensitively" do
+    a =
+      serve(:a, fn
+        "/start", port -> {301, "http://LocalHost:#{port}/final", ""}
+        "/final", _ -> {200, nil, "diff"}
+      end)
+
+    url = String.replace(a, "127.0.0.1", "localhost")
+    assert {:ok, "diff"} = Reviewer.get_same_origin("#{url}/start", @headers)
+    assert_received {:hit, :a, "/final", ["token test-dummy-reviewer"]}
+  end
+
+  test "a same-origin Location carrying userinfo is refused" do
+    a =
+      serve(:a, fn
+        "/start", port ->
+          {302, "http://test-dummy-user:test-dummy-pass@127.0.0.1:#{port}/final", ""}
+
+        "/final", _ ->
+          {200, nil, "should not be reached"}
+      end)
+
+    assert {:error, {:http_status, 302}} = Reviewer.get_same_origin("#{a}/start", @headers)
+    assert_received {:hit, :a, "/start", _}
+    refute_received {:hit, :a, _, _}
+  end
+
+  # Each hop takes 150 ms and fits a 400 ms budget on its own; the chain of
+  # four requests does not, so the budget must span the redirects.
+  test "the timeout covers the whole redirect chain" do
+    a =
+      serve(:a, fn path ->
+        Process.sleep(150)
+
+        case path do
+          "/1" -> {302, "/2", ""}
+          "/2" -> {302, "/3", ""}
+          "/3" -> {302, "/4", ""}
+          "/4" -> {200, nil, "late"}
+        end
+      end)
+
+    assert {:error, {:http_error, :timeout}} =
+             Reviewer.get_same_origin("#{a}/1", @headers, 3, 400)
+
+    assert {:ok, "late"} = Reviewer.get_same_origin("#{a}/1", @headers, 3, 5_000)
   end
 
   defp serve(name, respond) do
