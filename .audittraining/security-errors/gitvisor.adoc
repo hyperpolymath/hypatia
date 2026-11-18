@@ -177,10 +177,3 @@ For polyglot repos like gitvisor:
 |===
 
 '''''
-
-=== Training Classification
-
-* *Error Types:* PROCESS_HYGIENE, MISSING_TESTS, MISSING_SAST
-* *Auto-Fixable:* YES (add workflow files)
-* *Prevention:* Template enforcement, repo standards
-* *Recurrence Risk:* MEDIUM (new repos may lack setup)
