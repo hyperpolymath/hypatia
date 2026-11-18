@@ -10,6 +10,38 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Added
+
+==== RE011: a pipe into a quiet grep, flag-only (2026-11-18)
+
+`research_extensions` gains RE011. It reports `writer | grep -q PATTERN` in
+shell sources (`*.sh`, files under `.githooks/`, files with a shell shebang)
+and in workflow `run:` blocks. Under `set -o pipefail` the form is unsound:
+`grep -q` exits at its first match, a writer that is still writing is killed
+by SIGPIPE, the pipeline's status is 141, and a match reads as "no match". In
+a gate written `if writer | grep -q BAD; then fail`, that is a fail-open. It
+was reproduced in metadatastician/standards on 2026-11-17, and the owner ruled
+"A Hypatia rule, estate-wide".
+
+* The detector is a port of standards' `scripts/check-pipe-grep-q.sh`. On two
+  trees of standards it reports the same `path:line` set as that gate
+  (444 of 444 on `main` at 940a27a, 182 of 182 on the head of standards#1667).
+  It also reads two forms the gate misses: a cluster with a digit or an
+  argument after the `q` (`-qm1`), and a flag after a bare `--color`.
+* A finding is _exposed_ (`:warn`) where pipefail is in force: the script sets
+  it, or the step's shell is `bash` (GitHub runs `bash -eo pipefail`), from the
+  step or from `defaults.run.shell`. Elsewhere it is _latent_ (`:info`).
+* The rule is flag-only: action `:review`, every finding `advisory: true`, no
+  recipe and no fix script. The research-extensions normalizer in
+  `Hypatia.CLI.collect_findings/2` now carries `:advisory`, so an RE011 finding
+  never counts toward exit 1.
+* One gate does not read the class yet: standards `scripts/apply-baseline.sh`
+  in `blocking` mode at threshold `info` (governance "Baseline validation").
+  It rejects an exposed RE011 finding like any other unbaselined finding until
+  the caller runs a standards revision that exempts `advisory: true`.
+
+Tests: `test/research_extensions_re011_test.exs`.
+
 === Changed
 
 ==== RSR 3.2.2 is the verdict of the capability reader (2026-11-16)

@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
@@ -165,7 +165,7 @@ pub struct BatchItemResult {
     /// Duration in milliseconds
     pub duration_ms: u64,
     /// Timestamp
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
 }
 
 /// Status of a batch item
@@ -369,7 +369,7 @@ async fn process_scan_repo(
             fixes_count: 0,
             error: Some(format!("Path does not exist: {}", repo)),
             duration_ms: start.elapsed().as_millis() as u64,
-            timestamp: Utc::now(),
+            timestamp: Timestamp::now(),
         };
     }
 
@@ -381,7 +381,7 @@ async fn process_scan_repo(
             fixes_count: 0,
             error: Some(format!("Not a directory: {}", repo)),
             duration_ms: start.elapsed().as_millis() as u64,
-            timestamp: Utc::now(),
+            timestamp: Timestamp::now(),
         };
     }
 
@@ -414,7 +414,7 @@ async fn process_scan_repo(
                             fixes_count: 0,
                             error: None,
                             duration_ms: start.elapsed().as_millis() as u64,
-                            timestamp: Utc::now(),
+                            timestamp: Timestamp::now(),
                         },
                         Some(1) => {
                             // Parse JSON findings
@@ -432,7 +432,7 @@ async fn process_scan_repo(
                                 fixes_count: 0,
                                 error: None,
                                 duration_ms: start.elapsed().as_millis() as u64,
-                                timestamp: Utc::now(),
+                                timestamp: Timestamp::now(),
                             }
                         }
                         Some(code) => BatchItemResult {
@@ -446,7 +446,7 @@ async fn process_scan_repo(
                                 stderr.trim()
                             )),
                             duration_ms: start.elapsed().as_millis() as u64,
-                            timestamp: Utc::now(),
+                            timestamp: Timestamp::now(),
                         },
                         None => BatchItemResult {
                             repo: repo.to_string(),
@@ -455,7 +455,7 @@ async fn process_scan_repo(
                             fixes_count: 0,
                             error: Some("Scanner process killed by signal".to_string()),
                             duration_ms: start.elapsed().as_millis() as u64,
-                            timestamp: Utc::now(),
+                            timestamp: Timestamp::now(),
                         },
                     }
                 }
@@ -466,7 +466,7 @@ async fn process_scan_repo(
                     fixes_count: 0,
                     error: Some(format!("Failed to execute scanner: {}", e)),
                     duration_ms: start.elapsed().as_millis() as u64,
-                    timestamp: Utc::now(),
+                    timestamp: Timestamp::now(),
                 },
             }
         }
@@ -622,7 +622,7 @@ fn process_scan_repo_fallback(repo: &str, start: &std::time::Instant) -> BatchIt
         fixes_count: 0,
         error: None,
         duration_ms: start.elapsed().as_millis() as u64,
-        timestamp: Utc::now(),
+        timestamp: Timestamp::now(),
     }
 }
 
@@ -681,7 +681,7 @@ async fn execute_fix(
                     fixes_count: 0,
                     error: Some(format!("Not a directory: {}", repo)),
                     duration_ms: start.elapsed().as_millis() as u64,
-                    timestamp: Utc::now(),
+                    timestamp: Timestamp::now(),
                 };
                 return result;
             }
@@ -755,7 +755,7 @@ async fn execute_fix(
                 fixes_count,
                 error: None,
                 duration_ms: start.elapsed().as_millis() as u64,
-                timestamp: Utc::now(),
+                timestamp: Timestamp::now(),
             };
 
             if !no_progress {
@@ -995,7 +995,7 @@ fn generate_markdown_report(repos: &[String]) -> String {
     report.push_str("# hypatia Batch Report\n\n");
     report.push_str(&format!(
         "Generated: {}\n\n",
-        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        Timestamp::now().strftime("%Y-%m-%d %H:%M:%S UTC")
     ));
     report.push_str("## Repositories\n\n");
     report.push_str("| Repository | Status |\n");
