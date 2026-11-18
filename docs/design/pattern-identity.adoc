@@ -90,9 +90,14 @@ not named one, so these are the 2 that exist. The second is my choice, not a rul
 |occurrences, all patterns |1972 |136466
 |===
 
-No pattern has the rule `PA000` today. That is because the registry holds only categories that the map knows. The
-map lacks 5 of the 30 categories of the scanner: `Advisory`, `BannedDep`, `LicensePolicy`, `UnboundedAllocation`
-and `UnknownSource`. The first finding of one of them becomes `PA000` (case R3).
+No pattern has the rule `PA000` today, and that zero does not show that the unmapped population is empty. In this
+repository's registry none of the 9 entries has a `pa_rule` at all (checked: `pa_rule` is `null` in each). They are
+legacy-schema entries (ids like `unsafe_panic-unwrap_on_lock`), and their categories (`unsafe_crash`,
+`unsafe_panic`, `type_safety_bypass`, `cors_misconfiguration`) are not in the map either, so they are not counted
+under `PA000` because they were never given a rule, not because the map knows them. The cause of the zero in the
+estate registry was not rechecked for this revision. The map lacks 5 of the 30 categories of the scanner:
+`Advisory`, `BannedDep`, `LicensePolicy`, `UnboundedAllocation` and `UnknownSource`. The first finding of one of
+them becomes `PA000` (case R3).
 
 Measured on the estate registry (1036 patterns):
 
@@ -156,8 +161,10 @@ Each key is listed with what it merges, what it splits, and 1 example of each.
 
 |K3
 |`rule_id` + a normal form of the description: lower case, with the leading count, the path after "in" and a
-trailing parenthesis removed. Example: `PA005-unwrap-expect-calls`.
-|Apart: "unwrap/expect calls" and "unsafe get calls". Joins: 290 ids of one class into 1, whatever the count or the path. About 105 patterns for the estate. It still splits a reworded defect (R2), because it reads the words.
+trailing parenthesis removed. Example: `PA005-unwrap-expect-calls`. When the category has no entry in the map (rule
+`PA000`), the canonical category is part of the key (`PA000-advisory-dependency-has-a-known-vulnera...`), so that
+2 unmapped categories with one description stay apart (the R3 harm).
+|Apart: "unwrap/expect calls" and "unsafe get calls"; 2 unmapped categories with one description. Joins: 290 ids of one class into 1, whatever the count or the path. About 105 patterns for the estate. It still splits a reworded defect (R2), because it reads the words.
 |Recommended now. It removes the measured harms and needs no scanner change. It does **not** meet "does not depend on wording" in the strict sense.
 
 |K4
@@ -169,7 +176,10 @@ description in the key.
 
 No candidate that reads free text can be independent of wording. K4 is the only one that is. K3 is the step that
 makes K4 cheap: its ids are the same shape (`PA005-unwrap-expect-calls`), so a K4 id can replace the second half
-later with no change in the readers.
+later with no change in the readers that only store or join the id. Not every reader only does that: the Kin
+readers of section 7 compare ids for equality and read words inside them. A coarser K3 id can make 2 held actions
+conflict that did not before, and an opaque K4 token can change what `categorize_action/1` finds. Those 2 readers
+need their own check before any key is switched.
 
 == 6. The history and the recipe link of an old pattern
 
@@ -224,8 +234,16 @@ later with no change in the readers.
 |`lib/fleet_dispatcher.ex`, line 274
 |`pattern_id` of the action that goes to the Kin Gate.
 
-|`lib/kin/gate.ex`, line 531
-|Records `pattern_id` of the action.
+|`lib/kin/gate.ex`, lines 417 to 427 and 531
+|Semantic: `check_conflict/2` rejects an action when a held action has the same repository and the same
+`pattern_id`, so coarsening ids (K3) can create conflicts that equal-by-count ids did not. Also records `pattern_id`
+of the action.
+
+|`lib/kin/arbiter.ex`, lines 196, 254 to 275, 292
+|Semantic: equality of `pattern_id` is a direct conflict, and `categorize_action/1` looks for substrings
+(`license`, `spdx`, `CommandInjection`, `doc`, `format`, ...) inside the id. A K3 id keeps the words of the
+description, so it keeps that behaviour; an opaque K4 token would not. The intended migration behaviour of these
+2 readers is not decided in this note.
 
 |`lib/neural/coordinator.ex`, line 505
 |Takes `pattern_id` as a candidate recipe id of a finding.
@@ -271,12 +289,22 @@ pattern key.
   equal to 0, counted by the recipe's predicate over the repository. So the recipe's own predicate judges the
   fix, and nothing has to guess which of 2 findings was meant. It answers a stricter question than the
   rescan: "did every target of the recipe go?", not "did this instance go?". When 2 instances exist and the fix
-  removes one, `after_hits` stays above 0 and the verdict is `incomplete`, which is the safe side.
+  removes one, `after_hits` stays above 0 and the verdict is `incomplete`, which is the safe side. **This does not
+  meet the acceptance case of `E0-22`** (`docs/operations/e0-closeout/work-orders/E0-22-fix-check-by-finding.adoc`,
+  "Acceptance"): there, the fixed finding is gone, another finding of the category stays, and the result must be
+  `verified`. Option A of ruling 4 gives `incomplete` for that case and so trades the case for never reporting a
+  false `verified`. Meeting the case needs an identity for the instance, which no pattern key supplies. The owner
+  rules whether that trade is accepted.
 * *`E0-19` (cap for a merged match).* With the registry as it is, no recipe can match exactly (0 of 42), so the cap
   would hold every dispatch at `review`. That is the intended direction, and it is also why a key like K3 matters
-  to the cap.
+  to the cap. A new key alone does not change the 0 of 42: a recipe matches exactly only if its `pattern_ids` name a
+  class id. Today they do not (for example `recipe-unwrap-to-match` names `PA005-panic-unwrap`,
+  `PA005-unwrap-on-user-input` and `PA005-unwrap-without-check`, and none of them is a registry id, so section 6
+  leaves them as literal recipe ids). The recipes in `verisimdb-data` have to be re-pointed at class ids, by a
+  separate reviewed step, before the cap stops holding that class at `review`. This note does not do that step.
 * *The measurement of option C* of the merge-honesty note needs a pattern that is a class. Today's ids are
-  per-count and per-path, so a success rate for one id would measure one file.
+  per-count and per-path, so a success rate for one id measures one count-and-path bucket, which can still join
+  several files (R1, R4) and, through `repo_occurrences`, several repositories. It is not a rate for one file.
 
 == 9. Ruling packet
 
@@ -297,7 +325,8 @@ Stop here. Answer by letter.
   you have approved for writes. I would not do it without this answer.
 . *The same-file case of `E0-22`.*
   A. Judge it by the fleet's own before and after counts, and leave the rescan at the file (recommended).
-  B. Wait for K4.
+  B. Wait for a stable id for the instance from the scanner. K4 does not do this: it identifies a detector
+  class, so it cannot tell 2 findings of one class in one file apart (section 8).
   C. Leave the same-file case as it is, and say so.
 
 == 10. Limits
