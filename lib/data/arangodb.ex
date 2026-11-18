@@ -371,10 +371,18 @@ defmodule Hypatia.Data.ArangoDB do
 
   def handle_cast(:sync_from_verisimdb, state) do
     if state.connected do
-      do_sync(state)
-      {:noreply, %{state | last_sync: DateTime.utc_now()}}
+      {:noreply, sync_and_record(state)}
     else
       {:noreply, state}
+    end
+  end
+
+  # `last_sync` moves only on a run in which every upsert succeeded; after a
+  # failed run it keeps the last successful timestamp.
+  defp sync_and_record(state) do
+    case do_sync(state) do
+      :ok -> %{state | last_sync: DateTime.utc_now()}
+      {:error, _failures} -> state
     end
   end
 
@@ -384,9 +392,8 @@ defmodule Hypatia.Data.ArangoDB do
 
   def handle_info(:sync_from_verisimdb, state) do
     if state.connected do
-      do_sync(state)
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
-      {:noreply, %{state | last_sync: DateTime.utc_now(), sync_timer: timer}}
+      {:noreply, %{sync_and_record(state) | sync_timer: timer}}
     else
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
       {:noreply, %{state | sync_timer: timer}}
@@ -612,16 +619,45 @@ defmodule Hypatia.Data.ArangoDB do
 
   # --- verisim-data Sync ---
 
+  # Returns :ok when every upsert succeeded, otherwise {:error, failures},
+  # each failure `{collection, key, reason}` (or the exception that stopped
+  # the run). A failed run is logged, never reported as complete.
   defp do_sync(state) do
     verisimdb_path = Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
-    sync_scans(state, verisimdb_path)
-    sync_outcomes(state, verisimdb_path)
-    sync_recipes(state, verisimdb_path)
+    failures =
+      sync_scans(state, verisimdb_path) ++
+        sync_outcomes(state, verisimdb_path) ++
+        sync_recipes(state, verisimdb_path)
 
-    Logger.info("ArangoDB sync from verisim-data complete")
+    case failures do
+      [] ->
+        Logger.info("ArangoDB sync from verisim-data complete")
+        :ok
+
+      [first | _] ->
+        Logger.error(
+          "ArangoDB sync from verisim-data failed (#{length(failures)} failed upserts, " <>
+            "first: #{inspect(first)})"
+        )
+
+        {:error, failures}
+    end
   rescue
-    e -> Logger.error("ArangoDB sync failed: #{inspect(e)}")
+    e ->
+      Logger.error("ArangoDB sync failed: #{inspect(e)}")
+      {:error, [e]}
+  end
+
+  # Upserts and returns the failure, if any, as a list for flat_map. A
+  # cursor answer without a result list (an error body with no message) is a
+  # failure too.
+  defp sync_upsert(state, collection, key, document) do
+    case do_upsert(state, collection, key, document) do
+      {:ok, result} when is_list(result) -> []
+      {:error, reason} -> [{collection, key, reason}]
+      other -> [{collection, key, other}]
+    end
   end
 
   defp sync_scans(state, base_path) do
@@ -629,48 +665,40 @@ defmodule Hypatia.Data.ArangoDB do
 
     case File.ls(scans_dir) do
       {:ok, repos} ->
-        Enum.each(repos, fn repo_dir ->
+        Enum.flat_map(repos, fn repo_dir ->
           scan_path = Path.join([scans_dir, repo_dir, "latest.json"])
 
-          case File.read(scan_path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, scan} ->
-                  findings = Map.get(scan, "findings", [])
+          with {:ok, content} <- File.read(scan_path),
+               {:ok, scan} <- Jason.decode(content) do
+            findings = Map.get(scan, "findings", [])
 
-                  do_upsert(state, "repos", repo_dir, %{
-                    "name" => repo_dir,
-                    "finding_count" => length(findings),
-                    "last_scanned" => Map.get(scan, "timestamp", ""),
-                    "status" => "active"
-                  })
+            repo =
+              sync_upsert(state, "repos", repo_dir, %{
+                "name" => repo_dir,
+                "finding_count" => length(findings),
+                "last_scanned" => Map.get(scan, "timestamp", ""),
+                "status" => "active"
+              })
 
-                  # Sync individual findings
-                  Enum.each(findings, fn finding ->
-                    f_key = "#{repo_dir}_#{:erlang.phash2(finding)}"
+            # Sync individual findings
+            repo ++
+              Enum.flat_map(findings, fn finding ->
+                f_key = "#{repo_dir}_#{:erlang.phash2(finding)}"
 
-                    do_upsert(
-                      state,
-                      "findings",
-                      f_key,
-                      Map.merge(finding, %{
-                        "repo" => repo_dir,
-                        "status" => "open"
-                      })
-                    )
-                  end)
-
-                _ ->
-                  :skip
-              end
-
-            _ ->
-              :skip
+                sync_upsert(
+                  state,
+                  "findings",
+                  f_key,
+                  Map.merge(finding, %{"repo" => repo_dir, "status" => "open"})
+                )
+              end)
+          else
+            _ -> []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
@@ -681,31 +709,28 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
-        |> Enum.each(fn file ->
-          path = Path.join(outcomes_dir, file)
-
-          case File.read(path) do
+        |> Enum.flat_map(fn file ->
+          case File.read(Path.join(outcomes_dir, file)) do
             {:ok, content} ->
               content
               |> String.split("\n", trim: true)
-              |> Enum.each(fn line ->
+              |> Enum.flat_map(fn line ->
                 case Jason.decode(line) do
                   {:ok, outcome} ->
-                    key = "outcome_#{:erlang.phash2(outcome)}"
-                    do_upsert(state, "outcomes", key, outcome)
+                    sync_upsert(state, "outcomes", "outcome_#{:erlang.phash2(outcome)}", outcome)
 
                   _ ->
-                    :skip
+                    []
                 end
               end)
 
             _ ->
-              :skip
+              []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
@@ -716,27 +741,18 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.each(fn file ->
-          path = Path.join(recipes_dir, file)
-
-          case File.read(path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, recipe} ->
-                  key = Map.get(recipe, "id", Path.rootname(file))
-                  do_upsert(state, "recipes", key, recipe)
-
-                _ ->
-                  :skip
-              end
-
-            _ ->
-              :skip
+        |> Enum.flat_map(fn file ->
+          with {:ok, content} <- File.read(Path.join(recipes_dir, file)),
+               {:ok, recipe} <- Jason.decode(content) do
+            key = Map.get(recipe, "id", Path.rootname(file))
+            sync_upsert(state, "recipes", key, recipe)
+          else
+            _ -> []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
