@@ -69,7 +69,15 @@ defmodule Hypatia.Rules.ResearchExtensionsRE011Test do
           {"a blank line between the pipe and the grep", ["writer |", "", "grep -q x"], 5},
           {"the pipe on the line after a backslash", ["writer \\", "  | grep -q x"], 4},
           {"a second pipe on one line", ["a | b | grep -q x"], 3},
-          {"a carriage return at the end of the line", ["writer | grep -q x\r"], 3}
+          {"a carriage return at the end of the line", ["writer | grep -q x\r"], 3},
+          # GNU grep's --color takes its value only as --color=WHEN, so the
+          # next word is still a flag (the standards gate misses these two).
+          {"--color before the flag", ["writer | grep --color -q x"], 3},
+          {"--colour before the flag", ["writer | grep --colour -q x"], 3},
+          # A cluster that carries a digit or an argument after the q.
+          {"-qm1: quiet, then a count", ["writer | grep -qm1 x"], 3},
+          {"-qA2: quiet, then context", ["writer | grep -qA2 x"], 3},
+          {"-2q: context digits, then quiet", ["writer | grep -2q x"], 3}
         ] do
       test label do
         assert [finding] = scan([{"a.sh", strict(unquote(lines))}])
@@ -125,6 +133,13 @@ defmodule Hypatia.Rules.ResearchExtensionsRE011Test do
                ])
     end
 
+    test "a file that only shares a pruned directory's name is still read" do
+      body = strict(["writer | grep -q x"])
+
+      assert ["scripts/target", "tools/deps.sh"] ==
+               Enum.map(scan([{"scripts/target", body}, {"tools/deps.sh", body}]), & &1.file)
+    end
+
     test "a symbolic link is not followed" do
       root = repo([{"real/a.sh", strict(["writer | grep -q x"])}])
       File.ln_s!(Path.join(root, "real/a.sh"), Path.join(root, "link.sh"))
@@ -148,6 +163,8 @@ defmodule Hypatia.Rules.ResearchExtensionsRE011Test do
           {"-eq is the pattern q", ["writer | grep -eq x"]},
           {"-e then a pattern", ["writer | grep -e -q x"]},
           {"--regexp then a pattern", ["writer | grep --regexp -q x"]},
+          {"-m1q: the count takes the rest of the cluster", ["writer | grep -m1q x"]},
+          {"-A3 is context, not quiet", ["writer | grep -A3 x", "writer | grep -m1 x"]},
           {"a non-quiet grep", ["writer | grep -c x", "writer | grep x"]},
           {"a here-string", ["grep -q x <<<\"$out\""]},
           {"|| is not a pipe", ["writer || grep -q x"]},

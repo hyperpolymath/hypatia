@@ -1780,10 +1780,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @re011_same Regex.compile!("(?:^|[^|&])\\|&?[[:space:]]*" <> @re011_grep)
   # The grep at the start of a line whose predecessor ended in the pipe.
   @re011_next Regex.compile!("^[[:space:]]*" <> @re011_grep)
-  # grep's long options that take their argument as the next word.
+  # grep's long options that take their argument as the next word. `--color`
+  # and `--colour` are not among them: their value is optional and is given
+  # only as `--color=WHEN`, so the word after a bare `--color` is still a flag.
   @re011_long_with_arg ~w(--regexp --file --max-count --after-context --before-context
                           --context --binary-files --devices --directories --exclude
-                          --include --label --color --colour)
+                          --include --label)
   # `set -o pipefail` in any of its spellings (`set -euo pipefail`,
   # `set -e -o pipefail`, `shopt -so pipefail`); `set +o pipefail` is not one.
   @re011_pipefail ~r/(?:^|[;&|({[:space:]])(?:set|shopt)[[:space:]]+(?:[^;&|#]*[[:space:]])?-[A-Za-z]*o[[:space:]]+pipefail(?![A-Za-z0-9_-])/
@@ -1825,6 +1827,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
   `!`, `|&`, the flag after the pattern, and the pipe on the previous line
   (`cmd |` then `grep -q`, with blank and comment lines between skipped).
   Full-line comments are ignored.
+
+  The rule reads two forms the gate misses, so it reports every line the gate
+  reports and may report more: a cluster that carries a digit or an argument
+  after the `q` (`-qm1`, `-qA2`, `-2q`), and a flag after a bare `--color`
+  or `--colour`, which takes no following word.
 
   Not detected: the command held in a variable or a function; `xargs grep
   -q`, `git grep -q`, `rg -q`; the other readers that exit early (`head`,
@@ -1896,11 +1903,13 @@ defmodule Hypatia.Rules.ResearchExtensions do
     {output, _status} =
       System.cmd(
         "find",
-        [repo_path, "-type", "f"] ++
-          Enum.flat_map(
-            ~w(.git node_modules _build deps target),
-            &["-not", "-path", "*/#{&1}/*"]
-          ),
+        # Pruned, not filtered: find never descends into these directories.
+        [repo_path, "(", "-type", "d", "("] ++
+          (~w(.git node_modules _build deps target)
+           |> Enum.map(&["-name", &1])
+           |> Enum.intersperse(["-o"])
+           |> List.flatten()) ++
+          [")", ")", "-prune", "-o", "-type", "f", "-print"],
         stderr_to_stdout: true
       )
 
@@ -2068,8 +2077,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @doc """
   The lines of a shell text that pipe into a quiet grep, as
   `{line number, byte offset of the line, line}`. A port of the `scan`
-  function of standards' `scripts/check-pipe-grep-q.sh`, line for line: the
-  same lines are found in the same text.
+  function of standards' `scripts/check-pipe-grep-q.sh`: every line that gate
+  finds is found here, and two forms it misses (see RE011's `@doc`).
   """
   def pipe_grep_q_lines(text) when is_binary(text) do
     {hits, _offset, _prev_pipe?} =
@@ -2138,15 +2147,13 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp re011_quiet_word?(["--" <> _ = word | rest]),
     do: re011_quiet_word?(if(word in @re011_long_with_arg, do: Enum.drop(rest, 1), else: rest))
 
-  defp re011_quiet_word?(["-" <> cluster = word | rest]) do
-    if Regex.match?(~r/^-[A-Za-z]+$/, word) do
-      case re011_cluster(cluster) do
-        :quiet -> true
-        :takes_next -> re011_quiet_word?(Enum.drop(rest, 1))
-        :none -> re011_quiet_word?(rest)
-      end
-    else
-      re011_quiet_word?(rest)
+  # Every `-…` word is read as a cluster, digits included: `-qm1` is quiet,
+  # and `-2q` is two lines of context and quiet.
+  defp re011_quiet_word?(["-" <> cluster | rest]) do
+    case re011_cluster(cluster) do
+      :quiet -> true
+      :takes_next -> re011_quiet_word?(Enum.drop(rest, 1))
+      :none -> re011_quiet_word?(rest)
     end
   end
 
