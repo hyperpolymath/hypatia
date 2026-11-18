@@ -23,6 +23,7 @@ defmodule Hypatia.PatternAnalyzer do
   alias Hypatia.Neural.Coordinator, as: NeuralCoordinator
   alias Hypatia.Neural.DispatchGuard
   alias Hypatia.ScorecardIngestor
+  alias Hypatia.FleetEnrolmentIngestor
 
   require Logger
 
@@ -58,6 +59,11 @@ defmodule Hypatia.PatternAnalyzer do
     Logger.info(
       "Scorecard: #{length(scorecard_patterns)} repo-level findings added (#{length(patterns)} total)"
     )
+
+    # Step 2c: Repos that render the verdict grid without a gitbot-fleet
+    # enrolment manifest (gitbot-fleet docs/REPORT-BACK.adoc section 6).
+    enrolment_patterns = run_fleet_enrolment_checks(scans)
+    patterns = patterns ++ enrolment_patterns
 
     # Step 3: Route each pattern+repo through the safety triangle.
     # Tag each pattern with its routed_repo so manifest entries are 1:1.
@@ -128,7 +134,7 @@ defmodule Hypatia.PatternAnalyzer do
     patterns = Map.get(registry, "patterns", %{}) |> Map.values()
     repo_languages = build_language_map(scans)
     scorecard_patterns = run_scorecard_checks(scans)
-    all_patterns = patterns ++ scorecard_patterns
+    all_patterns = patterns ++ scorecard_patterns ++ run_fleet_enrolment_checks(scans)
 
     # Chunk repos and process in batches
     all_repos =
@@ -374,21 +380,7 @@ defmodule Hypatia.PatternAnalyzer do
   # Run Scorecard local checks against all repos that have scan data.
   # Resolves repo paths from scan program_path or falls back to standard locations.
   defp run_scorecard_checks(scans) do
-    repo_paths =
-      scans
-      |> Enum.map(fn scan ->
-        path = Map.get(scan.scan, "program_path", "")
-
-        resolved =
-          if is_binary(path) and path != "" and path != "." and File.dir?(path) do
-            path
-          else
-            Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
-          end
-
-        {scan.repo, resolved}
-      end)
-      |> Enum.filter(fn {_repo, path} -> File.dir?(path) end)
+    repo_paths = scanned_repo_paths(scans)
 
     {patterns, stats} = ScorecardIngestor.batch_local_scan(repo_paths)
 
@@ -398,6 +390,36 @@ defmodule Hypatia.PatternAnalyzer do
     )
 
     patterns
+  end
+
+  # The MissingFleetEnrolment check over the same repo paths.
+  defp run_fleet_enrolment_checks(scans) do
+    {patterns, stats} = FleetEnrolmentIngestor.batch_local_scan(scanned_repo_paths(scans))
+
+    Logger.info(
+      "Fleet enrolment: #{stats.total_findings} of #{stats.total_repos} repos render the grid without a manifest"
+    )
+
+    patterns
+  end
+
+  # Repo paths for repo-level checks, resolved from each scan's program_path
+  # or HYPATIA_REPOS_DIR.
+  defp scanned_repo_paths(scans) do
+    scans
+    |> Enum.map(fn scan ->
+      path = Map.get(scan.scan, "program_path", "")
+
+      resolved =
+        if is_binary(path) and path != "" and path != "." and File.dir?(path) do
+          path
+        else
+          Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
+        end
+
+      {scan.repo, resolved}
+    end)
+    |> Enum.filter(fn {_repo, path} -> File.dir?(path) end)
   end
 
   @doc false
