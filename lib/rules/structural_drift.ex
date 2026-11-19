@@ -1081,7 +1081,7 @@ defmodule Hypatia.Rules.StructuralDrift do
       ])
       |> Enum.reject(fn rel ->
         rel == "CHANGELOG.md" or Enum.any?(corpus_prefixes, &String.starts_with?(rel, &1)) or
-          nested_project_doc?(repo_path, rel)
+          nested_project_doc?(repo_path, rel) or planning_doc?(rel)
       end)
       |> Enum.flat_map(fn rel ->
         path = Path.join(repo_path, rel)
@@ -1140,6 +1140,37 @@ defmodule Hypatia.Rules.StructuralDrift do
   defp describes_a_local_src_tree?(repo_path, rel) do
     File.dir?(Path.join(repo_path, "src")) or
       File.dir?(Path.join([repo_path, Path.dirname(rel), "src"]))
+  end
+
+  # A plan or roadmap describes the tree as it WILL be: the paths it lists are
+  # files a work package is to create, not paths that survived a rename. It is
+  # the mirror of CHANGELOG.md, which records the tree as it WAS; neither
+  # describes the current layout, so neither can show rename drift.
+  #
+  # Measured 2026-11-15 on bactrian#37: docs/status/BACTRIAN-ULTRAPLAN.adoc
+  # lists `src/driver/`, `src/ppx/` and `src/frontend/` under a work package's
+  # "Files:" line. None exists yet, so SD022 fired three times on a correct plan.
+  #
+  # Recognised by name only: a file-name segment ending in PLAN (PLAN,
+  # ULTRAPLAN, IMPLEMENTATION-PLAN) or equal to ROADMAP, or a directory named
+  # plan/plans/roadmap. EXPLAINME and other current-state docs stay in scope.
+  defp planning_doc?(rel) do
+    segments = fn s -> s |> String.upcase() |> String.split(~r/[-_.\s]+/, trim: true) end
+
+    name_hit =
+      rel
+      |> Path.basename()
+      |> Path.rootname()
+      |> segments.()
+      |> Enum.any?(&(&1 == "ROADMAP" or String.ends_with?(&1, "PLAN")))
+
+    dir_hit =
+      rel
+      |> Path.dirname()
+      |> Path.split()
+      |> Enum.any?(&(String.downcase(&1) in ["plan", "plans", "roadmap"]))
+
+    name_hit or dir_hit
   end
 
   # Drop whole-line comments before matching. A commented-out example is not a
