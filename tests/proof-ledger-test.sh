@@ -58,6 +58,67 @@ expect "a name the file does not hold is refused" 1 env PROOF_LEDGER="$work/rena
 mutate missing-file '.file = "verification/proofs/idris2/Gone.idr"' quarantine
 expect "a file that does not exist is refused" 1 env PROOF_LEDGER="$work/missing-file.jsonl" bash "$script" check
 
+mutate outside-file '.file = "/etc/passwd" | .names = ["root"]' abi-types
+expect_msg "a row resting on a file outside the repository is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/outside-file.jsonl" bash "$script" check
+
+mutate parent-file '.file = "../hypatia/verification/proofs/idris2/RateLimiting.idr"' rate-limiting
+expect_msg "a row whose file climbs out with .. is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/parent-file.jsonl" bash "$script" check
+
+mutate dot-file '.file = "./" + .file' rate-limiting
+expect_msg "a row spelling its file with ./ is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/dot-file.jsonl" bash "$script" check
+
+mutate double-slash-file '.file = (.file | sub("/"; "//"))' rate-limiting
+expect_msg "a row spelling its file with // is refused" 1 "must be a canonical repository path" env PROOF_LEDGER="$work/double-slash-file.jsonl" bash "$script" check
+
+mutate empty-name '.names = [""]' abi-types
+expect_msg "an empty witness name is refused" 1 "names and axioms hold non-blank strings" env PROOF_LEDGER="$work/empty-name.jsonl" bash "$script" check
+
+mutate empty-axiom '.status = "proven-with-postulates" | .axioms = [""]' rate-limiting
+expect_msg "an empty axiom name is refused" 1 "names and axioms hold non-blank strings" env PROOF_LEDGER="$work/empty-axiom.jsonl" bash "$script" check
+
+expect_msg "a receipt with no file is refused" 2 "receipt needs at least one file" env PROOF_RECEIPTS="$work/none.jsonl" bash "$script" receipt idris2 pass --
+
+mutate blank-name '.names = [" "]' abi-types
+expect_msg "a blank witness name is refused" 1 "names and axioms hold non-blank strings" env PROOF_LEDGER="$work/blank-name.jsonl" bash "$script" check
+
+mutate blank-leg-axiom '.legs = [{"prover": "rocq", "route": "re-proved", "status": "proven-with-postulates", "correspondence": "reconciled", "axioms": [""]}]' pagerank-convergence
+expect_msg "a blank axiom on a proof leg is refused" 1 "a leg names each axiom with a non-blank string" env PROOF_LEDGER="$work/blank-leg-axiom.jsonl" bash "$script" check
+
+# A file inside the checkout that git does not track: a runner could create it.
+untracked=".proof-ledger-untracked-$$"
+printf 'planted\n' > "$untracked"
+mutate untracked-file ".file = \"$untracked\" | .names = [\"planted\"]" abi-types
+expect_msg "a row resting on an untracked file is refused" 1 "not a file committed to this repository" env PROOF_LEDGER="$work/untracked-file.jsonl" bash "$script" check
+rm -f -- "$untracked"
+
+# A committed symlink that points out of the tree.
+link_repo="$work/link-repo"
+mkdir -p "$link_repo" && git -C "$link_repo" init -q && ln -s /etc/hostname "$link_repo/evidence"
+git -C "$link_repo" add evidence && git -C "$link_repo" -c user.name=t -c user.email=t@example.invalid commit -qm link
+jq -cS '.file = "evidence" | .names = ["e"]' <<<"$(jq -c 'select(.id == "abi-types")' verification/proof-ledger.jsonl)" > "$link_repo/ledger.jsonl"
+# shellcheck disable=SC2016 # $1 and $2 are the inner sh -c arguments
+expect_msg "a row resting on a committed symlink is refused" 1 "is a symlink" \
+  sh -c 'cd "$1" && PROOF_LEDGER=ledger.jsonl bash "$2" check' _ "$link_repo" "$repo_root/$script"
+
+# A gitlink (mode 160000) records a commit, not a file, even when a regular
+# file sits at its path in the worktree.
+gitlink_repo="$work/gitlink-repo"
+mkdir -p "$gitlink_repo" && git -C "$gitlink_repo" init -q
+git -C "$gitlink_repo" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m base
+git -C "$gitlink_repo" update-index --add --cacheinfo "160000,$(git -C "$gitlink_repo" rev-parse HEAD),evidence"
+printf 'planted\n' > "$gitlink_repo/evidence"
+jq -cS '.file = "evidence" | .names = ["planted"]' <<<"$(jq -c 'select(.id == "abi-types")' verification/proof-ledger.jsonl)" > "$gitlink_repo/ledger.jsonl"
+# shellcheck disable=SC2016 # $1 and $2 are the inner sh -c arguments
+expect_msg "a row resting on a gitlink is refused" 1 "with mode 160000, not as a regular file" \
+  sh -c 'cd "$1" && PROOF_LEDGER=ledger.jsonl bash "$2" check' _ "$gitlink_repo" "$repo_root/$script"
+
+# An empty file name: refused outright. It also used to empty a tab-separated
+# field, which bash collapsed, shifting the first name into the file column.
+mutate empty-file '.file = "" | .names = ["README.adoc"]' rate-limiting
+expect_msg "a row with an empty file name is refused" 1 "file is empty" env PROOF_LEDGER="$work/empty-file.jsonl" bash "$script" check
+
+expect_msg "a receipt with an empty file name is refused" 2 "receipt was given an empty file name" env PROOF_RECEIPTS="$work/empty-name.jsonl" bash "$script" receipt idris2 pass ""
+
 mutate unbounded-test '.bounds = ""' kin-gate
 expect "tested-only without bounds is refused" 1 env PROOF_LEDGER="$work/unbounded-test.jsonl" bash "$script" check
 

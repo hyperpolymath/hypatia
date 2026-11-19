@@ -126,6 +126,12 @@ check() {
       ( if .status != "tested-only" and .bounds != "" then "\(.id): only a tested-only row has bounds" else empty end ),
       ( if .status != "open" and .file == "-" then "\(.id): only an open row may have no file" else empty end ),
       ( if .file != "-" and (.names | length) == 0 then "\(.id): a row with a file names what it rests on in that file" else empty end ),
+      # Evidence lives in this tree: an absolute path or a .. step would let a
+      # row rest on a file outside the checkout, and on the runner it happens
+      # to run on.
+      ( if .file == "" then "\(.id): file is empty; an open row with no file writes -" else empty end ),
+      ( if .file != "-" and .file != "" and any(.file | split("/")[]; IN(.; "", ".", "..")) then "\(.id): file \(.file) must be a canonical repository path: no leading /, and no empty, . or .. segment" else empty end ),
+      ( if any(.names[], .axioms[]; test("\\S") | not) then "\(.id): names and axioms hold non-blank strings" else empty end ),
       ( if .kind == "theory" then
           ( if IN(.pwg; "3", "2i", "2ii", "1", "ungraded") then empty else "\(.id): a theory row records pwg as 3, 2i, 2ii, 1 or ungraded" end ),
           ( if (.foundation_diverse | type) == "boolean" then empty else "\(.id): a theory row records foundation_diverse" end ),
@@ -143,7 +149,9 @@ check() {
                       else "\($r.id): a leg status is proven, proven-with-postulates, assumed, waived, unavailable or bridge-pending" end ),
                     ( if IN($l.correspondence; "reconciled", "pending") then empty else "\($r.id): a leg correspondence is reconciled or pending" end ),
                     ( if ($l.axioms | type) == "array" and all($l.axioms[]; type == "string") then empty else "\($r.id): a leg lists its axioms as strings" end ),
-                    ( if $l.status == "proven" and ($l.axioms | length) > 0 then "\($r.id): a proven leg rests on no axioms" else empty end )
+                    ( if $l.status == "proven" and ($l.axioms | length) > 0 then "\($r.id): a proven leg rests on no axioms" else empty end ),
+                    ( if ($l.axioms | type) == "array" and any($l.axioms[]; type == "string" and (test("\\S") | not)) then "\($r.id): a leg names each axiom with a non-blank string" else empty end ),
+                    ( if $l.status == "proven-with-postulates" and (($l.axioms | type) != "array" or ($l.axioms | length) == 0) then "\($r.id): a proven-with-postulates leg lists its axioms" else empty end )
                   end )
             else "\(.id): a theory row records its legs" end ),
           # The grade the legs support (section 8.2), compared with the one
@@ -178,15 +186,43 @@ check() {
 
   # Currency against the tree: the file exists, and every name it rests on
   # is in it (a renamed proof turns this red).
-  local file name
-  while IFS=$'\t' read -r id file name; do
+  # Evidence is committed: the file is in git's index as a regular file
+  # (mode 100644 or 100755). An untracked file (.git/HEAD, a runner's scratch
+  # file), a committed symlink (120000, which -f and grep would follow out of
+  # the tree) and a gitlink (160000, a commit, whatever sits at its path) are
+  # refused, whatever the path looks like.
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "::error::proof-ledger: check needs a git checkout, to confirm each file is committed"; return 1
+  fi
+  # One read of the index for the whole check: path -> mode.
+  local -A index_mode=()
+  local entry meta path
+  while IFS= read -r -d '' entry; do
+    meta=${entry%%$'\t'*}; path=${entry#*$'\t'}
+    index_mode["$path"]=${meta%% *}
+  done < <(git ls-files -s -z)
+  local file name mode
+  # Fields are joined with the unit separator (0x1F): unlike a tab it is not
+  # IFS white space, so an empty field is kept rather than collapsed, and the
+  # control-character rule above keeps it out of every field.
+  while IFS=$'\x1f' read -r id file name; do
+    mode=${index_mode["$file"]:-}
+    if [ -z "$mode" ]; then
+      echo "::error::proof-ledger: $id names $file, which is not a file committed to this repository"; fails=$((fails + 1)); continue
+    fi
+    if [ "$mode" = 120000 ]; then
+      echo "::error::proof-ledger: $id names $file, which is a symlink; name the file it points to"; fails=$((fails + 1)); continue
+    fi
+    if [ "$mode" != 100644 ] && [ "$mode" != 100755 ]; then
+      echo "::error::proof-ledger: $id names $file, which git records with mode $mode, not as a regular file"; fails=$((fails + 1)); continue
+    fi
     if [ ! -f "$file" ]; then
       echo "::error::proof-ledger: $id names $file, which does not exist"; fails=$((fails + 1)); continue
     fi
     if [ -n "$name" ] && ! grep -qwF -- "$name" "$file"; then
       echo "::error::proof-ledger: $id says $file holds '$name', and it does not (renamed or removed?)"; fails=$((fails + 1))
     fi
-  done < <(jq -r 'select(.file != "-" and (.names | type) == "array" and (.file | type) == "string") | .id as $i | .file as $f | if (.names | length) == 0 then [$i, $f, ""] else (.names[] | [$i, $f, .]) end | @tsv' "$LEDGER")
+  done < <(jq -r 'select((.file | type) == "string" and .file != "-" and .file != "" and (.names | type) == "array") | .id as $i | .file as $f | if (.names | length) == 0 then [$i, $f, ""] else (.names[] | [$i, $f, .]) end | join("\u001f")' "$LEDGER")
 
   if [ "$fails" -gt 0 ]; then
     echo "proof-ledger: INVALID ($fails problem(s)) in $LEDGER"
@@ -258,6 +294,14 @@ receipt() {
   local files=()
   while [ $# -gt 0 ] && [ "$1" != "--" ]; do files+=("$1"); shift; done
   [ "${1:-}" = "--" ] && shift
+  if [ "${#files[@]}" -eq 0 ]; then
+    echo "::error::proof-ledger: receipt needs at least one file" >&2; exit 2
+  fi
+  for f in "${files[@]}"; do
+    if [ -z "$f" ]; then
+      echo "::error::proof-ledger: receipt was given an empty file name" >&2; exit 2
+    fi
+  done
   for kv in "$@"; do
     extra=$(jq -cS --arg k "${kv%%=*}" --arg v "${kv#*=}" '. + {($k): $v}' <<<"$extra")
   done

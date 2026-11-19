@@ -281,6 +281,14 @@ jobs:
           bash tests/readme-claims-test.sh
           bash scripts/check-readme-claims.sh
 
+      # The ledger names test and library files that Verify Proofs' path
+      # filter does not list, so a change that renames a witness in one of
+      # them would not run that workflow. This job has no path filter: the
+      # currency check (each file exists and holds each name) runs on every
+      # push and pull request.
+      - name: Proof ledger rows match the tree
+        run: bash scripts/proof-ledger.sh check
+
       # The standards A5 rule registry is generated from lib/rules/*.ex. The
       # test fails when the committed hypatia_rules_praxis.deed is stale, when
       # an id repeats or holds `*`, and when deed_lint.js rejects the file.
