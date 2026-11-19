@@ -9,8 +9,10 @@
 --
 -- lib/neural/graph_of_trust.ex (build_edges/1) keeps edge weights
 -- non-negative, divides each source's contributions by its outgoing-weight
--- sum, and keeps the damping factor in [0, 1]. This file states the first
--- two over a Nat model. Convergence of the iteration is a theory theorem,
+-- sum, and keeps the damping factor in [0, 1]. This file proves
+-- non-negativity only, over a Nat model: edge weights and the outgoing and
+-- incoming weight sums are non-negative. It defines the sums but proves
+-- nothing about the normalisation by them. Convergence of the iteration is a theory theorem,
 -- planned in Agda over constructive reals
 -- (docs/proofs/HANDOVER-neural-convergence.adoc); it is not proved here.
 
