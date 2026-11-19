@@ -288,7 +288,7 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |`+verification/proofs/tlaplus/KinGate.tla+`: `+KinGateSafe+`, `+MutualExclusionByType+`, `+MutualExclusionBotView+`, `+ViewCoherentWithLocks+`, `+NoOrphanView+`, `+GrantsAreWellBracketed+`, `+EveryRequestProcessed+`
 |One bounded instance; the Elixir kin gate is not shown to follow the spec. Bounds: 3 bots x 2 repos, MaxRequests = 4: 444715 distinct states, depth 13, no error
 
-|The 18 transcribed alert types agree between the source of record (the ECHIDNA security-learning rule table) and Hypatia.Rules.SecurityErrors on category, severity, auto-fixability and fix presence; prevention agrees except the two recorded non-equalities
+|The 18 transcribed alert types agree between the source of record (the ECHIDNA security-learning rule table) and Hypatia.Rules.SecurityErrors on category, severity, auto-fixability and fix presence; prevention agrees for tokenPermissions, pinnedDependencies, missingWorkflowPerms, hardCodedCrypto, vulnerabilities and securityPolicy, and the source and target values are recorded for branchProtection and codeReview
 |proven, PWG-3
 |Agda 2.8.0.2, builtins only, --safe --without-K --cubical-compatible
 |`+verification/proofs/agda/AlertTableCorrespondence.agda+`: `+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`, `+fixPresenceAgrees+`, `+preventionAgreesToken+`, `+preventionAgreesPinned+`, `+preventionAgreesMissing+`, `+preventionAgreesHardCoded+`, `+preventionAgreesVulnerabilities+`, `+preventionAgreesSecurityPolicy+`, `+preventionBranchSource+`, `+preventionBranchTarget+`, `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
@@ -855,7 +855,10 @@ from Lean on 2026-11-09; the Lean proofs rested on the kernel axioms
 
 The model states that the 18 security-alert types agree between the source
 of record (ECHIDNA's security-learning rule table) and
-`+Hypatia.Rules.SecurityErrors+`. Status for all of P8: `proven`, *PWG-3*
+`+Hypatia.Rules.SecurityErrors+` on category, severity, auto-fixability and
+fix presence. Prevention agreement covers the six alerts named in P8.5;
+P8.6 records the source and target values for two other alerts.
+Status for all of P8: `proven`, *PWG-3*
 (AGDA-VERIFIED), held to the strict-profile receipt that the `agda
 strict-profile check` job writes on each Verify Proofs run (Agda 2.8.0.2,
 builtins only); the job's `derive` step fails the run when this row has no
@@ -873,12 +876,15 @@ still owed (PROOF-POLICY §8.4).
   `+catchAllUnmaintainedLow+`
 * *P8.3* Auto-fixability correspondence: `+autoFixableAgrees+`
 * *P8.4* Fix-presence (domain) correspondence: `+fixPresenceAgrees+`
-* *P8.5* Prevention agreement where the target did not deliberately
-  change it: `+preventionAgreesToken+`, `+preventionAgreesPinned+`,
+* *P8.5* Prevention agreement for `+tokenPermissions+`,
+  `+pinnedDependencies+`, `+missingWorkflowPerms+`, `+hardCodedCrypto+`,
+  `+vulnerabilities+` and `+securityPolicy+`: `+preventionAgreesToken+`,
+  `+preventionAgreesPinned+`,
   `+preventionAgreesMissing+`, `+preventionAgreesHardCoded+`,
   `+preventionAgreesVulnerabilities+`,
   `+preventionAgreesSecurityPolicy+`
-* *P8.6* The recorded prevention non-equalities, exactly:
+* *P8.6* The recorded prevention differences for `+branchProtection+`
+  and `+codeReview+`, exactly:
   `+preventionBranchSource+`, `+preventionBranchTarget+`,
   `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
 
