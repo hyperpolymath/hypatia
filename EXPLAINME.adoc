@@ -85,8 +85,8 @@ below 0.30) downgrades `auto_execute` to review in
 link:lib/fleet_dispatcher.ex[] line 267.
 
 Caveat::
-That recipe quarantine is not `Hypatia.Safety.Quarantine`, which nothing
-calls (<<known-gaps>>). The Idris2 model of the update uses natural-number
+That recipe quarantine is not `Hypatia.Safety.Quarantine`, which no scan or
+dispatch path calls (<<known-gaps>>). The Idris2 model of the update uses natural-number
 pseudo-counts, not Elixir floats.
 
 === Machine-checked proofs
@@ -249,8 +249,11 @@ for the owner, not a licence change).
 
 [CAUTION]
 ====
-Safety systems are built but not wired. `Safety.RateLimiter` and
-`Safety.Quarantine` have no caller in `lib/`. `BatchRollback.rollback/2` is
+Safety systems are built but not wired. No scan or dispatch path calls
+`Safety.RateLimiter` or `Safety.Quarantine`: the application starts both, the
+Kin watchdog watches both (`lib/kin/watchdog.ex`), and the REST and GraphQL
+APIs only list quarantines (`lib/hypatia/web/api_router.ex`,
+`lib/hypatia/web/graphql.ex`). `BatchRollback.rollback/2` is
 reached only through `Kin.Contingency.rollback_wave/2`, which nothing calls.
 `SelfDiagnostics.record_dispatch_failure/0` and `record_dispatch_success/0`
 have no callers, so its circuit breaker never opens. The moduledoc of

@@ -6,7 +6,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 
 > **Counts in this file are load-bearing — agents act on them.** They were re-measured
 > against the tree on 2026-08-07. If you change the shape of the system, re-measure
-> (`ls lib/**/*.ex | wc -l`, `grep -c "export fn" ffi/zig/src/main.zig`, the child list in
+> (`find lib -name "*.ex" | wc -l`, `grep -c "export fn" ffi/zig/src/main.zig`, the child list in
 > `lib/application.ex`) rather than editing a number by eye. Known-stale claims and the
 > full audit live in `docs/DEBT-REGISTER.adoc`.
 
