@@ -18,7 +18,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 |===
 | Component | Completion | Status | Notes
 
-| **Rules Engine (Logtalk)**
+| **Rules Engine**
 | 80%
 | ✅ Complete
 | Schema defined, bot protocol ready, 50+ rules
@@ -61,8 +61,8 @@ This document outlines the complete path from the current alpha state (*90% comp
 
 === Working Features Today
 
-* Logtalk rules engine with formal schema (`rule_schema.lgt`)
-* Bot integration protocol (`bot_integration.lgt`)
+* Rules engine with formal schema (`rule_schema`)
+* Bot integration protocol (`bot_integration`)
 * ArangoDB graph model with 9 collections, 16 edges, 3 graphs
 * 20+ AQL query templates
 * Gitbot fleet shared context layer
@@ -89,7 +89,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 | 2 days
 
 | Connect rules → graph
-| Logtalk engine writes findings to ArangoDB
+| Rules engine writes findings to ArangoDB
 | 3 days
 
 | Basic CLI
@@ -268,7 +268,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 | Task | Description | Effort
 
 | Distillation pipeline
-| Pattern → Logtalk rule conversion
+| Pattern → rule conversion
 | 4 days
 
 | Confidence scoring
@@ -445,10 +445,9 @@ This document outlines the complete path from the current alpha state (*90% comp
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                            │                                                  │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
-│  │                          SYMBOLIC LAYER (Logtalk)                                        │ │
+│  │                          SYMBOLIC LAYER                                                  │ │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │ │
 │  │  │ rule_schema  │  │  bot_integr  │  │  cicd_rules  │  │  distiller   │               │ │
-│  │  │    .lgt      │  │    .lgt      │  │    .lgt      │  │    .lgt      │               │ │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │ │
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                            │                                                  │
@@ -586,7 +585,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 
 1. Deploy ArangoDB with graph model
 2. Run initial bot fleet integration test
-3. Connect Logtalk engine to ArangoDB
+3. Connect the rules engine to ArangoDB
 4. Create `hypatia scan` CLI
 
 === This Month

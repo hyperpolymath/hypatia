@@ -194,42 +194,6 @@ let key = keys.get(index).ok_or(CryptoError::InvalidIndex)?;
 
 '''''
 
-=== Prevention Rules (historical Logtalk — superseded)
-
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP009–AP011; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
-
-[source,logtalk]
-----
-% Crypto repos require enhanced review
-crypto_rule(enhanced_review, preventive,
-    "Crypto repos require 2+ reviewers",
-    [
-        repo_tag(cryptography),
-        pr_reviews < 2
-    ],
-    block_merge).
-
-% Require fuzzing for crypto
-crypto_rule(require_fuzzing, preventive,
-    "Crypto repos must have fuzz targets",
-    [
-        repo_tag(cryptography),
-        not(dir_exists("fuzz/"))
-    ],
-    block_release).
-
-% No panicking in crypto code
-crypto_rule(no_panic, preventive,
-    "Crypto code must not panic",
-    [
-        repo_tag(cryptography),
-        pattern("panic!|unwrap\\(\\)|expect\\(")
-    ],
-    warn_reviewer).
-----
-
-'''''
-
 === Training Classification
 
 * *Error Types:* DEPENDENCY_VULN, PROCESS_HYGIENE, MISSING_FUZZING

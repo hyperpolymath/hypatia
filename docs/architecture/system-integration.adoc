@@ -6,7 +6,7 @@
 
 ....
 ┌─────────────────────────────────────────────────────────────────┐
-│                     AUTONOMOUS LEARNING LOOP                    │
+│                          LEARNING LOOP                          │
 └─────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
@@ -26,10 +26,9 @@
          │     (hypatia-cli.sh scan .)              │
          │                                           │
          │     Rules from:                           │
-         │     • code-safety-lessons.lgt            │
-         │     • container-security-lessons.lgt     │
-         │     • security-lessons.lgt               │
-         │     • learned-rules.lgt (auto-generated) │
+         │     • lib/rules/code_safety.ex           │
+         │     • lib/rules/security_errors.ex       │
+         │     • lib/rules/cicd_rules.ex            │
          └──────────────┬───────────────────────────┘
                         │
                         ▼
@@ -66,18 +65,18 @@
          │  • Frequencies   │  │  fixes based on  │
          │  • Fix outcomes  │  │  known patterns  │
          │                  │  │                  │
-         │  After 5 obs.:   │  │  Records:        │
-         │  → Propose rule  │  │  • Success rate  │
+         │  On promote:     │  │  Records:        │
+         │  >= 5 fixes and  │  │  • Success rate  │
          │                  │  │  • Failure rate  │
-         │  After 10 obs +  │  │                  │
-         │  3 successes:    │  │  ← Feeds back    │
-         │  → Auto-approve  │  │                  │
-         │  → Add to        │  │                  │
-         │     learned-     │  │                  │
-         │     rules.lgt    │  │                  │
+         │  >= 75% success, │  │                  │
+         │  FP <= 30%:      │  │  ← Feeds back    │
+         │  → promoted      │  │                  │
+         │  (manual call:   │  │                  │
+         │  promote_patterns│  │                  │
+         │  ; no timer)     │  │                  │
          └──────┬───────────┘  └─────┬────────────┘
                 │                    │
-                │ New rules          │ Fix results
+                │ Promotions         │ Fix results
                 │                    │
                 └──────────┬─────────┘
                            │
@@ -85,10 +84,10 @@
          ┌──────────────────────────────────────────┐
          │  7. CONTINUOUS IMPROVEMENT               │
          │                                           │
-         │  • New patterns → New rules              │
+         │  • New categories → recipes at 0.50      │
          │  • Successful fixes → Higher confidence  │
          │  • Failed fixes → Try alternative        │
-         │  • 10+ observations → Auto-add rule      │
+         │  • promote_patterns → promote issue type │
          └───────────────────────────────────────────┘
 ....
 
@@ -101,19 +100,14 @@ from fixes to rules ❌ *GitHub integration* - No CI/CD calling hypatia
 
 === What Was Built (2026-01-25)
 
-✅ *code-safety-lessons.lgt* - Rust / (legacy ReScript) / CORS / auth
-patterns [Logtalk engine retired 2026-04; see commit d27fe4b] ✅
-*engine/scanner.lgt* - Actual file reading/pattern matching [same
-retirement] ✅ *hypatia-cli.sh* - Command-line scanner (ripgrep-based)
-✅ *fleet-coordinator.sh* - Bot execution & coordination ✅
-*learning_engine.lgt* - Auto-generates rules from patterns [same
-retirement] ✅ *GitHub Actions template* - CI/CD integration
-
-____
-*2026-04 update:* The `+.lgt+` (Logtalk) components were retired; rule
-logic now lives entirely in Elixir under `+lib/rules/+`. The historical
-entries above are kept for provenance.
-____
+✅ *Code-safety rules* - Rust / (legacy ReScript) / CORS / auth
+patterns (now `+lib/rules/code_safety.ex+`) ✅ *hypatia-cli.sh* -
+Command-line scanner (ripgrep-based) ✅ *fleet-coordinator.sh* - Bot
+execution & coordination ✅ *Learning engine* - Records fix outcomes;
+`+promote_patterns+` marks qualifying issue types as promoted in the
+module's own state, which nothing outside it acts on yet (now
+`+lib/rules/learning.ex+`) ✅ *GitHub Actions
+template* - CI/CD integration
 
 === How To Use
 
@@ -187,32 +181,36 @@ cd gitbot-fleet
 ==== Threshold Phase
 
 ....
-Observations | Action
--------------|-----------------------------------
-1-4          | Just observe and count
-5            | Generate rule proposal → manual review
-10 + 3 fixes | Auto-approve → add to learned-rules.lgt
+At a promote_patterns call, for one issue type   | Action
+-------------------------------------------------|---------------------
+fewer than 5 recorded fixes                      | not promoted
+success rate below 0.75                          | not promoted
+false-positive records over 30% of fix count    | not promoted
+5+ fixes, success >= 0.75, FP records <= 30%    | promoted
 ....
 
-==== Auto-Generated Rule Example
+The false-positive share is the number of `+record_false_positive/2+`
+records for the type divided by its number of recorded fixes. A type that
+is already promoted stays promoted: a later call that fails a check does
+not demote it.
 
-After seeing `+useUnsafePointer()+` 10 times, the learning pipeline in
-`+lib/rules/learning.ex+` auto-generates a rule module at confidence
-0.50 and promotes it via the Bayesian update loop once fixes succeed.
-The former Logtalk example here described the retired `+.lgt+` engine;
-the Elixir equivalent lives in `+lib/rules/code_safety.ex+`.
+==== Rule Promotion and New Recipes
 
-____
-*Note:* this document still contains residual `+.lgt+` filenames and
-"`learned-rules.lgt`"-style references from the earlier Logtalk-era
-architecture; they are provenance only. The rules engine is 100% Elixir
-(`+lib/rules/*.ex+`); see `+docs/rules/logtalk-migration.adoc+` for the
-semantic transcription and JSON replacement contracts.
-____
+`+lib/rules/learning.ex+` promotes an issue type only when
+`+promote_patterns+` is called; nothing in `+lib/+` calls it on a
+timer. For an uncovered category, `+recipe_generator.ex+` writes a
+remediation recipe (`+recipe-<category>.json+`) at confidence 0.50. It
+does not create a detector rule: nothing generates executable rules yet.
+The Bayesian loop in `+outcome_tracker.ex+`
+updates that confidence as fixes succeed or fail.
+The Elixir rule for this pattern family lives in
+`+lib/rules/code_safety.ex+`. The rules engine is 100% Elixir
+(`+lib/rules/*.ex+`); see `+docs/rules/security-rule-provenance.adoc+`
+for the transcribed rule tables and the learned-rules JSON contract.
 
 === Current Rules Coverage
 
-==== Code Safety (code-safety-lessons.lgt)
+==== Code Safety
 
 * ✅ Rust `+unwrap()+` → panic DoS
 * ✅ Rust `+unwrap_or(0)+` → privilege escalation
@@ -227,7 +225,7 @@ detection kept for migration audits)
 * ✅ Path traversal patterns
 * ✅ Command injection patterns
 
-==== Container Security (container-security-lessons.lgt)
+==== Container Security
 
 * ✅ Environment variable injection
 * ✅ Shell variable quoting
@@ -237,7 +235,7 @@ detection kept for migration audits)
 * ✅ Permissive mode bypasses
 * ✅ Runtime delegation security
 
-==== Workflow Security (security-lessons.lgt)
+==== Workflow Security
 
 * ✅ Unpinned GitHub Actions
 * ✅ Missing permissions declarations
@@ -296,9 +294,10 @@ Scan of svalinn (2026-01-25):
 === Architecture Benefits
 
 [arabic]
-. *Autonomous* - Learns and improves without manual intervention
+. *Feedback-driven* - Fix outcomes update confidence; rule promotion
+runs when `+promote_patterns+` is called
 . *Incremental* - Starts with basic rules, grows organically
-. *Evidence-based* - Rules generated from actual observations
+. *Evidence-based* - Recipe confidence comes from recorded fix outcomes
 . *Self-correcting* - Failed fixes reduce pattern confidence
 . *Explainable* - Every rule has observation count + context
 . *Collaborative* - Bots share findings via gitbot-fleet
@@ -313,8 +312,9 @@ After: - ✅ GitHub Actions watch alarm (CI/CD) - ✅ hypatia-cli detects
 smoke (scanner) - ✅ fleet-coordinator dispatches trucks (bot execution)
 - ✅ robot-repo-automaton puts out fire (auto-fix) - ✅ learning_engine
 improves detection (fewer false alarms) - ✅ System gets smarter with
-every fire (autonomous learning)
+every fire (fix outcomes feed confidence)
 
 '''''
 
-*The system is now fully operational and autonomous.*
+*The pipeline is wired end to end. Rule promotion is not automatic: it
+runs when `+promote_patterns+` is called.*

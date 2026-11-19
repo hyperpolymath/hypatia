@@ -205,7 +205,7 @@ jobs:
         component:
           # Only the CLI image remains. The adapter/registry/engine images were
           # retired: their Containerfiles were deleted (deploy/Containerfile.*),
-          # the Haskell `registry/` and Logtalk `engine/` sources removed, and the
+          # the Haskell `registry/` and the old `engine/` sources removed, and the
           # ghcr registry package archived (see note at end of file). The adapter
           # still ships as the `forge-adapter` binary via build-rust; recover its
           # image with `git show f2fe2df^:deploy/Containerfile.adapter` if wanted.
@@ -357,9 +357,9 @@ jobs:
 
   # NOTE: The adapter/registry/engine container images were retired; this workflow
   # now builds only the CLI image.
-  #   - registry (Haskell) + engine (SWI-Prolog/Logtalk): sources deleted (f2fe2df).
-  #     Logtalk was an early idea for the rule engine, superseded by the native
-  #     Elixir ruleset. The hypatia-registry package on ghcr.io is now archived.
+  #   - registry (Haskell) + engine: sources deleted (f2fe2df); the rule engine
+  #     is the native Elixir ruleset. The hypatia-registry package on ghcr.io is
+  #     now archived.
   #   - adapter (Rust): still ships as the `forge-adapter` binary via build-rust;
   #     only its service image was dropped. Recover it if ever wanted again with
   #     `git show f2fe2df^:deploy/Containerfile.adapter`.

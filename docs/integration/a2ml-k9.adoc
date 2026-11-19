@@ -1,6 +1,6 @@
 == Hypatia a2ml & K9 Integration
 
-*Status:* HISTORICAL DESIGN RECORD — the Logtalk rule-generation workflow below is superseded (2026-11-01): production rules are Elixir modules in `+lib/rules/*.ex+` and learned-rule exports are JSON (`+schemas/learned-security-rules.schema.json+`). See `+docs/rules/logtalk-migration.adoc+`. *Original date:* 2026-02-06 *Version:* 1.0.0
+*Status:* HISTORICAL DESIGN RECORD — the rule-generation workflow below is superseded (2026-11-01): production rules are Elixir modules in `+lib/rules/*.ex+` and learned-rule exports are JSON (`+schemas/learned-security-rules.schema.json+`). See `+docs/rules/security-rule-provenance.adoc+`. *Original date:* 2026-02-06 *Version:* 1.0.0
 
 === Overview
 
@@ -158,7 +158,6 @@ crossed (5+ obs), propose an Elixir rule under `+lib/rules/*.ex+` via
 the normal PR flow (observations are evidence, not approval) 5.
 Validate with tests — and ECHIDNA where the pattern is in its scope 6.
 Ship with the Hypatia release; there is no `+approved-rules/+` drop
-and no Logtalk artefact
 
 *When modifying rules:* 1. Update both the Elixir rule and any mirrored bash pattern 2.
 Re-validate with ECHIDNA 3. Document changes in deployment manifest

@@ -3,7 +3,7 @@
 
 Copied verbatim, SPDX headers intact, from `metadatastician/standards`
 `1-formats/deed/tools/fixtures/` at commit
-`b2aaeb0c142de45ca1ed6e7b29f548c979737f54` (main, 2026-11-14), where
+`830b0d3758370b7496b83f61e6ec90d9e31080ec` (main, 2026-11-16), where
 `deed.abnf` is v2.0.0:
 
 [cols="1,3"]

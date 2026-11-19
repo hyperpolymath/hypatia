@@ -2,10 +2,9 @@
 = lib/rules/ — the canonical Hypatia rule system
 
 This directory is Hypatia's active, canonical rule system: pure-Elixir
-modules compiled into the `hypatia` Mix application. There is no
-`engine/` tree, no Logtalk loader, and no Logtalk output format (ADR-001,
-2026-04-14; semantic migration completed 2026-11-01 — see
-`docs/rules/logtalk-migration.adoc`).
+modules compiled into the `hypatia` Mix application (ADR-001,
+2026-04-14). Rules transcribed from an external source of record are
+recorded in `docs/rules/security-rule-provenance.adoc`.
 
 The inventory is intentionally *not* hand-listed here; it drifts. The
 generated catalogue is the reference, and the modules themselves win in
@@ -22,8 +21,7 @@ any disagreement:
 * `Hypatia.Rules.RuleLoader` + `Hypatia.Rules.RsrCriteria`
   — standards-authored rule data (`.a2ml`) loaded as data, never as code.
 * `Hypatia.Rules.Learning` — outcome tracking, confidence, and pattern
-  promotion (the live learning subsystem that replaced the old dynamic
-  Logtalk learning predicates).
+  promotion (the live learning subsystem).
 
 == Canonical semantic homes most often needed
 
@@ -34,14 +32,15 @@ any disagreement:
 |`security_errors.ex`
 |Shared security knowledge: error categories, the canonical alert
 category/severity/fix/prevention tables and `validate_alert/1`
-(transcribed from ECHIDNA's retired `security_learning.lgt`), SHA pins
+(transcribed from ECHIDNA's security-learning rule table), SHA pins
 and pin exemptions, secret patterns, CodeQL language support, CWE
-mappings, and the RSR language policy (Logtalk banned → Elixir).
+mappings, and the RSR language policy (banned languages and their
+replacements).
 
 |`audit_prevention.ex`
-|Audit-training prevention rules AP001–AP015, transcribed from the
-historical Logtalk blocks in `.audittraining/security-errors/*.adoc`:
-verbatim rule records (`rules/0`) plus the evidence-shaped checks that
+|Audit-training prevention rules AP001–AP015, first written in the
+`.audittraining/security-errors/*.adoc` incident reports: verbatim rule
+records (`rules/0`) plus the evidence-shaped checks that
 had no other home. Rules whose checks already existed point at them
 instead of duplicating them.
 
@@ -56,12 +55,7 @@ home of AP012).
 
 == Output contracts
 
-Rules produce findings consumed as JSON (`schema/findings.ncl`), never
-as Logtalk facts. Rulesets exchanged as data follow
+Rules produce findings consumed as JSON (`schema/findings.ncl`). Rulesets exchanged as data follow
 `schemas/ruleset.schema.json`; learned security-rule exports follow
 `schemas/learned-security-rules.schema.json`
 (`Mix.Tasks.Hypatia.BatchSecurityScan`).
-
-New `.lgt`/`.logtalk` sources and Logtalk output settings are blocked
-by `scripts/check-no-active-logtalk.sh` (exact-path exemptions, with
-removal conditions, in `.logtalk-allowlist`).

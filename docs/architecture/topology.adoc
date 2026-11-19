@@ -85,7 +85,7 @@ NEURAL SUBSYSTEM (hub-and-spoke)
   Training Pipeline                ██████████ 100%    Reads verisim-data automatically
   Persistence                      ██████████ 100%    ArangoDB + flat file backup
 
-RULES ENGINE (Elixir — absorbed from Logtalk 2026-03-06)
+RULES ENGINE (Elixir)
   security_errors.ex               ██████████ 100%    SHA pins, secrets, CWEs
   cicd_rules.ex                    ██████████ 100%    Commit blocking, waste detection
   code_safety.ex                   ██████████ 100%    Per-language dangerous patterns
@@ -125,7 +125,7 @@ CROSS-REPO INTEGRATION
   .git-private-farm → hypatia      ██░░░░░░░░  20%    repo-list done, HOOKSYNC_TOKEN missing
 
 REMOVED (2026-03-06)
-  Logtalk engine/ (28 .lgt files)  — absorbed into lib/rules/*.ex
+  Old rule engine/ (28 files)      — absorbed into lib/rules/*.ex
   Ada TUI (102 files)              — never compiled
   Haskell registry (30 files)      — superseded by Elixir pipeline
   k8s/terraform/helm deploy (94)   — over-engineered for local tool

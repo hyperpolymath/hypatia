@@ -10,9 +10,7 @@ integration:
 # Connection to hypatia engine
 engine:
   # Canonical Elixir rule engine (ADR-001, 2026-04-14). Rules are
-  # compiled Elixir modules in lib/rules/*.ex — there is no loader
-  # file and no Logtalk/Prolog runtime. Migration ledger:
-  # docs/rules/logtalk-migration.adoc.
+  # compiled Elixir modules in lib/rules/*.ex; there is no loader file.
   elixir:
     application: hypatia
     mix_project: mix.exs
@@ -125,7 +123,7 @@ learning:
     min_occurrences: 3
     output_path: .audittraining/echidna-rules.json
 
-  # Export formats (replaces the retired Logtalk security_rule/4 file)
+  # Export formats
   exports:
     - format: json
       path: .audittraining/echidna-rules.json
@@ -187,7 +185,7 @@ rsr_policy:
     - java
     - kotlin
     - swift
-    - logtalk  # retired 2026-04-14 (ADR-001); rules are Elixir
+    - logtalk
 
   # Allowed languages
   allowed_languages:

@@ -127,7 +127,7 @@ sequenceDiagram
     participant Verify
     participant Storage
 
-    User->>CLI: hyper deposit ruleset.lgt
+    User->>CLI: hyper deposit ruleset.json
     CLI->>CLI: parse_ruleset()
     CLI->>API: POST /rulesets
 

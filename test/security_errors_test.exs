@@ -137,7 +137,7 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
       assert SecurityErrors.alert_category("unused-import") == nil
     end
 
-    test "Logtalk severity catch-all members are explicit :low, not :info" do
+    test "source-table severity catch-all members are explicit :low, not :info" do
       for alert_type <- ["SASTID", "CITestsID", "unmaintained", "FuzzingID"] do
         assert SecurityErrors.issue_severity(alert_type) == :low
       end

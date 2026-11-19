@@ -2,8 +2,7 @@
 
 defmodule Hypatia.Rules.Learning do
   @moduledoc """
-  Learning engine rules absorbed from the retired Logtalk learning and
-  rule-distiller modules (see docs/rules/logtalk-migration.adoc).
+  Learning engine rules.
 
   Tracks fix outcomes, adjusts confidence, promotes patterns to rules,
   and manages cross-repo learning.

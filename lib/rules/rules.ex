@@ -2,22 +2,20 @@
 
 defmodule Hypatia.Rules do
   @moduledoc """
-  Facade module for all Hypatia rules, absorbed from the Logtalk engine.
+  Facade module for all Hypatia rules.
 
-  This replaces the need for Logtalk rule evaluation by providing
-  all policy rules, security checks, and learning operations directly
-  in Elixir. The canonical active rule system is this directory
-  (`lib/rules/*.ex`); there is no `engine/` tree and no Logtalk output
-  format. The original Logtalk declarations are preserved —
-  clause-by-clause, with every divergence — in
-  `docs/rules/logtalk-migration.adoc`.
+  Provides all policy rules, security checks, and learning operations
+  directly in Elixir. The canonical active rule system is this directory
+  (`lib/rules/*.ex`). Where a rule was transcribed from an external
+  source of record, the source and every divergence are recorded in
+  `docs/rules/security-rule-provenance.adoc`.
 
   ## Submodules
 
   - `SecurityErrors` -- Error categories, SHA pins, secret detection, CodeQL, CWE mappings, alert validation
   - `CicdRules` -- Repo requirements, commit blocking, waste detection, license validation
   - `CodeSafety` -- Language-specific dangerous pattern detection
-  - `AuditPrevention` -- AP001–AP015 audit-training prevention rules transcribed from Logtalk
+  - `AuditPrevention` -- AP001–AP015 audit-training prevention rules
   - `MigrationRules` -- ReScript v12→v13 migration, merge conflict resolution
   - `Learning` -- Fix outcome tracking, confidence, pattern promotion (GenServer)
   - `ForgeAdapters` -- Multi-forge operations with input validation

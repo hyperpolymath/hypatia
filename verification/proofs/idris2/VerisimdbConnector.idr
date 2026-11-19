@@ -10,11 +10,11 @@
 --      projected to the canonical JSON finding record (schema/findings.ncl)
 --
 -- Corresponds to: lib/verisim_connector.ex (cleaned-finding projection model).
--- Statement superseded 2026-11-01: the 2026-04-04 target was the retired
--- Logtalk fact format. The equality proof below is unchanged; its target is
--- now the JSON finding record. This model does not by itself prove runtime
--- refinement of the Elixir connector (estate PROOF-POLICY); see
--- docs/rules/logtalk-migration.adoc and verification/PROOF-STATUS.adoc.
+-- Statement superseded 2026-11-01: the 2026-04-04 target was a retired
+-- positional fact format. The equality proof below is unchanged; its target
+-- is now the JSON finding record. This model does not by itself prove
+-- runtime refinement of the Elixir connector (estate PROOF-POLICY); see
+-- verification/PROOF-STATUS.adoc.
 
 module VerisimdbConnector
 
@@ -153,7 +153,6 @@ cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just
 
 ||| The repo/file/category/severity projection of a finding: the fields a
 ||| canonical JSON finding (schema/findings.ncl) carries for every result.
-||| (Named LogtalkFact until the 2026-11-01 supersession in the header.)
 public export
 record FindingFact where
   constructor MkFact

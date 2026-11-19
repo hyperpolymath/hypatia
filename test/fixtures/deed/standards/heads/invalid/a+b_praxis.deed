@@ -1,0 +1,3 @@
+;; SPDX-License-Identifier: MPL-2.0
+; deed.abnf stem fixture: "+" is not a stem character
+(praxis-deed :schema-version "1.0.0")

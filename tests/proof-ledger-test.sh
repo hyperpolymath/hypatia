@@ -64,10 +64,10 @@ expect "tested-only without bounds is refused" 1 env PROOF_LEDGER="$work/unbound
 mutate open-graded '.pwg = "3"' pagerank-convergence
 expect_msg "a PWG on an open theory row is refused" 1 "PWG-3 needs an Agda proof that is proven" env PROOF_LEDGER="$work/open-graded.jsonl" bash "$script" check
 
-mutate grade-without-leg '.pwg = "2i"' logtalk-migration
+mutate grade-without-leg '.pwg = "2i"' alert-table-correspondence
 expect "PWG-2i with no counted recheck leg is refused" 1 env PROOF_LEDGER="$work/grade-without-leg.jsonl" bash "$script" check
 
-mutate weak-agda '.checker = "Agda 2.8.0.2, --safe"' logtalk-migration
+mutate weak-agda '.checker = "Agda 2.8.0.2, --safe"' alert-table-correspondence
 expect "a PWG without the PROOF-POLICY 2.1 invocation is refused" 1 env PROOF_LEDGER="$work/weak-agda.jsonl" bash "$script" check
 
 mutate engineering-grade '.pwg = "3"' abi-ffi
@@ -127,7 +127,7 @@ expect "derive: TLC bounds the run does not reproduce are refused" 1 bash "$scri
 mutate under '.status = "open" | .lane = "idris2"' elixir-rules-support
 expect "derive: an open row whose file checks is a stale underclaim" 1 env PROOF_LEDGER="$work/under.jsonl" bash "$script" derive "$lanes" "$all_pass"
 
-mutate pwg-up '.pwg = "2i" | .legs = []' logtalk-migration
+mutate pwg-up '.pwg = "2i" | .legs = []' alert-table-correspondence
 expect "derive: a grade above PWG-3 with no counted leg is an overclaim" 1 env PROOF_LEDGER="$work/pwg-up.jsonl" bash "$script" derive "$lanes" "$all_pass"
 
 expect "derive: no receipts file is a failure, never a pass" 1 bash "$script" derive "$lanes" "$work/no-such-receipts.jsonl"
@@ -157,25 +157,25 @@ expect_msg "a proven row with an empty checker is refused" 1 "are not empty" env
 mutate control-char '.obligation += "\n|open"' abi-types
 expect_msg "a control character in a field is refused" 1 "control character" env PROOF_LEDGER="$work/control-char.jsonl" bash "$script" check
 
-mutate number-leg '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven","receipt":1}]' logtalk-migration
+mutate number-leg '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven","receipt":1}]' alert-table-correspondence
 expect_msg "a number anywhere in a row is refused (jq -cS is JCS only without numbers)" 1 "holds no numbers" env PROOF_LEDGER="$work/number-leg.jsonl" bash "$script" check
 
-mutate asserted-leg '.pwg = "1" | .legs = [{"counts":true}]' logtalk-migration
+mutate asserted-leg '.pwg = "1" | .legs = [{"counts":true}]' alert-table-correspondence
 expect_msg "a leg that only asserts it counts is refused" 1 "unknown leg field(s) counts" env PROOF_LEDGER="$work/asserted-leg.jsonl" bash "$script" check
 
-mutate pending-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"pending","prover":"rocq","route":"transported","status":"proven"}]' logtalk-migration
+mutate pending-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"pending","prover":"rocq","route":"transported","status":"proven"}]' alert-table-correspondence
 expect_msg "a leg whose statement is not reconciled does not count" 1 "the legs support PWG-3" env PROOF_LEDGER="$work/pending-leg.jsonl" bash "$script" check
 
-mutate counted-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"}]' logtalk-migration
+mutate counted-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"}]' alert-table-correspondence
 expect "a reconciled, proven Rocq leg supports PWG-2i" 0 env PROOF_LEDGER="$work/counted-leg.jsonl" bash "$script" check
 
-mutate understated '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' logtalk-migration
+mutate understated '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' alert-table-correspondence
 expect_msg "a grade below what the legs support is refused too (computed, not asserted)" 1 "the legs support PWG-2ii" env PROOF_LEDGER="$work/understated.jsonl" bash "$script" check
 
-mutate pwg-one '.pwg = "1" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' logtalk-migration
+mutate pwg-one '.pwg = "1" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' alert-table-correspondence
 expect_msg "PWG-1 is refused while the ledger records no per-commit receipts" 1 "PWG-1 needs a current per-commit receipt" env PROOF_LEDGER="$work/pwg-one.jsonl" bash "$script" check
 
-mutate diverse-claim '.foundation_diverse = true' logtalk-migration
+mutate diverse-claim '.foundation_diverse = true' alert-table-correspondence
 expect_msg "+foundation-diverse without a counted other-foundation leg is refused" 1 "foundation_diverse is true exactly when" env PROOF_LEDGER="$work/diverse-claim.jsonl" bash "$script" check
 
 expect_msg "a missing PROOF-POLICY pin is refused (section 7)" 1 "pin is missing or malformed" env PROOF_POLICY_PIN="" bash "$script" check

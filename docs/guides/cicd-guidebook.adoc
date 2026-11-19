@@ -1026,7 +1026,7 @@ RUST_LOG=cicd_fixer::scanner=trace cicd-fixer scan /path/to/repo
 
 === Phase 1: Foundation (Complete)
 
-* [x] Logtalk rule engine (retired 2026-03-06, absorbed into the Elixir ruleset)
+* [x] Rule engine (error catalog, pattern detection) in the Elixir ruleset
 * [x] ERROR-CATALOG.scm
 * [x] SHA-PINS.scm
 * [x] cicd-fixer CLI
