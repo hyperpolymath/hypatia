@@ -11,12 +11,13 @@ workflows:
     '.github/workflows/build-gossamer-gui.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-node@v7.1.0'
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
+        - 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
         - 'taiki-e/install-action@v2.90.3'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
+        - 'actions/create-github-app-token@v3.3.0'
         - 'step-security/harden-runner@v2.22.4'
     '.github/workflows/ci.yml':
         - 'actions/cache@v6.1.0'
@@ -38,6 +39,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'github/codeql-action@v4.38.2'
     '.github/workflows/credential-read-check.yml':
+        - 'actions/create-github-app-token@v3.3.0'
         - 'step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
@@ -54,6 +56,7 @@ workflows:
     '.github/workflows/governance.yml':
         - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
     '.github/workflows/hypatia-remediation-sweep.yml':
+        - 'actions/create-github-app-token@v3.3.0'
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.4'
     '.github/workflows/hypatia-scan.yml':

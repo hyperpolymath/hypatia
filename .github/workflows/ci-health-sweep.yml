@@ -55,12 +55,28 @@ jobs:
             api.github.com:443
 
       - uses: actions/checkout@v7.0.1
+
+      # Short-lived installation token, replacing the long-lived
+      # HYPATIA_DISPATCH_PAT. Scoped to every repository the App is
+      # installed on (the sweep walks the whole owner).
+      - name: Mint sweep token (GitHub App)
+        id: sweep_app
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          app-id: ${{ secrets.HYPATIA_APP_ID }}
+          private-key: ${{ secrets.HYPATIA_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.owner || 'hyperpolymath' }}
+          permission-actions: read           # detect.sh lists workflow runs and jobs
+          permission-checks: read            # detect.sh reads check-run annotations
+          permission-administration: write   # allow-list PUT
+          permission-contents: write         # fix branches
+          permission-pull-requests: write    # PR create
+          permission-issues: write           # issue upsert
+          permission-workflows: write        # branches that touch .github/workflows
+
       - name: Run CI-health sweep
         env:
-          # PAT needs classic `repo` + `workflow` scope (repo admin for the
-          # allow-list PUT, PR create, and issue upsert). Reused from the
-          # existing remediation pipeline.
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          GH_TOKEN: ${{ steps.sweep_app.outputs.token }}
           OWNER: ${{ inputs.owner || 'hyperpolymath' }}
           # Scheduled runs remediate live (owner opted into auto-remediation);
           # manual dispatch defaults to dry-run for safety.
