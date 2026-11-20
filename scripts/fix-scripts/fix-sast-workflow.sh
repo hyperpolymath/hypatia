@@ -22,11 +22,11 @@ mkdir -p "${REPO}/.github/workflows"
 # Detect languages for CodeQL matrix
 languages=()
 # JavaScript/TypeScript (includes ReScript compiled output)
-if find "$REPO" -maxdepth 3 -name "*.js" -o -name "*.mjs" -o -name "*.res" 2>/dev/null | grep -q .; then
+if find "$REPO" -maxdepth 3 -name "*.js" -o -name "*.mjs" -o -name "*.res" 2>/dev/null | grep >/dev/null .; then
   languages+=("javascript-typescript")
 fi
 # Ruby
-if find "$REPO" -maxdepth 3 -name "*.rb" 2>/dev/null | grep -q .; then
+if find "$REPO" -maxdepth 3 -name "*.rb" 2>/dev/null | grep >/dev/null .; then
   languages+=("ruby")
 fi
 

@@ -1,7 +1,10 @@
 [tools]
 # Language runtimes
 # Match the OTP 27.3.4.19 / Elixir 1.19.4 lanes in .github/workflows/ci.yml and tests.yml.
-erlang = "27.3.4.19"  # >= 27.3.4.13: :httpc drops authorization on cross-origin redirect
+# OTP 27.3.4.19 drops header and URL credentials when a redirect changes host or port.
+# Scheme alone is not checked: same-host, same-port HTTPS-to-HTTP redirects are not protected.
+# Keep explicit redirect guards.
+erlang = "27.3.4.19"
 elixir = "1.19.4-otp-27"
 node = "latest"
 rust = "latest"   # provides cargo, rustfmt and clippy

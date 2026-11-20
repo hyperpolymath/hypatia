@@ -33,7 +33,7 @@ while IFS=$'\t' read -r repo cls _sev _det; do
     D-BURN)
       if [ "$burned" -lt "$MAXPR" ]; then
         out=$(OWNER="$O" "$HERE/remediate.sh" "$repo" "$cls" "$DRY" || true); echo "$out"
-        echo "$out" | grep -q '^FIXED' && burned=$((burned+1))
+        echo "$out" | grep >/dev/null '^FIXED' && burned=$((burned+1))
       else echo "CAP $repo/D-BURN max-burn-prs($MAXPR) reached — deferred"; fi ;;
   esac
 done < <(sort -u "$findings")

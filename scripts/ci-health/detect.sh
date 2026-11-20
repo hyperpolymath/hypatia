@@ -59,11 +59,11 @@ for fail_id in "${fail_ids[@]}"; do
       emit B-TRACKER-TOKEN HIGH "Pin updater reports missing write credential (run $fail_id) → compare pins read-only before provisioning repository-scoped write access"
       tracker_token_seen=true
     fi
-    if [ "$billing_seen" = false ] && printf '%s' "$msg" | grep -qiE 'payments have failed|spending limit'; then
+    if [ "$billing_seen" = false ] && printf '%s' "$msg" | grep -iE 'payments have failed|spending limit' >/dev/null; then
       emit A-BILLING CRITICAL "Actions billing/spending-limit wall blocks all billable jobs → OWNER: GitHub Settings -> Billing & plans"
       billing_seen=true
     fi
-    if [ "$lockfile_seen" = false ] && printf '%s' "$msg" | grep -qiE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin'; then
+    if [ "$lockfile_seen" = false ] && printf '%s' "$msg" | grep -iE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' >/dev/null; then
       first_lock_msg=$(printf '%s\n' "$msg" | grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin')
       emit B-LOCKFILE HIGH "Actions lockfile verification failed (${first_lock_msg}) → run gh actions-lock --verify, repair, then commit actions.lock"
       lockfile_seen=true
@@ -107,7 +107,7 @@ fi
 # --- D: burn anti-pattern (bare [push, pull_request] double-trigger), via API
 for path in $(api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' || true); do
   if api "repos/$O/$R/contents/$path" --jq '.content' | base64 -d \
-       | grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]'; then
+       | grep -E '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]' >/dev/null; then
     emit D-BURN MEDIUM "ERR-WF-014: $path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
   fi
 done

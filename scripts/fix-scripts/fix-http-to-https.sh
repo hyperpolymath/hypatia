@@ -44,7 +44,7 @@ fix_file() {
   [[ "$file" == */.zig-cache/* ]] && return 0
 
   # Only process text files
-  file -b --mime-type "$file" 2>/dev/null | grep -q "text/" || return 0
+  file -b --mime-type "$file" 2>/dev/null | grep >/dev/null "text/" || return 0
 
   # Build sed exclusion pattern
   local sed_cmd="s|http://|https://|g"
