@@ -48,6 +48,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 * link:design/DESIGN-NARRATIVE.adoc[`DESIGN-NARRATIVE.adoc`] — narrative design rationale.
 * link:design/design-decisions.adoc[`design-decisions.adoc`] — atomic decision log.
 * link:design/2026-11-14-merge-honesty.adoc[`2026-11-14-merge-honesty.adoc`]: proposed. When Hypatia treats 2 findings as 1, and 5 decisions for the owner.
+* link:design/pattern-identity.adoc[`pattern-identity.adoc`]: proposed. What a pattern id is made of today (a count and a path prefix), 5 candidate keys, and a ruling packet.
 
 == Operations — runbooks + design memos
 

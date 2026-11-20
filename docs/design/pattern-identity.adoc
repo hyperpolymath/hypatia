@@ -1,0 +1,411 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Pattern identity: a key that does not depend on wording
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-15
+:toc:
+
+Status: REVISED to the owner's rulings of 2026-11-18 (recorded as a comment on pull request 1175): the key is
+K4 now (not K3 as a step), and the same-file case of `E0-22` fails closed. Questions that those rulings leave
+open are in section 9. No code changes in work order E0-20.
+
+== 1. Summary
+
+Owner ruling of 2026-11-14 on `docs/design/2026-11-14-merge-honesty.adoc`, decision 3: "a new key that does
+not depend on wording, as its own design work order." This note is that work order.
+
+What I measured, on 2026-11-15:
+
+* The id of a pattern is the scanner rule plus the first 30 characters of the description. The description
+  of the scanner has the shape `<count> <thing> in <path>`. So the id **contains the count and the start of
+  the path**. In the estate registry, 824 of 1036 ids carry a count, and removing the count and the path
+  leaves about 105 defect classes. One class, `PA005 unwrap-expect-calls`, is spread over 290 ids.
+* A change of the count gives a new id. A fix that takes 103 calls to 102 would start a new pattern and leave
+  the old one, with its recipe link, behind.
+* **No recipe can match a registry id exactly.** 0 of the 42 recipe `pattern_ids` of the estate equal any of
+  its 1036 registry ids. Every match today is a `category` or a `fuzzy` match.
+
+The key that does not depend on wording is one that the scanner emits: a stable id for the detector (K4). The
+scanner does not give it today. The owner ruled (2026-11-18) that K4 is the key now, so this note recommends K4
+from the start, states its cost (section 5.2: a change in `panic-attack`, and a class-id table for the old ids)
+and no longer proposes the description-based key K3 as an interim step (section 5.1).
+
+== 2. What exists today (measured)
+
+Commit `cf1e2757` of `main`, read on 2026-11-15. Scanner: `panic-attack` at `cbf2b93` (the commit that the CI of
+this repository pins).
+
+* `lib/pattern_registry.ex`, `aggregate_fresh/2` (line 204): `pattern_id = "#{pa_rule}-#{fingerprint(description)}"`.
+* Same file, `fingerprint/1` (line 380): lower case, each run of characters outside `a-z0-9` becomes one hyphen,
+  trimmed, then the first 30 characters.
+* Same file, line 203: `pa_rule = Map.get(@pa_rule_map, category, "PA000")`. The map has 35 entries (25 `PA`
+  rules and 10 `UX`).
+* The registry keeps the first description that it saw for an id, and a count of occurrences for each repository.
+  It keeps no file, no line and no list of findings.
+
+=== 2.1 The 2 results that the work order inferred, shown
+
+These ran through the real `PatternRegistry.sync_from_scans/1` in a throw-away store (script
+`/tmp/identity_demo.exs`, run with `mix run --no-start`).
+
+[source,text]
+----
+R1: 2 findings, different files and lines, same rule, same first 30 characters of the description
+  id="PA009-potentially-unquoted-variable-" occurrences=2 category=CommandInjection
+  => 1 pattern(s) for 2 finding(s)
+
+R2: the SAME defect, reworded
+  id="PA009-possibly-unquoted-variable-in-" occurrences=1 category=CommandInjection
+  id="PA009-potentially-unquoted-variable-" occurrences=1 category=CommandInjection
+  => 2 pattern(s) for 2 finding(s)
+----
+
+Both inferred results hold. R1 is the merge that the merge-honesty note describes: a label on an outcome cannot
+tell the 2 findings apart. R2 is the split: a reworded description is a new pattern, and the old one loses its
+recipe link.
+
+Two more cases that the same script showed:
+
+[source,text]
+----
+R3: 2 different categories that Hypatia's map does not know, same description
+  id="PA000-dependency-has-a-known-vulnera" occurrences=2 category=Advisory
+  => 1 pattern(s) for 2 finding(s)
+
+R4: long common path prefix, different files
+  id="PA005-unchecked-malloc-in-verificati" occurrences=2 category=PanicPath
+  => 1 pattern(s) for 2 finding(s)
+----
+
+R3 joins `Advisory` and `BannedDep` into one pattern that says `Advisory`. R4 shows that the id depends on a path
+prefix: 2 different files under one directory are one pattern.
+
+=== 2.2 What the real registry looks like
+
+The work order asks for the count of patterns with the rule `PA000` in a store that the owner names. The owner has
+not named one, so these are the 2 that exist. The second is my choice, not a ruling.
+
+[cols="3,2,2",options="header"]
+|===
+|Measure |`data/verisim/patterns/registry.json` (this repository, 1 commit) |`hyperpolymath/verisimdb-data` `patterns/registry.json` (sha `9d94837`)
+
+|patterns |9 |1036
+|patterns with the rule `PA000` |0 |0
+|occurrences, all patterns |1972 |136466
+|===
+
+No pattern has the rule `PA000` today, and that zero does not show that the unmapped population is empty. In this
+repository's registry none of the 9 entries has a `pa_rule` at all (checked: `pa_rule` is `null` in each). They are
+legacy-schema entries (ids like `unsafe_panic-unwrap_on_lock`), and their categories (`unsafe_crash`,
+`unsafe_panic`, `type_safety_bypass`, `cors_misconfiguration`) are not in the map either, so they are not counted
+under `PA000` because they were never given a rule, not because the map knows them. The cause of the zero in the
+estate registry was not rechecked for this revision. The map lacks 5 of the 30 categories of the scanner:
+`Advisory`, `BannedDep`, `LicensePolicy`, `UnboundedAllocation` and `UnknownSource`. The first finding of one of
+them becomes `PA000` (case R3).
+
+Measured on the estate registry (1036 patterns):
+
+[source,text]
+----
+fingerprint at the 30-character limit ......... 1001 of 1036
+ids with a count right after the rule ......... 824 of 1036   (PA005-103-unwrap-expect-calls-in-int)
+descriptions that contain a path or extension .. 1005 of 1036
+distinct (rule, description without count and path) ... 105   (an estimate: my own normal form)
+largest classes:  290 ids  PA005 unwrap-expect-calls        17856 occurrences
+                  111 ids  PA014 http-non-https-urls         13164
+                  108 ids  PA005 unsafe-get-calls            14268
+                   91 ids  PA009 potentially-unquoted-variable-expansions  18177
+recipe pattern_ids that equal a registry id ... 0 of 42
+----
+
+So today a "pattern" is, in practice, one rule seen with one count in one place. The registry mixes 2 things: the
+class of a defect and one instance of it.
+
+== 3. 2 different things carry the word "pattern"
+
+* A *pattern* is a class of defect across the fleet: "unwrap/expect calls". Recipes, confidence, the annealing stage
+  and the trend are about classes.
+* A *finding* is one instance: a repository, a file and a place in it. A fix, a rescan and a withdrawal are about
+  instances.
+
+Decision 3 asks for a key for the first. The fix check of `E0-22` needs the second. `E0-26` already compares the
+file of a finding, and the rest is the same file, the same class, a different place. This note keeps the 2 apart
+and says what each needs (section 7).
+
+== 4. What the scanner gives
+
+`src/types.rs` of `panic-attack` at `cbf2b93`, `WeakPoint`: `category` (30 values), `location`, `file` and `line`
+(derived from `location`), `severity`, `description` (free text), `recommended_attack`, `suppressed`,
+`test_context`. The canonical rule table (`WeakPointCategory::rule_id`, `PA001` to `PA029` and `PA001b`) is "a
+public contract: never renumber an existing category". There is no snippet, no stable id for a detector and no
+id for one instance.
+
+== 5. Candidate keys for a pattern
+
+Each key is listed with what it merges, what it splits, and 1 example of each.
+
+[cols="1,3,3,3",options="header"]
+|===
+|Key |What it is |Keeps apart / joins |Label
+
+|K0, today
+|Hypatia's rule + first 30 characters of the description.
+|Apart: a count of 103 and a count of 102 of the same defect (R2-like), the same defect in 2 directories. Joins: 2 files under one long path prefix (R4), 2 categories under `PA000` (R3).
+|Rejected: it splits by count and path, joins by prefix, and depends on wording.
+
+|K1
+|The canonical `rule_id` of the scanner, alone (`PA005`).
+|Apart: `PA005` and `PA009`. Joins: "unwrap/expect calls" and "unsafe get calls" (both `PA005`; the estate has 2 classes of 290 and 108 ids under that one rule). About 17 patterns for the estate (one for each rule it holds).
+|Rejected: too coarse. A recipe is about one defect, not a whole rule.
+
+|K2
+|`rule_id` + the kind of file (the extension class: shell, Rust, Elixir, ReScript, ...).
+|Apart: `PA009` in a `.sh` file and in a `.ex` file. Joins: "unquoted variable expansions" and "eval usage", both `PA009` in `.sh` files.
+|Rejected: still too coarse, and "file kind" needs a table that Hypatia would have to own.
+
+|K3
+|`rule_id` + a normal form of the description: lower case, with the leading count, the path after "in" and a
+trailing parenthesis removed. Example: `PA005-unwrap-expect-calls`. When the category has no entry in the map (rule
+`PA000`), the canonical category is part of the key (`PA000-advisory-dependency-has-a-known-vulnera...`), so that
+2 unmapped categories with one description stay apart (the R3 harm).
+|Apart: "unwrap/expect calls" and "unsafe get calls"; 2 unmapped categories with one description. Joins: 290 ids of one class into 1, whatever the count or the path. About 105 patterns for the estate. It still splits a reworded defect (R2), because it reads the words.
+|Considered, not chosen (section 5.1). It removes the measured harms and needs no scanner change, but it does **not** meet "does not depend on wording": it reads the words of the description.
+
+|K4
+|`rule_id` + a stable id for the detector that the scanner emits (for example `PA005.unwrap`), with no
+description in the key.
+|Apart: 2 detectors of one rule. Joins: the same detector, whatever it says in its message. A reworded message does not split it.
+|**Recommended (owner ruling, 2026-11-18).** The only candidate that is independent of wording. **It needs a field that the scanner does not give today** (the stop condition of the work order): a change in `panic-attack`, which is a separate repository. Whether a work order may make that change is still open (section 9, question 2).
+|===
+
+=== 5.1 Why K4 and not K3
+
+The requirement of decision 3 is a key that does not depend on wording. K3 cannot meet it, for 2 reasons that
+come from how K3 is built (inferred from section 2 and the definition of K3; no K3 was run on a scan):
+
+* K3 is a function of the text of the description. A reworded description (case R2) gives a different normal
+  form, so the same defect is a new pattern and the old one loses its recipe link. The normal form removes the
+  count and the path; it cannot remove a change of the words.
+* The normal form is Hypatia's own reading of the scanner's free text. If the scanner changes the shape
+  `<count> <thing> in <path>`, the removal of the count and the path can silently stop working. That would be a
+  silent split, not a failure.
+
+K3 is therefore *considered, not chosen*. It stays in the table as the measured fallback and as the source of the
+"about 105 classes" estimate, which also bounds the size of the table that K4 needs (section 5.2). It is not an
+interim step: the owner ruled against shipping a key that would be replaced and migrated a second time.
+
+=== 5.2 What K4 costs that K3 did not
+
+* *A field from the scanner.* `WeakPoint` (section 4) has no detector id. Until `panic-attack` emits one, no new
+  finding can get a K4 key from a field. This is a change in a separate repository (section 9, question 2).
+* *A class-id table for the old ids.* The 1036 old ids hold no detector id. To map an old id to a K4 key, a table
+  must say which detector each old (rule, first description) belongs to. That table reads wording once, as a
+  reviewed one-time artefact for the migration (about 105 rows if the estimate of section 10 holds; the
+  count is not measured on the final table). It is not a runtime key. Ids that the table cannot place stay held
+  (section 6). The K3 normal form would have been computed by code with no table to review.
+* *A rule for a finding with no detector id.* While the scanner does not emit one, ingest cannot compute a K4
+  key. Falling back to K3 would bring back what the owner ruled out; the open choice is in section 9, question 3.
+* *The Kin readers.* Section 5.3.
+
+=== 5.3 The Kin Gate and the Arbiter under K4
+
+Facts on head `d0694ac4` (read on 2026-11-18):
+
+* `lib/kin/gate.ex`, `check_conflict/2` (lines 417 to 427 are its search): a held action conflicts when it has the
+  same `repo`, an equal `pattern_id` and a different `bot_id`. Under K4 the id names a detector, so 2 bots that
+  target one detector in one repository conflict, whatever the count or the path. Under K0 they conflicted only on
+  an equal count-and-path id, so this check becomes stricter. That is the intended direction of a class key, and it
+  needs no code change: the comparison is equality of opaque strings.
+* `lib/kin/arbiter.ex`, line 196: the same equality is a "direct conflict" resolved by priority
+  (`resolve_by_priority/3`). Lines 285 to 296 (`scan_for_conflicts/2`) use equality of `pattern_id` or an overlap of
+  `affected_files`. Both are equality, so K4 works without a change and is stricter in the same way.
+* `lib/kin/arbiter.ex`, `categorize_action/1` (lines 254 to 275): it looks for the substrings `license`, `spdx`,
+  `CommandInjection`, `PathTraversal`, `accessibility`, `a11y`, `doc` and `format` inside the `pattern_id`. The
+  result feeds `non_conflicting?/2` (pairs at lines 50 to 58), which makes 2 actions on one repository compatible
+  before the equality check at line 196. Two statements follow from reading the code. First, the ids that the
+  registry builds today are lower case (`fingerprint/1`, `lib/pattern_registry.ex` line 380) and hold no category name,
+  so the `CommandInjection` and `PathTraversal` branches cannot match a registry id (inferred from the code; I did
+  not run it on the registry). Second, an opaque K4 token such as `PA005.unwrap` holds none of the words, so every
+  K4 action would be `general` and no pair of `@non_conflicting_pairs` could apply. K4 therefore changes the behaviour of
+  `categorize_action/1`: the pairs that today rely on a word in the description would stop being compatible.
+* Both modules receive their id from `lib/fleet_dispatcher.ex` line 274, which uses `Map.get(pattern, "id",
+  Map.get(pattern, "description", ""))`. A pattern with no `id` is keyed by its whole description. Under K4 that
+  fallback would put a wording-dependent key into the one place that must not have it.
+
+The code does not settle what the intended behaviour is, so these are open questions with options (section 9,
+questions 4 and 5), not decisions of this note.
+
+== 6. The history and the recipe link of an old pattern
+
+* *Outcome rows.* Rows have a `pattern_id` only since `E0-18`, and older rows have none. There is no history of
+  pattern ids in the outcome log to rewrite.
+* *Ambiguous legacy ids.* Before mapping, identify every `PA000` id, every id whose contributing categories
+  conflict in retained scans or rule-map history, and every id for which a single category cannot be established.
+  `PA000` is a shared fallback (R3), so the stored category and first description cannot prove a category split.
+  Hold these ids and all their occurrences out of the merge for owner review: preserve their entries and counts,
+  assign no `superseded_by`, and exclude them from dispatch and recipe matching while held. Do not infer a split
+  from the stored description. This proposal does not establish that retained scans cover all contributing
+  findings; releasing a hold needs an owner-approved category split with evidence accounting for every occurrence
+  per repository, or a separate ruling on unrecoverable data.
+* *Readers before migration.* These are proposed requirements, not current behaviour: registry enumeration
+  (`all_patterns`, active, category and trend queries) must skip entries with `superseded_by`; dispatch must also
+  reject them even if passed directly. Explicit history access may return the original entries and counts, but
+  must not feed them into live totals or dispatch. Held ambiguous entries must be identified as held in enumeration
+  and excluded from dispatch as above. Implement and validate these reader rules before migrating any data.
+* *The registry.* Only an old id established to contain one category maps to one new key (many-to-one for K4). Compute its key from that category's canonical rule and the detector id that the reviewed class-id table of section 5.2 gives for the stored description. Keep the old
+  entry marked `superseded_by`, and add its per-repository occurrences to the new key exactly once. Delete nothing;
+  subsequent syncs and migration reruns must preserve the marker and must not count the old entry again.
+* *Recipes and old-id lookup.* For recipe matching, resolve both the requested id and each recipe `pattern_ids`
+  entry through `superseded_by` to the terminal class id before exact, category or fuzzy matching. This is separate
+  from history lookup, which returns the original entry. A held id, missing alias target or alias cycle produces
+  no match and a diagnostic; it must not fall back to category or fuzzy matching. An id absent from the registry
+  remains a literal recipe id, preserving today's category/fuzzy matching for recipe names (0 of 42 currently
+  equal registry ids). A valid alias whose canonical ids are equal is an `exact` match; otherwise category/fuzzy
+  matching uses the resolved ids. After K4 a recipe can name a class id directly. The fuzzy match of `E0-21` reads
+  the words after the rule; a K4 id has a detector token there, not the words, so fuzzy matching against K4 ids needs its own check (not run). Implement and validate alias resolution before migration too.
+* *Receipts.* `pattern_id` in a receipt is a string (`schema/receipt.ncl`). A K4 id fits.
+* *A dry run first.* A script prints each eligible old id and new key, merge counts and per-repository occurrence
+  totals, and writes nothing. It lists ambiguous ids separately, with the reason for each hold and its withheld
+  per-repository counts; they have no proposed target and are excluded from merge totals. The migration runs only
+  after the owner has seen this report and the reader and alias rules above have been implemented and validated.
+
+== 7. Who reads the pattern id
+
+[cols="3,5",options="header"]
+|===
+|Reader |What it does with it
+
+|`lib/recipe_matcher.ex`, lines 22, 32, 140 to 142, 196 to 218
+|Exact match by id (`best_recipe/2`), fuzzy match by the rule prefix and the keywords after it.
+
+|`lib/pattern_registry.ex`, lines 204, 211, 251
+|Builds the id, stores `pa_rule`, keeps the metadata.
+
+|`lib/dispatch_manifest.ex`, lines 59, 148, 177, 201, 247
+|Writes `pattern_id` in each manifest entry and names it in the fact of the step.
+
+|`lib/fleet_dispatcher.ex`, line 274
+|`pattern_id` of the action that goes to the Kin Gate.
+
+|`lib/kin/gate.ex`, lines 417 to 427 and 531
+|Semantic: `check_conflict/2` rejects an action when a held action has the same repository, the same
+`pattern_id` and a different bot, so a class key (K4) can create conflicts that equal-by-count ids did not (section 5.3).
+Also records `pattern_id` of the action.
+
+|`lib/kin/arbiter.ex`, lines 196, 254 to 275, 292
+|Semantic: equality of `pattern_id` is a direct conflict, and `categorize_action/1` looks for substrings
+(`license`, `spdx`, `CommandInjection`, `doc`, `format`, ...) inside the id. Equality works unchanged under K4;
+`categorize_action/1` does not, because an opaque K4 token holds none of those words (section 5.3). The intended
+behaviour is an open question (section 9, questions 4 and 5).
+
+|`lib/neural/coordinator.ex`, line 505
+|Takes `pattern_id` as a candidate recipe id of a finding.
+
+|`lib/vcl/query.ex`, lines 284, 476 to 489
+|Joins patterns with the recipes that name them.
+
+|`lib/recipe_generator.ex`, lines 143, 231
+|Writes `pa_rule`, reads the id of a pattern.
+
+|`lib/outcome_tracker.ex`, line 256, and `lib/mix/tasks/hypatia.record_outcome.ex`, line 242
+|Writes `pattern_id` on a row (`E0-18`).
+
+|`lib/hypatia/receipt.ex`, line 117
+|Carries `pattern_id` in a receipt.
+
+|`lib/scorecard_ingestor.ex`, lines 612 and 643
+|Its own id: `<check>-<fingerprint of the repository>`. Not changed by this key.
+
+|`lib/data/arangodb.ex`, line 367
+|An index on `pattern_id`.
+
+|`gitbot-fleet`, `scripts/dispatch-runner.sh`
+|Reads `pattern_id` of a manifest entry (outside this repository).
+
+|`verisimdb-data`, `patterns/registry.json` and `recipes/`
+|The data that holds the ids today (outside this repository).
+|===
+
+Precedents inside the repository for a stable key: `lib/scorecard_reconciler.ex`, `fingerprint/3` (line 124),
+`repo|tool|rule|normalized-path`, which "deliberately excludes line numbers"; and `lib/hypatia/sarif.ex` (line 114),
+`hypatiaFindingHash/v1`, a hash of the rule, the uri, the type and the reason. The first is a finding key, not a
+pattern key.
+
+== 8. What this means for the other work orders
+
+* *`E0-22` (fix check by finding).* `E0-26` already makes the rescan judge a fix by its category and its file.
+  What is left is 2 findings of one class in the same file. The fix side knows the file and not the line, and a line
+  moves when the fix edits the file. The scanner gives no stable id for an instance. So that case cannot be decided
+  from the rescan at all, whatever the pattern key is (K4 included: it names a detector, not an instance).
+**Owner ruling, 2026-11-18: fail closed.** An ambiguous same-file case is recorded as `scan_skipped`, with no
+credit and no blame on the fix, and the fleet-count answer `incomplete` is accepted. **The acceptance case of the
+`E0-22` work order therefore changes: it must expect `incomplete`, not `verified`.** The fleet already has an identity-free answer: its own
+  postcondition counts the weak points of the recipe before and after (`before_hits` and `after_hits` in every
+  fleet row; `E0-03` stores them). The fleet's verdict `verified` needs `before_hits` above 0 and `after_hits`
+  equal to 0, counted by the recipe's predicate over the repository. So the recipe's own predicate judges the
+  fix, and nothing has to guess which of 2 findings was meant. It answers a stricter question than the
+  rescan: "did every target of the recipe go?", not "did this instance go?". When 2 instances exist and the fix
+  removes one, `after_hits` stays above 0 and the verdict is `incomplete`, which is the safe side. The work order as
+  it stands (`docs/operations/e0-closeout/work-orders/E0-22-fix-check-by-finding.adoc`, "Acceptance") expects
+  `verified` when the fixed finding is gone and another finding of the category stays. The ruling trades that case
+  for never reporting a false `verified`. The work order is not part of this pull request's diff (the diff holds
+  `docs/README.adoc` and this note), so this note does not edit it: a separate change to that file is needed to
+  make its acceptance case expect `incomplete` and to record the `scan_skipped` outcome.
+* *`E0-19` (cap for a merged match).* With the registry as it is, no recipe can match exactly (0 of 42), so the cap
+  would hold every dispatch at `review`. That is the intended direction, and it is also why a class key such as K4 matters
+  to the cap. A new key alone does not change the 0 of 42: a recipe matches exactly only if its `pattern_ids` name a
+  class id. Today they do not (for example `recipe-unwrap-to-match` names `PA005-panic-unwrap`,
+  `PA005-unwrap-on-user-input` and `PA005-unwrap-without-check`, and none of them is a registry id, so section 6
+  leaves them as literal recipe ids). The recipes in `verisimdb-data` have to be re-pointed at class ids, by a
+  separate reviewed step, before the cap stops holding that class at `review`. Owner ruling, 2026-11-18: that
+  re-pointing stays a SEPARATE step. This note does not do it and the K4 ruling does not include it.
+* *The measurement of option C* of the merge-honesty note needs a pattern that is a class. Today's ids are
+  per-count and per-path, so a success rate for one id measures one count-and-path bucket, which can still join
+  several files (R1, R4) and, through `repo_occurrences`, several repositories. It is not a rate for one file.
+
+== 9. Ruling packet
+
+Ruled on 2026-11-18, so no longer questions: the key is K4 now (section 5.1); the same-file case of `E0-22` fails
+closed (section 8); re-pointing the recipes is a separate step. The questions below are what those rulings leave
+open. Answer by letter. The option marked "(default arm)" is the most elegant and correct long-term one.
+
+. *The migration of the registry.*
+  A. Map eligible old ids to new keys and keep them marked `superseded_by`; hold ambiguous ids for owner review,
+  with the enumeration, dispatch and recipe-resolution rules of section 6 in place, after a dry run that you have
+  seen (recommended).
+  B. Rebuild the registry from the scans and drop the old ids.
+  C. No migration: new ids from now on, old ids left to age out.
+. *Detector id from the scanner.* K4 needs it (section 5.2). May a work order change `panic-attack` to emit a
+  stable detector id (and with what naming rule)? It is a separate repository. I would not do it without this
+  answer. A (default arm): yes, a work order in `panic-attack`, with ids never renumbered, as for `rule_id`.
+  B: no change; the class-id table of section 5.2 stays the only source, which keeps a wording dependence at
+  ingest.
+. *A finding with no detector id, until the scanner emits one.*
+  A (default arm, fail closed): ingest holds it as unclassified, outside dispatch and recipe matching, and counts
+  it in a visible total.
+  B: look it up in the class-id table and hold only what the table cannot place.
+  C: fall back to K3. This brings back the wording dependence that the ruling removed; listed for completeness.
+. *`categorize_action/1` under K4.* The substring test cannot read an opaque token.
+  A (default arm): the action carries an explicit `category` field (the pattern already has one; the dispatcher
+  at `lib/fleet_dispatcher.ex` line 274 can pass it) and `categorize_action/1` reads that field.
+  B: the detector id has a reserved, documented category segment and the test reads the segment.
+  C: keep the substring test; most actions become `general` and the `@non_conflicting_pairs` stop applying.
+. *Conflict scope under K4.* The Gate and the Arbiter would treat any 2 bots on one detector in one repository
+  as in conflict, however far apart the instances are.
+  A: accept it (equality, no code change; the stricter direction).
+  B: also compare `affected_files` for that case (the Arbiter already does for different patterns, line 200
+  onward). More precise, and it needs the Gate to receive `affected_files`, which it does not read today (not
+  checked in detail).
+  I recommend A for now. It is the simpler reading of a class key; it is not the default arm if the owner prefers
+  precision, so I name both.
+
+== 10. Limits
+
+* The "about 105 classes" is an estimate. It rests on my own normal form, applied to the first description that the
+  registry kept for each id. It is also only an estimate of the size of the class-id table of section 5.2.
+* The statements about the Kin Gate and the Arbiter (section 5.3) are read from the code of head `d0694ac4`.
+  None was run; the claim about `categorize_action/1` and the lower-case registry ids is an inference.
+* The `E0-22` work order file was not read or changed for this revision.
+* The estate registry is a snapshot of one commit (sha `9d94837`). I did not scan any repository for this note.
+* The examples of K1 and K2 are built from the classes that the registry shows. I did not run K1 or K2 on a scan.
+* No prover was run. No code of Hypatia was changed.
