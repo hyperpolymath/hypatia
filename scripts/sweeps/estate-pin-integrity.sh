@@ -322,7 +322,7 @@ replace_site() { # <line> <masked-line> <action> <ref> <good>
 # (`denylisted_pair`): `some/action@v4.38.1` is no finding.
 line_has_denied_token() {
   local tok t
-  if [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "(^|[^0-9A-Za-z])(${SHA_ALTERNATION})([^0-9A-Za-z]|\$)"; then
+  if [ -n "$SHA_ALTERNATION" ] && grep -qiE "(^|[^0-9A-Za-z])(${SHA_ALTERNATION})([^0-9A-Za-z]|\$)" <<<"$1"; then
     return 0
   fi
   [ ${#DENY_VERSIONS[@]} -gt 0 ] || return 1
@@ -399,7 +399,7 @@ relabel_comment() {
   local trimmed="${body#"$lead"}"
   # A bare claim (no `#`, no leading space) normalises to `# vX`, as relabel/2 does.
   [ "$body" = "$comment" ] && [ -z "$lead" ] && lead=" "
-  if printf '%s' "$trimmed" | grep -qE '^v?[0-9]+(\.[0-9]+)*([[:space:]]|$)'; then
+  if grep -qE '^v?[0-9]+(\.[0-9]+)*([[:space:]]|$)' <<<"$trimmed"; then
     printf '%s%s' "#${lead}" \
       "$(printf '%s' "$trimmed" | sed -E "0,/^v?[0-9]+(\.[0-9]+)*/s//v${version}/")"
   else

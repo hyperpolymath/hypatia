@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MPL-2.0
+name: has-concurrency
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions: read-all
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"

@@ -181,7 +181,7 @@ jobs:
             while IFS= read -r name; do
               # Names come from a repository_dispatch payload — enforce a
               # strict charset before using them anywhere.
-              if ! printf '%s' "$name" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+              if ! grep -Eq '^[A-Za-z0-9._-]+$' <<<"$name"; then
                 echo "::warning::Skipping invalid repo name in payload: $name"
                 continue
               fi
