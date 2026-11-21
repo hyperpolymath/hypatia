@@ -207,7 +207,7 @@ jobs:
               refs/heads/*|main|master|HEAD|develop)
                 echo "::error::refusing standards ref '${STANDARDS_REF}': pin a commit SHA or a release tag"
                 exit 1 ;;
-              *) printf '%s' "$STANDARDS_REF" | grep -Eq '^[0-9a-f]{7,40}$' || {
+              *) grep -Eq '^[0-9a-f]{7,40}$' <<<"$STANDARDS_REF" || {
                    echo "::error::refusing standards ref '${STANDARDS_REF}': not a commit SHA or release tag"
                    exit 1
                  } ;;
@@ -297,7 +297,7 @@ jobs:
           case "$ref" in
             refs/tags/*|v[0-9]*) ok=1 ;;
             refs/heads/*|main|master|HEAD|develop) ok=0 ;;
-            *) printf '%s' "$ref" | grep -Eq '^[0-9a-f]{7,40}$' && ok=1 ;;
+            *) grep -Eq '^[0-9a-f]{7,40}$' <<<"$ref" && ok=1 ;;
           esac
           if [ "$repo_is_self" = "1" ]; then
             ok=1
@@ -306,7 +306,7 @@ jobs:
             echo "::error::the oracle is pinned to '${ref}' in ${WORKFLOW_REPOSITORY}, which is not an immutable ref. Pin a full commit SHA (or a release tag); '@main' is what let one broken commit break every consumer at once."
             exit 1
           fi
-          if ! printf '%s' "$pinned" | grep -Eq '^[0-9a-f]{40}$'; then
+          if ! grep -Eq '^[0-9a-f]{40}$' <<<"$pinned"; then
             echo "::error::could not resolve the pinned oracle SHA (got '${pinned}'); refusing to compile an unpinned oracle"
             exit 1
           fi
@@ -360,7 +360,7 @@ jobs:
             # Read from the checkout, never from an expression spliced into
             # this script.
             commit=$(git -C "$GITHUB_WORKSPACE/repo" rev-parse HEAD 2>/dev/null || true)
-            if printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            if grep -Eq '^[0-9a-f]{40}$' <<<"$commit"; then
               args+=(--source-commit "$commit")
             fi
           fi
