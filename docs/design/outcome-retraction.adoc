@@ -1,0 +1,235 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Outcome retraction: a finding that names an outcome row as support
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-21
+:toc:
+
+Status: RULED (owner, 2026-11-21; section 8a). No code changes in this note.
+
+== 1. Summary
+
+When a person withdraws an outcome row (work order `E0-07`), anything that rested on that row should stop
+resting on it. The retraction model of HYP-01 does this for a quarantined bot, rule or prover. The owner chose
+to extend it so that a finding can name an outcome row as support, accepting that it is dead code until
+something cites a row, and asking for its own design. This is that design.
+
+What I measured, on 2026-11-21:
+
+* The model is small and generic: a token rests on a list of assumptions, and a finding survives while one of
+  its tokens does. Adding a fourth kind of assumption, `outcome:<event_id>`, is a few lines in Elixir and one
+  constructor in the Idris2 model. The proved theorems are generic over the assumption type and do not change.
+* **The model's rule does not fit a count.** A claim such as "5 qualified outcomes put this recipe at
+  `adolescent`" is a threshold. Under the model, retracting 1 of the 5 rows keeps the finding, with 4 of 5 tokens,
+  and its claim still says 5 (shown in 2.2). A naive extension would leave a stale claim.
+* **A withdrawal can raise a tier.** Withdrawing a row of a *failure* raises the confidence of its recipe. The
+  retraction model only ever takes support away.
+* **Nothing cites an outcome row, and nothing in `lib/` calls `retract_dependents/1`.**
+
+The note recommends invalidating a finding whose claim is a function of the set of cited rows when any of them is
+withdrawn, and recomputing a new one from the remaining log. It then needs a first finding that cites rows, or it
+stays dead code on purpose (section 8, question 2).
+
+== 2. What exists today (measured)
+
+Commit `689897b4` of `main`, read on 2026-11-21.
+
+* `lib/hypatia/verdict/retraction.ex`: `@type assumption :: {:rule, _} | {:bot, _} | {:prover, _}`. `parse/1`
+  turns a quarantine key into one (`rule:`, `prover:`, `bot:`, or a bare bot name). `token_support/1` gives the
+  assumptions of a token: its `:rule`, and its `:bot` when it has one. `retract/2` is pure: the caller gives the
+  retracted set.
+* `src/Hypatia/ABI/Retraction.idr` (line 49): `data Assumption = RuleA String | BotA String | ProverA String`.
+  The theorems (`retractThin`, `survivesDependent`, `retractedSupportDies`, `noTokensNoSurvival`) are about `Elem`
+  and `Thin` over a list of any type.
+* `lib/safety/quarantine.ex`: `retracted_assumptions/0` reads the quarantine table, and `retract_dependents/1`
+  applies `retract/2` with it. **No module of `lib/` calls `retract_dependents/1`.** Only `test/retraction_test.exs` does.
+* `lib/hypatia/verdict.ex`: the findings that carry evidence tokens are the findings of rule modules
+  (`annotate/1`). Their tokens name a rule, a rule version and a span. The `observed` support of a manifest fact
+  (`DispatchManifest.facts_for/1`) counts the occurrences in the pattern registry, not outcome rows.
+* The withdrawal store of `E0-07` does not exist yet (`E0-07-stop-note`, in the outputs of the close-out).
+
+=== 2.1 What a withdrawn row has to name
+
+After `E0-09` every row that Hypatia writes has an `event_id`; a fleet row with a producer id keeps it (`E0-11`).
+So `outcome:<event_id>` can name any row written since then. A row from before has no id: it cannot be cited and,
+as ruled for `E0-07`, cannot be withdrawn.
+
+=== 2.2 The case that a naive extension gets wrong
+
+Run through the real `Hypatia.Verdict.Retraction.retract/2`, with 5 evidence tokens that each rest on a different
+assumption (a bot stands in for an outcome row, because no outcome kind exists yet):
+
+[source,text]
+----
+--- retract 1 of the 5 ---
+kept: 1  retracted: 0
+surviving tokens: 4 of 5   claim still reads: recipe-x tier = adolescent (5 qualified outcomes)   level: epi   support: %{kind: "observed", observations: 5}
+--- retract all 5 ---
+kept: 0  retracted: 1
+----
+
+The finding is kept while a token survives, and its `support.observations` is not re-derived. A finding whose claim
+is a count would go on saying 5 after a row was withdrawn.
+
+== 3. The extension itself
+
+[cols="2,5",options="header"]
+|===
+|Part |Change
+
+|Elixir `assumption` type
+|Add `{:outcome, String.t()}`; `name/1` gives `outcome:<id>`; `parse/1` reads the prefix `outcome:` before the bare-bot fallback, so that a bot cannot be named like an outcome.
+
+|`token_support/1`
+|A token may carry `:outcomes`, a list of event ids; each becomes `{:outcome, id}`. A token with no `:outcomes` is unchanged, so every finding of today keeps its behaviour.
+
+|Where the retracted set comes from
+|A new reader of the withdrawal store of `E0-07` (`withdrawn_assumptions/0`), united with `Quarantine.retracted_assumptions/0` by the caller of `retract/2`. `retract/2` stays pure.
+
+|Idris2 model
+|Add `OutcomeA String` to `Assumption`. No theorem changes. Add 1 accepted and 1 refused fixture under `tests/`: a token resting on a withdrawn outcome does not survive, and a token resting on another outcome does. Re-run `scripts/check-verdicts.sh`, and update the trust boundary of the ledger row.
+
+|Mirror test
+|The Elixir behaviour is held to the model by `test/retraction_test.exs`: add the outcome cases there.
+|===
+
+This part is small and is the dead code that the owner accepted.
+
+=== 3a. What the rulings add to section 3
+
+* A finding carries `claim: :threshold | :any` (default `:any`, so no finding of today changes).
+* `:any`: a token for each cited row, resting on `{:outcome, id}`. The finding survives while a token does, and the caller re-derives its count and level from the survivors.
+* `:threshold`: the claim is a function of the whole set. It cites the set by a digest, not by a list of ids: `outcome_set: %{recipe_id: id, digest: digest}`. It survives only while that digest equals the current digest of the recipe's
+  qualified, non-withdrawn rows. A withdrawal of any row of the recipe therefore invalidates a fact built before it, and a fact built after it survives. `retract/3` takes the function that gives the current digest.
+* The withdrawn set reaches `Quarantine.retract_dependents/1` through `Quarantine.retracted_assumptions/0`, which includes `{:outcome, id}` for each withdrawn row (`E0-07`). That is the wiring that the owner approved.
+* Every row has an id: `event_id` since `E0-09`, and for an older row `legacy:<sha256 of its canonical JSON>` (`E0-34`). Two byte-identical legacy rows share an id and cannot be told apart, so a withdrawal of that id is refused.
+
+== 4. Why it is not a drop-in: 4 problems
+
+. *A count is not a disjunction.* The model keeps a finding while one token survives. That is right for "at least
+  one of these rows shows it" and wrong for "these 5 rows add up to adolescent" (section 2.2).
+. *A withdrawal can raise a tier.* Withdrawing a failure row raises confidence, and with it a recipe's stage and tier.
+  The retraction model, and the rule of the merge-honesty note that a cap only lowers, are about support being
+  removed. A tier is not monotone in its evidence.
+. *A fact that cites every counted row is as large as the count.* A veteran recipe has 50 or more qualified outcomes
+  (`ConfidenceAnnealing`), and I did not measure the largest in the estate.
+. *A legacy row has no id* and can be neither cited nor withdrawn.
+
+== 5. Candidate designs
+
+[cols="1,4,4,3",options="header"]
+|===
+|Design |What it does |Consequence |Label
+
+|D1, token per row
+|A finding that cites rows has one token for each row. It survives while a token does, and its count and level are re-derived from the survivors by the caller.
+|Right for a claim that one row is enough. For a threshold claim it keeps a claim that the survivors may not support unless every caller re-derives.
+|For "any row suffices" claims only
+
+|D2, invalidate and recompute
+|A finding whose claim is a function of the set of cited rows is retracted (not kept) when any cited row is withdrawn. `retracted_by` names the row. The caller computes a new finding from the log that remains.
+|Matches how `E0-07` recomputes from the log, and the echo-types rule that a withdrawal is applied to the log and the value computed again, never corrected in place. A cheap invariant: no finding survives that cites a withdrawn row. Costs a recompute for each withdrawal, which `E0-07` already does.
+|Recommended for threshold and count claims
+
+|D3, both, by a field
+|Each finding says whether its claim is `:threshold` or `:any`, and `retract/2` treats it as D2 or D1.
+|One rule per kind of claim, and no wrong default. One more field to get right.
+|Most correct in the long term, if both kinds of claim will exist
+
+|D4, none: recompute only
+|The withdrawal recomputes confidence, stage and tier, and no finding is retracted.
+|No dead code. A finding that cited an outcome could not be retracted, but none cites one.
+|The previous option A; the owner chose B instead
+|===
+
+== 6. The first finding that cites a row
+
+The owner accepts dead code. If a first citer is wanted, the natural one is a *recipe-tier fact* in the dispatch
+manifest: for each eliminate step, a second fact whose tokens carry `outcomes: [event ids]` of the rows that gave
+the recipe its stage. It needs a way to bound the size of the citation (section 4, problem 3):
+
+* cite only the rows that determine the stage: the first 5, 15 or 50 qualified rows, whichever threshold the
+  recipe has crossed, or
+* cite a digest of the recipe's qualified rows, and treat a withdrawal of any row of that recipe as invalidating
+  the fact (coarser, and cheap).
+
+Neither is needed until a citer exists. I recommend that the extension land first (section 7, `E0-32`) and that the
+citer be decided with the first reader that needs it.
+
+== 7. Work that this would give
+
+[cols="1,4,2",options="header"]
+|===
+|Id |Work |Depends on
+
+|`E0-07`
+|The withdrawal store, the single loader that the 5 readers of the gate use, the recompute, `mix hypatia.withdraw_outcome`, and tests. It does **not** call `retract_dependents/1`.
+|nothing in this note
+
+|`E0-32` (new)
+|The model extension of section 3 in Elixir and Idris2, with fixtures and the ledger row, under the semantics that the owner picks.
+|`E0-07`, and the ruling
+
+|`E0-33` (new, optional)
+|A first finding that cites rows (section 6).
+|`E0-32`, and the ruling
+|===
+
+== 8. Ruling packet
+
+Stop here. Answer by letter.
+
+. *Which semantics for a finding that cites outcome rows?*
+  A. D2: invalidate and recompute (recommended for counts and thresholds).
+  B. D1: a token for each row.
+  C. D3: both, chosen by a field on the finding.
+  D. D4: no extension; recompute only.
+. *Is a first citer wanted now?*
+  A. No: land the extension as dead code, and decide the citer with the first reader that needs one (recommended).
+  B. Yes: the recipe-tier fact of the manifest (`E0-33`).
+. *If B in 2, how is a row cited at scale?*
+  A. Only the rows that determine the stage (recommended).
+  B. A digest of the recipe's rows, with any withdrawal invalidating the fact.
+. *May the withdrawal of a failure row raise a tier?*
+  A. Yes. A person withdrew it, the log keeps both rows, and the revision receipt records the withdrawal (recommended).
+  B. No: a withdrawal may only lower a tier; raising one needs a new qualified success.
+. *Legacy rows with no `event_id`.* A. They cannot be cited or withdrawn (recommended). B. Give each a derived id first.
+
+== 8a. Rulings (owner, 2026-11-21)
+
+[cols="1,3,3",options="header"]
+|===
+|Question |Ruling |Work order
+
+|1. Semantics
+|C (D3): both, by a `claim` field: `:threshold` invalidates and is recomputed; `:any` has a token for each row.
+|`E0-32`
+
+|2. A first citer
+|B: now, the recipe-tier fact of the dispatch manifest.
+|`E0-33`
+
+|3. Citing at scale
+|B: a digest of the recipe's rows; any withdrawal of one invalidates the fact.
+|`E0-33`
+
+|4. A withdrawal raising a tier
+|A: yes. A person withdrew the row, the log keeps both rows, and a revision receipt records the withdrawal.
+|`E0-07`, `E0-35`
+
+|5. Legacy rows
+|B: give each a derived id first.
+|`E0-34`
+|===
+
+From the stop of `E0-07` (2026-11-15), confirmed on 2026-11-21: a withdrawal calls `Quarantine.retract_dependents/1` (now meaningful, through this extension); the local id of `E0-09` is enough for a new row.
+
+Order of the work: `E0-34` and `E0-32` (independent), then `E0-07`, then `E0-35` and `E0-33`.
+
+== 9. Limits
+
+* The demonstration in 2.2 uses bots as stand-ins, because no outcome kind exists. It shows the model's rule, not
+  an outcome citation.
+* I did not measure how many qualified outcomes the largest recipe has, so the size problem is stated, not sized.
+* No prover was run for this note. The claim that the Idris2 theorems do not change rests on reading them as
+  generic over the assumption type; `scripts/check-verdicts.sh` is the check, run by `E0-32`.
