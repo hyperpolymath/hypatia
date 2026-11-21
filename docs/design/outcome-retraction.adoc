@@ -5,7 +5,7 @@
 :date: 2026-11-21
 :toc:
 
-Status: PROPOSED. The owner rules on it (section 8). No code changes in this note.
+Status: RULED (owner, 2026-11-21; section 8a). No code changes in this note.
 
 == 1. Summary
 
@@ -94,6 +94,15 @@ is a count would go on saying 5 after a row was withdrawn.
 |===
 
 This part is small and is the dead code that the owner accepted.
+
+=== 3a. What the rulings add to section 3
+
+* A finding carries `claim: :threshold | :any` (default `:any`, so no finding of today changes).
+* `:any`: a token for each cited row, resting on `{:outcome, id}`. The finding survives while a token does, and the caller re-derives its count and level from the survivors.
+* `:threshold`: the claim is a function of the whole set. It cites the set by a digest, not by a list of ids: `outcome_set: %{recipe_id: id, digest: digest}`. It survives only while that digest equals the current digest of the recipe's
+  qualified, non-withdrawn rows. A withdrawal of any row of the recipe therefore invalidates a fact built before it, and a fact built after it survives. `retract/3` takes the function that gives the current digest.
+* The withdrawn set reaches `Quarantine.retract_dependents/1` through `Quarantine.retracted_assumptions/0`, which includes `{:outcome, id}` for each withdrawn row (`E0-07`). That is the wiring that the owner approved.
+* Every row has an id: `event_id` since `E0-09`, and for an older row `legacy:<sha256 of its canonical JSON>` (`E0-34`). Two byte-identical legacy rows share an id and cannot be told apart, so a withdrawal of that id is refused.
 
 == 4. Why it is not a drop-in: 4 problems
 
@@ -185,6 +194,37 @@ Stop here. Answer by letter.
   A. Yes. A person withdrew it, the log keeps both rows, and the revision receipt records the withdrawal (recommended).
   B. No: a withdrawal may only lower a tier; raising one needs a new qualified success.
 . *Legacy rows with no `event_id`.* A. They cannot be cited or withdrawn (recommended). B. Give each a derived id first.
+
+== 8a. Rulings (owner, 2026-11-21)
+
+[cols="1,3,3",options="header"]
+|===
+|Question |Ruling |Work order
+
+|1. Semantics
+|C (D3): both, by a `claim` field: `:threshold` invalidates and is recomputed; `:any` has a token for each row.
+|`E0-32`
+
+|2. A first citer
+|B: now, the recipe-tier fact of the dispatch manifest.
+|`E0-33`
+
+|3. Citing at scale
+|B: a digest of the recipe's rows; any withdrawal of one invalidates the fact.
+|`E0-33`
+
+|4. A withdrawal raising a tier
+|A: yes. A person withdrew the row, the log keeps both rows, and a revision receipt records the withdrawal.
+|`E0-07`, `E0-35`
+
+|5. Legacy rows
+|B: give each a derived id first.
+|`E0-34`
+|===
+
+From the stop of `E0-07` (2026-11-15), confirmed on 2026-11-21: a withdrawal calls `Quarantine.retract_dependents/1` (now meaningful, through this extension); the local id of `E0-09` is enough for a new row.
+
+Order of the work: `E0-34` and `E0-32` (independent), then `E0-07`, then `E0-35` and `E0-33`.
 
 == 9. Limits
 
