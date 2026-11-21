@@ -19,12 +19,14 @@ defmodule Hypatia.DispatchManifestTest do
         "replacement" => "\"${VAR}\""
       }
 
+      # An exact match: only an exact match can reach auto_execute (E0-19).
       pattern = %{
         "id" => "PA009-shell-unquoted-var",
         "category" => "CommandInjection",
         "description" => "Unquoted shell variable",
         "severity" => "High",
-        "routed_repo" => "test-repo"
+        "routed_repo" => "test-repo",
+        "match_kind" => "exact"
       }
 
       actions = [
@@ -174,6 +176,39 @@ defmodule Hypatia.DispatchManifestTest do
       assert File.exists?(path)
       assert_received {:dispatched, {:control, %{"id" => "PA006-z"}}}
       assert_received {:dispatched, {:control, %{"id" => "PA007-w"}}}
+    end
+  end
+
+  # E0-19: the manifest entry of an eliminate step takes its strategy through the cap for a
+  # merged match.
+  describe "the strategy of an eliminate step follows the kind of match (E0-19)" do
+    @cap_recipe %{"id" => "recipe-cap", "confidence" => 0.99, "auto_fixable" => true}
+
+    defp cap_pattern(extra) do
+      Map.merge(
+        %{
+          "id" => "PA009-cap",
+          "category" => "CommandInjection",
+          "severity" => "High",
+          "routed_repo" => "test-repo"
+        },
+        extra
+      )
+    end
+
+    test "confidence 0.99 with an exact match is auto_execute; with any other kind it is review" do
+      strategy = fn extra ->
+        {:ok, [entry]} =
+          DispatchManifest.compile([{:eliminate, @cap_recipe, cap_pattern(extra)}])
+
+        entry["strategy"]
+      end
+
+      assert strategy.(%{"match_kind" => "exact"}) == "auto_execute"
+      assert strategy.(%{"match_kind" => "category"}) == "review"
+      assert strategy.(%{"match_kind" => "fuzzy"}) == "review"
+      assert strategy.(%{"match_kind" => "unknown"}) == "review"
+      assert strategy.(%{}) == "review"
     end
   end
 end

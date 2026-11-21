@@ -83,6 +83,24 @@ defmodule Hypatia.TriangleRouter do
 
   def dispatch_strategy(_), do: :report_only
 
+  @doc """
+  The tier that a recipe may take, given the kind of match that chose it (E0-19; owner
+  ruling of 2026-11-14, decision 2).
+
+  A recipe that a `category` or a `fuzzy` match chose, or whose kind is unknown, never runs
+  with no person: its highest tier is `:review`. Only an `"exact"` match can reach
+  `:auto_execute`. The cap is a minimum over tiers, so it can only lower a tier and never
+  raise one. A recipe with no kind at all (for example one derived from a dependabot
+  alert, which no matcher chose) is capped too: no kind is an unknown kind.
+  """
+  def cap_strategy(:auto_execute, "exact"), do: :auto_execute
+  def cap_strategy(:auto_execute, _kind), do: :review
+  def cap_strategy(strategy, _kind), do: strategy
+
+  @doc "The tier of a confidence value, through the cap for the kind of match."
+  def strategy_for(confidence, match_kind),
+    do: confidence |> dispatch_strategy() |> cap_strategy(match_kind)
+
   # Owner ruling R1 and hypatia#1080: recipes that cicd-squabbler owns, that
   # the licence cap makes flag-only, or that only the owner can act on
   # (repository settings) never auto-execute. Read at compile
@@ -113,11 +131,12 @@ defmodule Hypatia.TriangleRouter do
 
   @doc """
   The dispatch strategy for a recipe: `:report_only` when the recipe has an
-  ownership cap, otherwise `dispatch_strategy/1` of its confidence.
+  ownership cap, otherwise `dispatch_strategy/1` of its confidence, capped by the
+  kind of match that chose it (`strategy_for/2`). With no kind given, the kind is unknown.
   """
-  def recipe_strategy(recipe) do
+  def recipe_strategy(recipe, match_kind \\ nil) do
     case ownership_cap(recipe) do
-      nil -> dispatch_strategy(Map.get(recipe, "confidence", 0.0))
+      nil -> strategy_for(Map.get(recipe, "confidence", 0.0), match_kind)
       _cap -> :report_only
     end
   end

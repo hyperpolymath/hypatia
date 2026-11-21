@@ -246,10 +246,21 @@ defmodule Hypatia.FleetDispatcher do
 
   # --- Eliminate dispatch helpers (called after Gate approval) ---
 
+  @doc false
+  # The tier of an eliminate dispatch: the tier of the recipe's confidence, capped by the
+  # kind of match that chose the recipe (E0-19). The one place where the live dispatch path
+  # decides it. A recipe that no matcher chose (a dependabot fix) has no kind, and is capped.
+  def eliminate_strategy(recipe, pattern) do
+    TriangleRouter.strategy_for(
+      Map.get(recipe, "confidence", 0.0),
+      Map.get(pattern, "match_kind")
+    )
+  end
+
   # Standard fleet dispatch path for eliminate tier.
   defp dispatch_eliminate_via_fleet(recipe, pattern) do
     confidence = Map.get(recipe, "confidence", 0.0)
-    strategy = TriangleRouter.dispatch_strategy(confidence)
+    strategy = eliminate_strategy(recipe, pattern)
 
     bot_id =
       case strategy do

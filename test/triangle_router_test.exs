@@ -114,4 +114,52 @@ defmodule Hypatia.TriangleRouterTest do
       assert TriangleRouter.dispatch_strategy(0.84) == :report_only
     end
   end
+
+  # E0-19 (owner ruling of 2026-11-14, decision 2, and of 2026-11-15, option A for a recipe
+  # with no kind of match): a recipe that a `category` or a `fuzzy` match chose, or whose
+  # kind is unknown, never runs with no person. Its highest tier is `review`. Only an
+  # `exact` match can reach `auto_execute`.
+  describe "the cap for a merged match (E0-19)" do
+    @kinds ["exact", "category", "fuzzy", "unknown", nil, "something-else"]
+    @rank %{report_only: 0, review: 1, auto_execute: 2}
+
+    test "confidence 0.99 with an exact match gives auto_execute" do
+      assert TriangleRouter.strategy_for(0.99, "exact") == :auto_execute
+    end
+
+    test "confidence 0.99 with category, fuzzy, unknown or no kind gives review" do
+      for kind <- ["category", "fuzzy", "unknown", nil, "something-else"] do
+        assert TriangleRouter.strategy_for(0.99, kind) == :review, "kind #{inspect(kind)}"
+      end
+    end
+
+    test "the cap never raises a tier: for each tier and each kind, the result is not above the uncapped one" do
+      for confidence <- [0.0, 0.5, 0.84, 0.85, 0.9, 0.94, 0.95, 0.99, 1.0], kind <- @kinds do
+        uncapped = TriangleRouter.dispatch_strategy(confidence)
+        capped = TriangleRouter.strategy_for(confidence, kind)
+
+        assert @rank[capped] <= @rank[uncapped],
+               "#{confidence} #{inspect(kind)}: #{capped} is above #{uncapped}"
+
+        if kind != "exact", do: assert(@rank[capped] <= @rank[:review])
+      end
+    end
+
+    test "a lower tier is kept as it is, whatever the kind" do
+      for kind <- @kinds do
+        assert TriangleRouter.strategy_for(0.9, kind) == :review
+        assert TriangleRouter.strategy_for(0.5, kind) == :report_only
+      end
+    end
+
+    test "an ownership cap still wins, and the match cap composes with it" do
+      assert TriangleRouter.recipe_strategy(%{"id" => "r", "confidence" => 0.99}, "exact") ==
+               :auto_execute
+
+      assert TriangleRouter.recipe_strategy(%{"id" => "r", "confidence" => 0.99}, "fuzzy") ==
+               :review
+
+      assert TriangleRouter.recipe_strategy(%{"id" => "r", "confidence" => 0.99}) == :review
+    end
+  end
 end
