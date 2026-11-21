@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-31: A Mix task that mints an event id
+:wo-id: E0-31
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 4
+:wo-max-turns: 100
+:wo-branch: feat/e0-31-event-id-task
+:wo-depends: none
+
+== Goal
+
+`mix hypatia.event_id` prints one event id, and nothing else, so that the fleet runner
+(`gitbot-fleet`, `E0-12`) can mint the id of an attempt with a tool that it already uses.
+
+== Authority
+
+Owner answer 5A of 2026-11-15, in the planning session for the close-out: the fleet runner mints
+the id with a `mix hypatia.event_id` task. The id format is the one that the owner ruled on in the
+packet of `E0-08` (decision D3 and ruling R5, `docs/design/e0-receipt.adoc` section 9a): an ADR-008
+version 8 id, profile T, from the Elixir implementation `Hypatia.EventId`.
+
+== Facts measured
+
+Commit `689897b4`, measured on 2026-11-21.
+
+* Read: `lib/hypatia/event_id.ex`, `generate/0` (line 37). Ran: `mix run --no-start -e
+  'IO.puts(Hypatia.EventId.generate())'` printed one valid id, so the generator needs no running
+  application.
+* Read: `gitbot-fleet` `scripts/dispatch-runner.sh`, `hypatia_record_outcome/5`: the runner already
+  calls `mix` in `$HYPATIA_HOME`, and skips Hypatia when `mix` is not on `PATH`.
+* Ran: `gitbot-fleet` has no `uuid-v8`, no `uuidgen` and no Bun (`grep` over the repository).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/mix_tasks/event_id_test.exs`: (a) the task prints one line that is a
+  valid event id; (b) 2 calls give 2 ids, the second after the first; (c) an argument is refused with
+  exit code 1 and nothing on standard output; (d) a real `mix hypatia.event_id` in a child process
+  prints exactly 1 line on standard output.
+. Add `lib/mix/tasks/hypatia.event_id.ex`. It does not start the application. It prints the id with
+  one line feed.
+. Update the counts that `scripts/check-readme-claims.sh` checks.
+
+== Acceptance
+
+* The 4 tests pass, and they failed before step 3.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* `bash scripts/check-readme-claims.sh` passes.
+
+== Stop and ask
+
+* The task cannot print only the id (the build writes to standard output on a normal run).
+* The cost reaches the cap before the acceptance checks pass.
