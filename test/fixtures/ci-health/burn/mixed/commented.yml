@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MPL-2.0
+name: commented
+on: [push, pull_request] # CI
+permissions: read-all
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
