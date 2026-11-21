@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-33: The dispatch manifest names the outcomes that a recipe's tier rests on
+:wo-id: E0-33
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 12
+:wo-max-turns: 180
+:wo-branch: feat/e0-33-recipe-tier-fact
+:wo-depends: E0-07, E0-32, E0-34
+
+== Goal
+
+Each eliminate step of the dispatch manifest carries a second fact: the stage and tier of its recipe, as a `:threshold` claim that names the set of qualified outcomes behind it by a digest. When a row of that recipe is withdrawn,
+a fact built before the withdrawal is retracted, and one built after it survives.
+
+== Authority
+
+Owner rulings of 2026-11-21 on `docs/design/outcome-retraction.adoc`, section 8a. Question 2, answer B (a first citer now: the recipe-tier fact) and question 3, answer B (cite a digest of the recipe's rows; any withdrawal of one of them invalidates the fact).
+
+== Facts measured
+
+Commit `689897b4`, read on 2026-11-21. Measure them again.
+
+* `lib/dispatch_manifest.ex`, `facts_for/1`: the fact of a step is built from the pattern registry (`support` `observed` or `pattern`, with 1 evidence token that names `pattern_registry/<id>`). It cites no outcome row.
+* `lib/confidence_annealing.ex`: the stage and tier of a recipe are functions of its qualified outcomes.
+* A fact that listed every counted row would be as large as the count (a `:veteran` recipe has 50 or more). A digest is a fixed size.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds. Confirm that `E0-07`, `E0-32` and `E0-34` are merged.
+. Write the tests first, in `test/dispatch_manifest_test.exs` (each must fail today): (a) an eliminate step for a recipe that has qualified outcomes carries a `recipe_tier` fact with `claim: "threshold"`, the `recipe_id`, the stage, the count, and `outcome_set_digest`;
+  a step for a recipe with none carries no such fact; (b) the digest is the SHA-256 of the sorted row ids of the recipe's qualified, non-withdrawn rows (the ids of `E0-34`); (c) the fact holds a digest and no list of ids;
+  (d) after a row of that recipe is withdrawn, a fact built before is retracted by `retract/3` (digest check) and a fact built after the withdrawal survives; (e) a withdrawn row of another recipe changes nothing; (f) the other facts of the step are unchanged.
+. Add the `recipe_tier` fact to `DispatchManifest`, and the digest function to `OutcomeTracker`. Do not change the strategy of a step: this is a fact, not a gate.
+
+== Acceptance
+
+* The new tests pass, and they failed before step 2. Give both outputs.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it. `bash scripts/check-readme-claims.sh` passes.
+* The pull request body says that no module reads the `recipe_tier` fact yet, and what a reader would do with it.
+
+== Stop and ask
+
+* The manifest size grows by more than a digest and a few fields for each step.
+* A reader of the manifest rejects an unknown fact.
+* The cost reaches the cap before the acceptance checks pass.
