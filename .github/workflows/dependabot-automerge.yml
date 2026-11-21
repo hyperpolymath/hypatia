@@ -111,7 +111,7 @@ jobs:
 
           # Dependabot adds severity labels like "severity: high",
           # "severity: critical". Look for those in the PR labels JSON.
-          if echo "$PR_LABELS" | grep -qiE '"(severity: (high|critical))"'; then
+          if grep -qiE '"(severity: (high|critical))"' <<<"$PR_LABELS"; then
             is_high_or_critical=true
           fi
 
