@@ -16,7 +16,51 @@ for i in "${!args[@]}"; do
   [ "${args[$i]}" = "--jq" ] && jq_filter="${args[$((i + 1))]}"
 done
 
-if printf ' %s ' "$*" | grep -q ' -X PUT '; then
+# D-BURN: MOCK_BURN_DIR holds the repo's workflow files on its default branch
+# (main, at commit cafe0001). Writes go to MOCK_WRITE_LOG, one line per call:
+# the method, the endpoint, then each -f field, a PUT's content decoded.
+if [ -n "${MOCK_BURN_DIR:-}" ]; then
+  method=GET; target=""; fields=()
+  for i in "${!args[@]}"; do
+    case "${args[$i]}" in
+      -X) method=${args[$((i + 1))]} ;;
+      -f) fields+=("${args[$((i + 1))]}") ;;
+      repos/*) [ -z "$target" ] && target=${args[$i]} ;;
+    esac
+  done
+  [ -z "$target" ] && [[ "$endpoint" == repos/* ]] && target=$endpoint
+  base=repos/test-owner/test-repo
+  if [ "$method" != GET ]; then
+    line="$method $target"
+    for kv in "${fields[@]}"; do
+      [[ "$kv" == content=* ]] && kv="content=$(base64 -d <<<"${kv#content=}" | jq -Rsc .)"
+      line="$line | $kv"
+    done
+    printf '%s\n' "$line" >> "$MOCK_WRITE_LOG"
+    [[ "$target" == "$base/pulls" ]] && printf 'https://github.com/test-owner/test-repo/pull/1\n'
+    exit 0
+  fi
+  case "${target%%\?*}" in
+    "$base")
+      if [ "$jq_filter" = ".default_branch" ]; then printf 'main\n'; else printf 'false false\n'; fi
+      exit 0 ;;
+    "$base/branches/ci/ci-health-auto-remediation") echo "HTTP 404" >&2; exit 1 ;;
+    "$base/git/ref/heads/main") printf 'cafe0001\n'; exit 0 ;;
+    "$base/contents/.github/workflows")
+      list=$(find "$MOCK_BURN_DIR" -type f -printf '%f\n' | sort |
+        jq -Rsc 'split("\n") | map(select(length > 0) | {name: ., path: (".github/workflows/" + .)})')
+      jq -r "${jq_filter:-.}" <<<"$list"
+      exit 0 ;;
+    "$base/contents/.github/workflows/"*)
+      p=${target%%\?*}; f="$MOCK_BURN_DIR/${p##*/}"
+      [ -f "$f" ] || { echo "HTTP 404" >&2; exit 1; }
+      doc=$(jq -nc --arg c "$(base64 < "$f")" --arg s "sha-${p##*/}" '{content: $c, sha: $s}')
+      jq -r "${jq_filter:-.}" <<<"$doc"
+      exit 0 ;;
+  esac
+fi
+
+if grep -q ' -X PUT ' <<<" $* "; then
   body=$(cat)
   if [ -n "${MOCK_STATE:-}" ] && [ "${MOCK_SCENARIO:-}" != "remediate-mismatch" ]; then
     printf '%s\n' "$body" > "$MOCK_STATE"
