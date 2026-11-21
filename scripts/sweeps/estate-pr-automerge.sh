@@ -225,6 +225,7 @@ decide_pr() {
   local pr="$1"
   local -a deltas=()
   local org repo num title author draft mstate head_sha created base_ref repo_archived body
+  local patch_filenames
   org=$(jq -r '.org' <<<"$pr")
   repo=$(jq -r '.repo' <<<"$pr")
   num=$(jq -r '.number' <<<"$pr")
@@ -296,7 +297,7 @@ decide_pr() {
     only_uses=1
     while IFS= read -r cl; do
       [ -n "$cl" ] || continue
-      printf '%s' "$cl" | grep -qE '^[-+]\s*-?\s*uses:' || only_uses=0
+      grep -qE '^[-+]\s*-?\s*uses:' <<<"$cl" || only_uses=0
     done <<<"$content_lines"
     [ "$only_uses" -eq 1 ] && [ -n "$content_lines" ] && pin_files=$((pin_files + 1))
     [ "$only_uses" -eq 0 ] && nonpin_change=$((nonpin_change + 1))
@@ -425,8 +426,8 @@ decide_pr() {
     blocked_by="pin_delta_unresolvable"
     route="rhodibot"; pool="P2"
   elif [ "$pin_files" -eq 0 ] && [ "$lock_only" -eq 0 ] &&
-       jq -r '.filename' <<<"$patches" 2>/dev/null \
-         | grep -qE '(^|/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|composer\.json|Gemfile|requirements[^/]*\.txt)$'; then
+       patch_filenames=$(jq -r '.filename' <<<"$patches" 2>/dev/null) &&
+       grep -qE '(^|/)(package\.json|Cargo\.toml|Project\.toml|mix\.exs|go\.mod|pyproject\.toml|composer\.json|Gemfile|requirements[^/]*\.txt)$' <<<"$patch_filenames"; then
     change_class="bump"; disposition="flag"; safety="flag"
     blocked_by="dependency_manifest_not_lockfile"
     route="rhodibot"; pool="P2"

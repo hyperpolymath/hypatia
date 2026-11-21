@@ -367,7 +367,7 @@ while IFS='~' read -r mod name f lit sev adv sf slit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($mod/$name)" >&2; exit 1; }
   if [ "$sf" = "$f" ]; then  # same file: beside the literal (a trailing #any: anywhere in it)
     n=$(grep -nF -- "$lit" "$f" | sed -n 1p | cut -d: -f1)
-    sed -n "$((n - 3)),$((n + 3))p" "$f" | grep -qF -- "$slit" ||
+    grep -qF -- "$slit" <<<"$(sed -n "$((n - 3)),$((n + 3))p" "$f")" ||
       { echo "gen-rules-praxis: $f no longer states '$slit' beside '$lit' ($mod/$name)" >&2; exit 1; }
   else
     sf=${sf%#any}
