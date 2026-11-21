@@ -153,6 +153,12 @@ defmodule Hypatia.TriangleRouterTest do
     end
 
     test "an ownership cap still wins, and the match cap composes with it" do
+      ownership_capped = %{"id" => "recipe-fix-spdx-license", "confidence" => 0.99}
+
+      assert TriangleRouter.recipe_strategy(ownership_capped, "exact") == :report_only
+      assert TriangleRouter.recipe_strategy(ownership_capped, "fuzzy") == :report_only
+      assert TriangleRouter.recipe_strategy(ownership_capped) == :report_only
+
       assert TriangleRouter.recipe_strategy(%{"id" => "r", "confidence" => 0.99}, "exact") ==
                :auto_execute
 
