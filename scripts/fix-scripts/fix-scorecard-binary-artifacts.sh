@@ -23,7 +23,8 @@ count=0
   echo ""
 
   while IFS= read -r -d '' file; do
-    if file "$file" | grep -qE 'ELF|PE32|Mach-O|compiled|bytecode|binary|data'; then
+    # Captured, then matched (RE011); a failed `file` is still no match.
+    if desc=$(file "$file") && grep -qE 'ELF|PE32|Mach-O|compiled|bytecode|binary|data' <<<"$desc"; then
       echo "BINARY: ${file#"${REPO}/"}"
       count=$((count + 1))
     fi

@@ -22,11 +22,14 @@ mkdir -p "${REPO}/.github/workflows"
 # Detect languages for CodeQL matrix
 languages=()
 # JavaScript/TypeScript (includes ReScript compiled output)
-if find "$REPO" -maxdepth 3 -name "*.js" -o -name "*.mjs" -o -name "*.res" 2>/dev/null | grep -q .; then
+# Captured, then matched: `find | grep -q .` can lose a match to SIGPIPE under
+# pipefail (RE011). A failed find is still no match.
+if found=$(find "$REPO" -maxdepth 3 -name "*.js" -o -name "*.mjs" -o -name "*.res" 2>/dev/null) \
+   && grep -q . <<<"$found"; then
   languages+=("javascript-typescript")
 fi
 # Ruby
-if find "$REPO" -maxdepth 3 -name "*.rb" 2>/dev/null | grep -q .; then
+if found=$(find "$REPO" -maxdepth 3 -name "*.rb" 2>/dev/null) && grep -q . <<<"$found"; then
   languages+=("ruby")
 fi
 
