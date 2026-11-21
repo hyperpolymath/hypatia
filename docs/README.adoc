@@ -48,6 +48,7 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 * link:design/DESIGN-NARRATIVE.adoc[`DESIGN-NARRATIVE.adoc`] — narrative design rationale.
 * link:design/design-decisions.adoc[`design-decisions.adoc`] — atomic decision log.
 * link:design/2026-11-14-merge-honesty.adoc[`2026-11-14-merge-honesty.adoc`]: proposed. When Hypatia treats 2 findings as 1, and 5 decisions for the owner.
+* link:design/outcome-retraction.adoc[`outcome-retraction.adoc`]: proposed. Letting a finding name an outcome row as support: why a count does not fit the retraction model, 4 designs, and a ruling packet.
 
 == Operations — runbooks + design memos
 

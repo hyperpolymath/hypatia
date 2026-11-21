@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-34: Every outcome row has an id: a derived id for a row that has none
+:wo-id: E0-34
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 140
+:wo-branch: fix/e0-34-derived-row-ids
+:wo-depends: none
+
+== Goal
+
+A row of the outcome log that was written before `E0-09` (it has no `event_id`) has an id that is derived from its
+bytes, so that a withdrawal can name it and a finding can cite it. No row is rewritten.
+
+== Authority
+
+Owner rulings of 2026-11-21 on `docs/design/outcome-retraction.adoc`, section 8a. Question 5, answer B: "give each legacy row a derived id first."
+
+== Facts measured
+
+Read on 2026-11-15, at the commit of the `E0-07` stop note. Measure them again.
+
+* A row written since `E0-09` has an `event_id` (an ADR-008 version 8 id of profile T). A fleet row with a producer id keeps it (`E0-11`).
+* A fleet row older than that has `fleet_import_id` (a SHA-256 of its line). A local row older than that has only
+  `LearningScheduler.local_source_id(file, line_number)`, a hash of the log file name and the line number, with no content in it.
+* The outcome log is append-only. The design of the receipt (`docs/design/e0-receipt.adoc`, D6) gives a legacy row no receipt.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds.
+. Write the tests first, in `test/outcome_tracker_test.exs`: (a) a row with an `event_id` has that id; (b) a row with none has
+  `legacy:` followed by the SHA-256, in lower-case hex, of its canonical JSON (sorted keys, no spaces, as `jq -cS`); (c) a derived id
+  never passes `Hypatia.EventId.valid?/1`; (d) the id of a legacy row is the same when the log is read twice, and after unrelated rows are appended;
+  (e) 2 byte-identical legacy rows have the same derived id, and `find_row/2` of that id answers `{:error, {:ambiguous, 2}}`;
+  (f) `find_row/2` of an id that no row has answers `{:error, :not_found}`.
+. Add `OutcomeTracker.row_id/1` and `OutcomeTracker.find_row/2` (the second reads the outcome log of the data root). Write no row and change no row.
+
+== Acceptance
+
+* The new tests pass, and they failed before step 3. Give both outputs.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The pull request body gives the number of legacy rows in the test store, and says that identical legacy rows cannot be told apart.
+
+== Stop and ask
+
+* The canonical form of a stored row is not stable (for example a float that prints in two ways).
+* More than a few identical legacy rows exist in a store that the owner names: say how many.
+* The cost reaches the cap before the acceptance checks pass.
