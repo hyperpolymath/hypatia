@@ -102,7 +102,7 @@ function name is the stable locator. Measure again before you edit.
 |E0-04 |Verification comes from a rescan, not from the caller |M |opus |$12 |none
 |E0-05 |The live neural path learns from qualified evidence only |S |sonnet |$6 |E0-04
 |E0-06 |Test: a failed write leaves the source unacknowledged |S |sonnet |$4 |none
-|E0-07 |Withdrawn evidence changes confidence and tier |M |opus |$16 |E0-09 (owner ruling 2026-11-15: local rows need ids first)
+|E0-07 |Withdrawn evidence changes confidence and tier |M |opus |$16 |E0-34, E0-32 (owner rulings 2026-11-15 and 2026-11-21)
 |E0-08 |The receipt: design and ruling packet |Design |opus |$10 |none
 |E0-09 |The receipt: schema, emitter and tests |M |sonnet |$18 |E0-05, E0-08
 |E0-10 |The receipt: Idris2 model and gate |M |opus |$25 |E0-09
@@ -126,6 +126,10 @@ function name is the stable locator. Measure again before you edit.
 |E0-28 |Cross-repo transfer is smoothed and anomalies report false positives |M |sonnet |$8 |none
 |E0-29 |The receipt writer refuses what the model refuses |S |sonnet |$8 |none
 |E0-31 |A Mix task that mints an event id |S |sonnet |$4 |none
+|E0-32 |The retraction model names an outcome as support, with a claim field |M |opus |$14 |none
+|E0-33 |The dispatch manifest names the outcomes that a recipe's tier rests on |M |sonnet |$12 |E0-07, E0-32, E0-34
+|E0-34 |Every outcome row has an id: a derived id for a row that has none |S |sonnet |$8 |none
+|E0-35 |A withdrawal writes a revision receipt |S |sonnet |$8 |E0-07
 |===
 
 The caps of `E0-01` to `E0-17` add up to $151. The estimate for that
