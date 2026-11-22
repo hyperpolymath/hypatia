@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
     #!/bin/sh
     case "$FAKE_PA_MODE" in
       clean) echo '{"weak_points":[]}' ;;
-      present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt"}]}' ;;
+      present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt","line":3}]}' ;;
       *) exit 1 ;;
     esac
     """)
@@ -104,6 +104,48 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
 
   # A runner learns what this task takes from `mix help hypatia.record_outcome`
   # (gitbot-fleet E0-02 reads it for --verdict), so every switch must be named there.
+  # E0-22: the line of the fixed finding tells it from another finding of the category in the file.
+  describe "--line" do
+    setup %{root: root} do
+      System.put_env("FAKE_PA_MODE", "present")
+      %{common: ["--outcome", "success", "--category", "cat-x", "--repo-path", root]}
+    end
+
+    test "without it, a weak point of the category left in the file is ambiguous: no credit, no blame",
+         %{root: root, common: common} do
+      run_ok(base_args(common))
+
+      assert [row] = stored_rows(root)
+      assert row["verification"] == "scan_skipped"
+      counts = OutcomeTracker.qualified_outcome_counts([row])
+      assert {counts.successes, counts.failures, counts.false_positives} == {0, 0, 0}
+    end
+
+    test "a line that is not the weak point's is as ambiguous", %{root: root, common: common} do
+      run_ok(base_args(common ++ ["--line", "99"]))
+
+      assert [row] = stored_rows(root)
+      assert row["verification"] == "scan_skipped"
+    end
+
+    test "the weak point's own line refutes the fix, and the task exits 2", %{
+      root: root,
+      common: common
+    } do
+      capture_io(fn ->
+        assert catch_exit(RecordOutcome.run(base_args(common ++ ["--line", "3"]))) ==
+                 {:shutdown, 2}
+      end)
+
+      # A fix that did not hold writes 2 rows: the success that was claimed and the false
+      # positive that the rescan makes of it. Neither is credit.
+      rows = stored_rows(root)
+      assert length(rows) == 2
+      assert Enum.all?(rows, &(&1["verification"] == "still_present"))
+      assert OutcomeTracker.qualified_outcome_counts(rows).successes == 0
+    end
+  end
+
   describe "the usage text" do
     test "names every switch that the task takes" do
       source = File.read!(Path.expand("../../lib/mix/tasks/hypatia.record_outcome.ex", __DIR__))
@@ -277,7 +319,9 @@ defmodule Mix.Tasks.Hypatia.RecordOutcomeTest do
           "--category",
           "cat-x",
           "--repo-path",
-          root
+          root,
+          "--line",
+          "3"
         ])
 
       System.put_env("FAKE_PA_MODE", "clean")

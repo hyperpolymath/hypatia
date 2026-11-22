@@ -23,6 +23,13 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
       --match-kind  exact|category|fuzzy      (the kind of match that chose the
                                                recipe; written on the row. Omitted,
                                                the row says "unknown")
+      --line        12                        (the line of the finding that was fixed.
+                                               With it, a weak point of the category
+                                               at that line of --file means the fix did
+                                               not hold. Without it, a weak point of the
+                                               category left in --file is ambiguous: the
+                                               row is "scan_skipped", with no credit and
+                                               no blame)
       --category    DependencyPinning         (auto-derived from recipe
                                                if omitted)
       --repo-path   /path/to/local/clone      (defaults to
@@ -75,6 +82,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     outcome: :string,
     pattern_id: :string,
     match_kind: :string,
+    line: :integer,
     category: :string,
     repo_path: :string,
     no_verify: :boolean,
@@ -138,6 +146,7 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     call_opts =
       []
       |> maybe_put(:pattern_id, Keyword.get(opts, :pattern_id))
+      |> maybe_put(:line, Keyword.get(opts, :line))
       |> maybe_put(:category, Keyword.get(opts, :category))
       |> maybe_put(:repo_path, Keyword.get(opts, :repo_path))
 
