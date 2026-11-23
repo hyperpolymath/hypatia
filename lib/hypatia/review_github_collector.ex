@@ -390,6 +390,8 @@ defmodule Hypatia.ReviewGithubCollector do
     end
   end
 
+  def gh_get(_), do: {:error, :invalid_api_endpoint}
+
   defp gh_command(path) do
     try do
       case System.cmd(
@@ -417,5 +419,5 @@ defmodule Hypatia.ReviewGithubCollector do
     end
   end
 
-  def gh_get(_), do: {:error, :invalid_api_endpoint}
+
 end
