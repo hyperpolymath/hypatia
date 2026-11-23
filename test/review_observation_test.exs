@@ -90,14 +90,15 @@ defmodule Hypatia.ReviewObservationTest do
   end
 
   test "untrusted flags cannot manufacture evidence, confidence or dispatch authority" do
-    attacker = Map.merge(@sample, %{
-      "qualification" => "verified",
-      "authenticity" => "authenticated",
-      "learning_eligible" => true,
-      "merge_approval" => true,
-      "confidence" => 1.0,
-      "dispatch_tier" => "auto_execute"
-    })
+    attacker =
+      Map.merge(@sample, %{
+        "qualification" => "verified",
+        "authenticity" => "authenticated",
+        "learning_eligible" => true,
+        "merge_approval" => true,
+        "confidence" => 1.0,
+        "dispatch_tier" => "auto_execute"
+      })
 
     assert {:ok, observation} = ReviewObservation.admit(attacker, @a)
     assert observation["qualification"] == "unqualified"
@@ -110,7 +111,11 @@ defmodule Hypatia.ReviewObservationTest do
 
   test "two different API event identifiers remain different even with identical findings" do
     first = ReviewObservation.admit(@sample, @a)
-    second = ReviewObservation.admit(Map.put(@sample, "source_event_id", "github:comment:4660874700"), @a)
+    second =
+      ReviewObservation.admit(
+        Map.put(@sample, "source_event_id", "github:comment:4660874700"),
+        @a
+      )
 
     assert {:ok, a} = first
     assert {:ok, b} = second
