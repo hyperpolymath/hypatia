@@ -27,6 +27,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
         "id" => 301,
         "user" => @codex,
         "commit_id" => @sha,
+        "original_commit_id" => @sha,
         "html_url" => "https://github.com/stuff-of-awe/awesome-zig/pull/20#discussion_r301",
         "body" => "Potential bad lock\n<!-- codex-code-review-finding:v1 -->"
       },
@@ -64,7 +65,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number, api: fake_api(api_responses([comment()])))
 
-    assert snapshot["collection"] == "complete_bounded_snapshot"
+    assert snapshot["collection"] == "repeated_stable_observation"
     assert snapshot["head_sha"] == @sha
     assert snapshot["ignored_source_events"] == 0
     assert [item] = snapshot["observations"]
@@ -141,18 +142,26 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert snapshot["ignored_source_events"] == 2
   end
 
-  test "an API review labelled APPROVED never becomes a merge approval" do
+  test "a linked APPROVED review never becomes a merge approval" do
     submitted = review(%{"state" => "APPROVED"})
+    linked = comment(%{"pull_request_review_id" => 501})
 
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number,
-               api: fake_api(api_responses([], [submitted]))
+               api: fake_api(api_responses([linked], [submitted]))
              )
 
-    assert [item] = snapshot["observations"]
-    assert item["source"]["event_id"] == "github:review:501"
-    assert item["assessment"] == "finding_summary_missing"
+    assert length(snapshot["observations"]) == 2
+
+    item =
+      Enum.find(snapshot["observations"], fn observation ->
+        observation["source"]["event_id"] == "github:review:501"
+      end)
+
+    assert item["source"]["scope"] == "code"
+    assert item["assessment"] == "review_unavailable"
     assert item["finding_signal"] == "unknown"
+    assert item["provider_run_status"] == "unknown"
     refute item["merge_approval"]
     refute item["learning_eligible"]
   end
@@ -169,13 +178,12 @@ defmodule Hypatia.ReviewGithubCollectorTest do
                api: fake_api(api_responses([], [review()]))
              )
 
-    assert [item] = with_review["observations"]
-    assert item["assessment"] == "finding_summary_missing"
-    assert item["finding_signal"] == "unknown"
+    assert with_review["observations"] == []
+    assert with_review["ignored_source_events"] == 1
   end
 
   test "a review of the old head remains stale even when the API has not moved" do
-    stale = comment(%{"commit_id" => @other})
+    stale = comment(%{"commit_id" => @sha, "original_commit_id" => @other})
 
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number, api: fake_api(api_responses([stale])))
@@ -225,7 +233,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   test "pagination reads a second page and does not invent a missing event" do
-    full_page = List.duplicate(%{"id" => nil}, 100)
+    full_page = Enum.map(1..100, fn id -> %{"id" => id} end)
 
     responses =
       api_responses()
@@ -274,4 +282,167 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert {:error, :invalid_subject} =
              Collector.collect(@repo, -1, api: bad_api)
   end
+  test "a finding retains original reviewed commit rather than rebound attachment" do
+    moved = comment(%{"original_commit_id" => @other, "commit_id" => @sha})
+
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number, api: fake_api(api_responses([moved])))
+
+    assert [item] = snapshot["observations"]
+    assert item["assessment"] == "stale_head"
+    assert item["subject"]["reviewed_sha"] == @other
+
+    current = comment(%{"original_commit_id" => @sha, "commit_id" => @other})
+
+    assert {:ok, current_snapshot} =
+             Collector.collect(@repo, @number, api: fake_api(api_responses([current])))
+
+    assert [current_item] = current_snapshot["observations"]
+    assert current_item["assessment"] == "reported_findings"
+  end
+
+  test "malformed recognised bot findings fail the entire collection" do
+    for broken <- [
+          comment(%{"original_commit_id" => nil}),
+          comment(%{"original_commit_id" => "not-a-sha"}),
+          comment(%{"html_url" => "https://github.com/stuff-of-awe/other/pull/20"}),
+          comment(%{"id" => nil})
+        ] do
+      assert {:error, {:invalid_source_event, _reason}} =
+               Collector.collect(@repo, @number,
+                 api: fake_api(api_responses([broken]))
+               )
+    end
+  end
+
+  test "malformed nested PR metadata is a structured error, not a crash" do
+    invalid_subjects = [
+      %{"number" => 20, "head" => "invalid", "base" => %{}},
+      %{"number" => 20, "head" => %{"sha" => @sha}, "base" => %{"repo" => "bad"}},
+      %{"number" => 20, "head" => [], "base" => %{}}
+    ]
+
+    for pr_subject <- invalid_subjects do
+      responses = Map.put(api_responses(), @path, {:ok, pr_subject})
+
+      assert {:error, :unexpected_pull_request_shape} =
+               Collector.collect(@repo, @number, api: fake_api(responses))
+    end
+  end
+
+  test "COMMENTED quota submissions are not counted as completed code reviews" do
+    linked = comment(%{"pull_request_review_id" => 501})
+    quota = review(%{"state" => "COMMENTED", "body" => "Quota exhausted"})
+
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number,
+               api: fake_api(api_responses([linked], [quota]))
+             )
+
+    review_item =
+      Enum.find(snapshot["observations"], fn observation ->
+        observation["source"]["event_id"] == "github:review:501"
+      end)
+
+    assert review_item["review_status"] == "unavailable"
+    assert review_item["assessment"] == "review_unavailable"
+    assert "completed_review" in review_item["missing_evidence"]
+    refute review_item["merge_approval"]
+  end
+
+  test "dismissed review submissions and linked findings are withdrawn" do
+    linked = comment(%{"pull_request_review_id" => 501})
+    withdrawn = review(%{"state" => "DISMISSED"})
+
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number,
+               api: fake_api(api_responses([linked], [withdrawn]))
+             )
+
+    assert length(snapshot["observations"]) == 2
+    assert Enum.all?(snapshot["observations"], &(&1["review_status"] == "cancelled"))
+    assert Enum.all?(snapshot["observations"], &(&1["finding_signal"] == "unknown"))
+  end
+
+  test "a security review is never re-labelled as a code review" do
+    security = comment(%{
+      "pull_request_review_id" => 501,
+      "body" => "<!-- codex-security-review-finding:v1 -->"
+    })
+
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number,
+               api: fake_api(api_responses([security], [review()]))
+             )
+
+    assert length(snapshot["observations"]) == 2
+    assert Enum.all?(snapshot["observations"], fn item ->
+             item["source"]["scope"] == "security"
+           end)
+  end
+
+  test "reviews with mixed linked scopes are not invented as one scope" do
+    security = comment(%{
+      "id" => 303,
+      "pull_request_review_id" => 501,
+      "body" => "<!-- codex-security-review-finding:v1 -->"
+    })
+
+    code = comment(%{"id" => 302, "pull_request_review_id" => 501})
+
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number,
+               api: fake_api(api_responses([code, security], [review()]))
+             )
+
+    assert length(snapshot["observations"]) == 2
+    refute Enum.any?(snapshot["observations"], fn item ->
+             item["source"]["event_id"] == "github:review:501"
+           end)
+  end
+
+  test "changed comment inventory is not labelled complete despite a stable head" do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+    first_page = @path <> "/comments?per_page=100&page=1"
+    second_page = @path <> "/comments?per_page=100&page=2"
+    reviews_page = @path <> "/reviews?per_page=100&page=1"
+
+    api = fn endpoint ->
+      cond do
+        endpoint == @path ->
+          {:ok, pr()}
+
+        endpoint == first_page ->
+          reads = Agent.get_and_update(counter, fn count -> {count, count + 1} end)
+          start_id = if reads == 0, do: 1, else: 2
+          {:ok, Enum.map(start_id..(start_id + 99), fn id -> %{"id" => id} end)}
+
+        endpoint == second_page ->
+          {:ok, []}
+
+        endpoint == reviews_page ->
+          {:ok, []}
+
+        true ->
+          {:error, :unexpected_endpoint}
+      end
+    end
+
+    assert {:error, {:source_inventory_changed, path}} =
+             Collector.collect(@repo, @number, api: api, page_budget: 2)
+
+    assert path == @path <> "/comments"
+  end
+
+  test "duplicate or missing API event identities invalidate the inventory" do
+    for entries <- [[%{"id" => 10}, %{"id" => 10}], [%{"body" => "no id"}]] do
+      assert {:error, {:invalid_or_duplicate_event_ids, path}} =
+               Collector.collect(@repo, @number,
+                 api: fake_api(api_responses(entries))
+               )
+
+      assert path == @path <> "/comments"
+    end
+  end
+
 end
