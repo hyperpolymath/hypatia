@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= S-04: GitHub Checks API intake for pre-commit.ci
+:date: 2026-11-23
+:toc:
+
+== Purpose
+
+This implements a *read-only, external-check assertion* boundary for
+pre-commit.ci and deliberately remains separate from review comments.
+The parent is https://github.com/hyperpolymath/hypatia/pull/1220[#1220].
+This adapter **does not** trigger pre-commit.ci, rerun jobs, autofix,
+post a comment, approve a merge, or authorise Bayesian learning.
+
+For an operational, read-only inspection of one PR, run:
+
+----
+mix hypatia.review_check_collect --repo stuff-of-awe/awesome-zig --pr 20
+----
+
+The command reports exact source IDs and native statuses only. It neither
+writes receipts nor runs the hooks. A missing check is explicitly
+"NOT OBSERVED", not success, compliance or a checked installation.
+
+The upstream ReviewObservation.admit/2 already permits provider
+pre-commit.ci with scope hooks. The new collector emits those observations
+through a distinct GitHub native Check Runs API intake.
+
+== Verified provider identity
+
+The authenticated GitHub Get App endpoint
+(https://docs.github.com/en/rest/apps/apps[GitHub Apps REST]) returned
+numeric app ID 68672 for slug pre-commit-ci on 2026-11-23.
+
+Matching is conjunctive:
+
+* native check.app.id exactly 68672;
+* native check.app.slug exactly pre-commit-ci;
+* native check.name exactly pre-commit.ci - pr;
+* native check.head_sha equals the current PR head after full validation.
+
+An arbitrary repository workflow merely named pre-commit.ci - pr
+is **not** the provider. An unknown app, renamed run, absent check,
+or checks not executed on that commit is unknown, never an inferred pass.
+
+Only the strict native state and conclusion vocabulary is preserved.
+The API-reported source event ID has prefix github:check_run: and the
+positive native check-run ID. The source locator is the validated GitHub
+PR permalink: the external details_url is untrusted and intentionally
+not forwarded as evidence.
+
+== Retrieval and consistency
+
+The adapter reads the PR via GitHub REST, checks its number, base repo
+and 40-hex head, then retrieves every check-run page using
+per_page=100 and filter=all, re-reads the inventory, and validates
+the head again.
+
+The API total_count is reconciled with retrieved count; incomplete
+pagination, duplicate IDs, invalid record shapes, API failures,
+full final pages at budget, shifted inventories and moved PR heads
+all fail closed.
+
+No GitHub API can supply an atomic cross-endpoint PR/check-run
+snapshot. Repeated agreement is observation, not a transaction.
+
+The default is five 100-item pages and an absolute budget of ten;
+no cursor is silently ignored. Even a zero-item response has
+coverage_verdict=not_established and provider_observed=false.
+This describes *observed* check runs, not installation state.
+
+== Admitted verdicts
+
+A completed pre-commit.ci check with conclusion success is a
+**provider-reported success**, not independent evidence that every
+hook ran or that the repository is defect-free. The native conclusion
+is carried separately as check_conclusion.
+
+The review-observation representation uses has_findings=nil for
+all check conclusions because GitHub's Checks API status alone
+contains no structured hook finding count. The provider's
+completed status does not become a clean review; finding_signal
+remains unknown and qualification unqualified.
+
+Failure/neutral/skipped/cancelled/timed_out/action_required and
+startup_failure outcomes are likewise preserved as bounded
+external assertions without inventing underlying defects.
+All admitted records have learning_eligible=false and
+merge_approval=false.
+
+This adapter is not yet merged into the S-03 JSON evidence envelope.
+A future versioned envelope union will need its own strict
+check-run schema and pinned JCS differential fixtures. It must
+not replace the existing permitted S-03 fields or broaden
+the E0 learning receipt as a shortcut.
+
+== Live availability and tests
+
+A GET-only reconnaissance of five pilot PR heads across four estate
+organisations plus Hypatia #1220 found **no matching pre-commit.ci
+check run** as of this check. That is evidence of absence of matching
+check-run events *on those heads*, not proof that the provider is
+uninstalled or that checks passed.
+
+test/review_check_run_collector_test.exs contains injected API
+fixtures for native app-name spoofing, successful/failed/running
+and skipped conclusions, incomplete and shifting pagination,
+duplicate or invalid check-run IDs, malformed subjects,
+stale/moved heads and absent providers.
+
+A real positive end-to-end provider check will be required before
+classifying this adapter as operationally verified beyond
+negative-source cases. Do not generate paid reviews or cause
+autofix commits merely to populate a test.
