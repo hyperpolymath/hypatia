@@ -162,6 +162,10 @@ defmodule Hypatia.ReviewObservationTest do
           "https://evil.example/stuff-of-awe/awesome-zig/pull/20",
           "https://github.com/stuff-of-awe/awesome-zig/pull/200",
           "https://attacker@github.com/stuff-of-awe/awesome-zig/pull/20",
+          "https://github.com:bogus/stuff-of-awe/awesome-zig/pull/20",
+          "https://github.com/stuff-of-awe/awesome-zig/pull/20/../21",
+          "https://github.com/stuff-of-awe/awesome-zig/pull/20/%2e%2e/21",
+          "https://github.com/stuff-of-awe/awesome-zig/pull/20/files",
           "https://github.com/stuff-of-awe/other/pull/20"
         ] do
       assert {:error, {:invalid, fields}} =
@@ -170,6 +174,32 @@ defmodule Hypatia.ReviewObservationTest do
                |> ReviewObservation.admit(@a)
 
       assert "source_url" in fields
+    end
+  end
+
+  test "valid repository names with interior dots are not rejected as traversal" do
+    assert {:ok, observation} =
+             @sample
+             |> Map.merge(%{
+               "repo" => "stuff-of-awe/foo..bar",
+               "source_url" => "https://github.com/stuff-of-awe/foo..bar/pull/20#discussion_r4660874699"
+             })
+             |> ReviewObservation.admit(@a)
+
+    assert observation["subject"]["repo"] == "stuff-of-awe/foo..bar"
+  end
+
+  test "isolated traversal-like repo path components are rejected" do
+    for name <- [".", ".."] do
+      assert {:error, {:invalid, fields}} =
+               @sample
+               |> Map.merge(%{
+                 "repo" => "stuff-of-awe/" <> name,
+                 "source_url" => "https://github.com/stuff-of-awe/" <> name <> "/pull/20"
+               })
+               |> ReviewObservation.admit(@a)
+
+      assert "repo" in fields
     end
   end
 
