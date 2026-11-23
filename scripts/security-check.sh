@@ -504,7 +504,7 @@ check_spdx_headers() {
     # Check Rust files
     echo "## Rust Files (.rs)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! head -10 "$f" | grep -q "SPDX-License-Identifier"; then
+        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -514,7 +514,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## Haskell Files (.hs)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! head -10 "$f" | grep -q "SPDX-License-Identifier"; then
+        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -524,7 +524,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## Shell Scripts (.sh)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! head -10 "$f" | grep -q "SPDX-License-Identifier"; then
+        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -534,7 +534,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## GitHub Workflows (.yml)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! head -1 "$f" | grep -q "SPDX-License-Identifier"; then
+        if ! grep -q "SPDX-License-Identifier" <<<"$(head -1 "$f")"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi

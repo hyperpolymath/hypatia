@@ -75,6 +75,12 @@ from the conclusion alone.
 * `remediate.sh <repo> <CLASS> <dry_run>` — applies B-ALLOWLIST (allow-list PUT)
   and D-BURN (idempotent signed PR). Guardrails: own repos only (skips
   forks/archived), `CI_HEALTH_DENYLIST`, idempotent, dry-run honoured.
+  D-BURN computes every patch before it writes, and a file is a target only
+  when its patch changes it, so the PR and the `FIXED` count name only files
+  that change.
+* `burn-trigger.sh` — the one pattern for the bare trigger, sourced by
+  `detect.sh` (report) and `remediate.sh` (select and rewrite), so the three
+  cannot drift apart. `test/ci-health-test.sh` checks that they agree.
 * `sweep.sh` — estate driver: enumerate → detect → remediate (cap
   `MAX_BURN_PRS`) → upsert one rolling tracking issue.
 * `baton-bridge.sh` — the complement to detect/sweep: where those *detect* that

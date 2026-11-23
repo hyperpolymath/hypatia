@@ -233,7 +233,9 @@ fi
 
 # Check all documented rules have corresponding modules
 for rule in root_hygiene honest_completion workflow_audit cicd_rules code_safety; do
-    if find "$PROJECT_DIR/lib" -name "*${rule}*" -o -name "*$(echo $rule | tr '_' '-')*" 2>/dev/null | grep -q .; then
+    # Captured, then matched (RE011); a failed find is still no match.
+    if found=$(find "$PROJECT_DIR/lib" -name "*${rule}*" -o -name "*$(echo $rule | tr '_' '-')*" 2>/dev/null) \
+       && grep -q . <<<"$found"; then
         pass "Rule module: $rule"
     else
         skip_test "Rule module: $rule" "file not found"
@@ -250,7 +252,7 @@ bold "Section 4: Fixture scan detection"
 # The fixture has deliberately insecure patterns — scanner should find them
 if $HAS_RUST && [ -f "$HYPER_BIN" ]; then
     FINDINGS=$("$HYPER_BIN" scan "$FIXTURE_DIR" 2>/dev/null || true)
-    if echo "$FINDINGS" | grep -qi "unpinned\|injection\|insecure\|http\|eval\|finding\|weak\|issue" 2>/dev/null; then
+    if grep -qi "unpinned\|injection\|insecure\|http\|eval\|finding\|weak\|issue" <<<"$FINDINGS" 2>/dev/null; then
         pass "Scanner detects issues in fixture repo"
     else
         skip_test "Fixture detection" "scanner may not produce text findings"

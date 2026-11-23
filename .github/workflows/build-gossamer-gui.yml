@@ -254,16 +254,20 @@ jobs:
           # (which will start accepting bridge.eph once the parser
           # learns v2) or any of the future subcommand names that have
           # been floated upstream — first one to start succeeding wins.
-          if just --list 2>/dev/null | grep -qE '^\s*compile-affine\b'; then
+          # Captured, then matched: a pipe into `grep -q` can read a match as
+          # no match under pipefail (SIGPIPE, RE011).
+          just_list=$(just --list 2>/dev/null || true)
+          cli_help=$("$cli" --help 2>&1 || true)
+          if grep -qE '^\s*compile-affine\b' <<<"$just_list"; then
             echo "→ just compile-affine (concrete .eph path available)"
             just compile-affine "$src_entry" affine "$wasm_out"
-          elif "$cli" --help 2>&1 | grep -qE '\bcompile-eph\b'; then
+          elif grep -qE '\bcompile-eph\b' <<<"$cli_help"; then
             echo "→ ephapax compile-eph"
             "$cli" compile-eph "$src_entry" -o "$wasm_out"
-          elif "$cli" --help 2>&1 | grep -qE '\bcompile-affine\b'; then
+          elif grep -qE '\bcompile-affine\b' <<<"$cli_help"; then
             echo "→ ephapax compile-affine"
             "$cli" compile-affine "$src_entry" -o "$wasm_out"
-          elif "$cli" --help 2>&1 | grep -qE '^\s*compile\b'; then
+          elif grep -qE '^\s*compile\b' <<<"$cli_help"; then
             echo "→ ephapax compile (v1.0.0 subcommand, gated on v2 grammar)"
             if ! "$cli" compile "$src_entry" -o "$wasm_out" 2>/tmp/ephapax-err; then
               if grep -q 'Parse error\|expected EOI' /tmp/ephapax-err; then
