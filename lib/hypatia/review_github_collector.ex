@@ -275,9 +275,11 @@ defmodule Hypatia.ReviewGithubCollector do
     try do
       case System.cmd(
              "gh",
-             ["api", "--method", "GET", path],
+             ["api", "--hostname", "github.com", "--method", "GET", path],
              env: [{"GH_PROMPT_DISABLED", "1"}],
-             stderr_to_stdout: false
+             # Capture error text rather than relaying it into the caller's
+             # stderr; the failure branch discards it without echoing secrets.
+             stderr_to_stdout: true
            ) do
         {body, 0} when byte_size(body) <= @max_response_bytes ->
           case Jason.decode(body) do
