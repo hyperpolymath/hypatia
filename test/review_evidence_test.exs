@@ -52,7 +52,7 @@ defmodule Hypatia.ReviewEvidenceTest do
     assert result["body"]["assurance"]["merge_authority"] == "none"
     assert result["body"]["assurance"]["learning_credit"] == "none"
     assert result["body"]["assurance"]["coverage_verdict"] == "not_established"
-    assert result["body"]["observations"] |> length() == 1
+    assert length(result["body"]["observations"]) == 1
 
     bytes = result["library_bytes"]
     assert String.starts_with?(bytes, "{\"assurance\":")
