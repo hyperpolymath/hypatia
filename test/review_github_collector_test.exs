@@ -83,6 +83,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
 
   test "distinguishes security from code scope using the known bot's marker" do
     security = comment(%{"body" => "<!-- codex-security-review-finding:v1 -->"})
+
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number, api: fake_api(api_responses([security])))
 
@@ -91,11 +92,12 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   test "recognises CodeRabbit only after matching GitHub's numeric bot identity" do
-    rabbit = comment(%{
-      "user" => @rabbit,
-      "id" => 302,
-      "body" => "Suggested patch: delete checks <!-- cr-comment:v1:deadbeef -->"
-    })
+    rabbit =
+      comment(%{
+        "user" => @rabbit,
+        "id" => 302,
+        "body" => "Suggested patch: delete checks <!-- cr-comment:v1:deadbeef -->"
+      })
 
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number, api: fake_api(api_responses([rabbit])))
@@ -106,19 +108,22 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   test "a spoofed login or forged marker from a human is not authenticated" do
-    impostor = comment(%{
-      "user" => %{"id" => 999, "login" => "chatgpt-codex-connector[bot]", "type" => "Bot"}
-    })
+    impostor =
+      comment(%{
+        "user" => %{"id" => 999, "login" => "chatgpt-codex-connector[bot]", "type" => "Bot"}
+      })
 
-    human = comment(%{
-      "id" => 303,
-      "user" => %{"id" => 42, "login" => "human", "type" => "User"}
-    })
+    human =
+      comment(%{
+        "id" => 303,
+        "user" => %{"id" => 42, "login" => "human", "type" => "User"}
+      })
 
-    wrong_type = comment(%{
-      "id" => 304,
-      "user" => Map.put(@codex, "type", "User")
-    })
+    wrong_type =
+      comment(%{
+        "id" => 304,
+        "user" => Map.put(@codex, "type", "User")
+      })
 
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number,
@@ -134,9 +139,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     reply = comment(%{"id" => 309, "in_reply_to_id" => 301})
 
     assert {:ok, snapshot} =
-             Collector.collect(@repo, @number,
-               api: fake_api(api_responses([unmarked, reply]))
-             )
+             Collector.collect(@repo, @number, api: fake_api(api_responses([unmarked, reply])))
 
     assert snapshot["observations"] == []
     assert snapshot["ignored_source_events"] == 2
@@ -174,9 +177,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert empty["coverage"] == "bot_comment_and_review_submissions_only"
 
     assert {:ok, with_review} =
-             Collector.collect(@repo, @number,
-               api: fake_api(api_responses([], [review()]))
-             )
+             Collector.collect(@repo, @number, api: fake_api(api_responses([], [review()])))
 
     assert with_review["observations"] == []
     assert with_review["ignored_source_events"] == 1
@@ -221,10 +222,11 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     # A full last page means there may be more data: the result is UNKNOWN.
     full_page = List.duplicate(comment(), 100)
 
-    api = fake_api(
-      api_responses()
-      |> Map.put(@path <> "/comments?per_page=100&page=1", {:ok, full_page})
-    )
+    api =
+      fake_api(
+        api_responses()
+        |> Map.put(@path <> "/comments?per_page=100&page=1", {:ok, full_page})
+      )
 
     assert {:error, {:page_budget_exhausted, path}} =
              Collector.collect(@repo, @number, api: api, page_budget: 1)
@@ -282,6 +284,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert {:error, :invalid_subject} =
              Collector.collect(@repo, -1, api: bad_api)
   end
+
   test "a finding retains original reviewed commit rather than rebound attachment" do
     moved = comment(%{"original_commit_id" => @other, "commit_id" => @sha})
 
@@ -308,9 +311,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
           comment(%{"html_url" => "https://github.com/stuff-of-awe/other/pull/20"})
         ] do
       assert {:error, {:invalid_source_event, _reason}} =
-               Collector.collect(@repo, @number,
-                 api: fake_api(api_responses([broken]))
-               )
+               Collector.collect(@repo, @number, api: fake_api(api_responses([broken])))
     end
   end
 
@@ -334,9 +335,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     quota = review(%{"state" => "COMMENTED", "body" => "Quota exhausted"})
 
     assert {:ok, snapshot} =
-             Collector.collect(@repo, @number,
-               api: fake_api(api_responses([linked], [quota]))
-             )
+             Collector.collect(@repo, @number, api: fake_api(api_responses([linked], [quota])))
 
     review_item =
       Enum.find(snapshot["observations"], fn observation ->
@@ -364,10 +363,11 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   test "a security review is never re-labelled as a code review" do
-    security = comment(%{
-      "pull_request_review_id" => 501,
-      "body" => "<!-- codex-security-review-finding:v1 -->"
-    })
+    security =
+      comment(%{
+        "pull_request_review_id" => 501,
+        "body" => "<!-- codex-security-review-finding:v1 -->"
+      })
 
     assert {:ok, snapshot} =
              Collector.collect(@repo, @number,
@@ -375,17 +375,19 @@ defmodule Hypatia.ReviewGithubCollectorTest do
              )
 
     assert length(snapshot["observations"]) == 2
+
     assert Enum.all?(snapshot["observations"], fn item ->
              item["source"]["scope"] == "security"
            end)
   end
 
   test "reviews with mixed linked scopes are not invented as one scope" do
-    security = comment(%{
-      "id" => 303,
-      "pull_request_review_id" => 501,
-      "body" => "<!-- codex-security-review-finding:v1 -->"
-    })
+    security =
+      comment(%{
+        "id" => 303,
+        "pull_request_review_id" => 501,
+        "body" => "<!-- codex-security-review-finding:v1 -->"
+      })
 
     code = comment(%{"id" => 302, "pull_request_review_id" => 501})
 
@@ -395,6 +397,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
              )
 
     assert length(snapshot["observations"]) == 2
+
     refute Enum.any?(snapshot["observations"], fn item ->
              item["source"]["event_id"] == "github:review:501"
            end)
@@ -436,12 +439,9 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   test "duplicate or missing API event identities invalidate the inventory" do
     for entries <- [[%{"id" => 10}, %{"id" => 10}], [%{"body" => "no id"}]] do
       assert {:error, {:invalid_or_duplicate_event_ids, path}} =
-               Collector.collect(@repo, @number,
-                 api: fake_api(api_responses(entries))
-               )
+               Collector.collect(@repo, @number, api: fake_api(api_responses(entries)))
 
       assert path == @path <> "/comments"
     end
   end
-
 end
