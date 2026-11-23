@@ -623,13 +623,19 @@ jobs:
       - name: Compile review admission and evidence encoder
         run: mix compile --warnings-as-errors
 
+      # Cargo treats a nested Rust package as part of Hypatia's workspace.
+      # Copy the already checked-out, pinned Git tree to a temporary sibling:
+      # no edits to either Cargo.toml, Cargo.lock, or the source checkout.
+      - name: Isolate pinned canonicaliser from Hypatia Cargo workspace
+        run: cp -a .ijson-jcs "$RUNNER_TEMP/ijson-jcs-review-source"
+
       - name: Compile JCS binary from exactly pinned source and lockfile
-        run: cargo build --release --locked --manifest-path .ijson-jcs/Cargo.toml --bin ijson-jcs
+        run: cargo build --release --locked --manifest-path "$RUNNER_TEMP/ijson-jcs-review-source/Cargo.toml" --bin ijson-jcs
 
       - name: Differential and failure-mode checks
         env:
-          HYPATIA_IJSON_JCS_SOURCE: .ijson-jcs
-          HYPATIA_IJSON_JCS_BIN: .ijson-jcs/target/release/ijson-jcs
+          HYPATIA_IJSON_JCS_SOURCE: ${{ runner.temp }}/ijson-jcs-review-source
+          HYPATIA_IJSON_JCS_BIN: ${{ runner.temp }}/ijson-jcs-review-source/target/release/ijson-jcs
         run: bash scripts/check-review-evidence-ijson-jcs.sh
 
   # ============================================================================
