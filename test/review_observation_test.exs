@@ -182,7 +182,8 @@ defmodule Hypatia.ReviewObservationTest do
              @sample
              |> Map.merge(%{
                "repo" => "stuff-of-awe/foo..bar",
-               "source_url" => "https://github.com/stuff-of-awe/foo..bar/pull/20#discussion_r4660874699"
+               "source_url" =>
+                 "https://github.com/stuff-of-awe/foo..bar/pull/20#discussion_r4660874699"
              })
              |> ReviewObservation.admit(@a)
 
