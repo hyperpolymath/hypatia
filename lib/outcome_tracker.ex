@@ -387,12 +387,15 @@ defmodule Hypatia.OutcomeTracker do
 
   # Write the receipts that a failed write left missing, into the store that the
   # recipe is recomputed in. It never raises.
-  defp repair_receipts(recipe_id) do
-    store = capture_outcome_store()
-    Hypatia.Receipt.repair(store.data_root, recipe_id)
+  defp repair_receipts(recipe_id, store) do
+    case Hypatia.Receipt.repair_with_status(store.data_root, recipe_id) do
+      %{pending: 0} -> :ok
+      %{pending: failed} -> {:error, {:receipt_repair_pending, failed}}
+    end
   rescue
     error ->
       Logger.warning("receipt repair failed for #{recipe_id}: #{Exception.message(error)}")
+      {:error, {:receipt_repair_failed, Exception.message(error)}}
   end
 
   # A row that the fleet import stored without qualifying it.
@@ -799,10 +802,21 @@ defmodule Hypatia.OutcomeTracker do
   Write failures remain errors. The annealing and recipe writes are not an
   atomic multi-file transaction; a later refusal can leave an earlier A write,
   but cannot redirect that operation to B.
+
+  Missing receipts are repaired before recomputation. A retryable repair failure
+  does not block the derived update, but remains an error so the scheduler keeps
+  the recipe pending even when its scalar confidence was successfully persisted.
+  Final receipt refusals remain logged and do not themselves schedule retries.
   """
   def update_recipe_confidence(recipe_id) do
-    repair_receipts(recipe_id)
-    update_recipe_confidence(recipe_id, fn -> :ok end)
+    store = capture_outcome_store()
+    receipt_result = repair_receipts(recipe_id, store)
+    confidence_result = do_update_recipe_confidence(recipe_id, store, fn -> :ok end)
+
+    case receipt_result do
+      :ok -> confidence_result
+      error -> error
+    end
   end
 
   # The barrier is a deterministic control seam; production uses the same

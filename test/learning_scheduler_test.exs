@@ -483,9 +483,11 @@ defmodule Hypatia.LearningSchedulerTest do
 
       {_positions, count, recipes} = LearningScheduler.ingest_new_outcomes(%{})
 
-      # Only the local record is counted.
+      # Only the local record is counted. Both recipes still need receipt and
+      # derived-state reconciliation in case an earlier write was interrupted.
       assert count == 1
       assert MapSet.member?(recipes, "recipe-a")
+      assert MapSet.member?(recipes, "recipe-b")
     end
   end
 

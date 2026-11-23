@@ -646,6 +646,59 @@ defmodule Hypatia.ReceiptTest do
   end
 
   describe "the failure rule" do
+    test "repair distinguishes final refusal from pending I/O while preserving the tuple contract",
+         %{data: data} do
+      recipe_id = "recipe-repair-status"
+
+      valid = %{
+        "event_id" => EventId.generate(),
+        "recipe_id" => recipe_id,
+        "repo" => "o/r",
+        "file" => "f",
+        "outcome" => "failure",
+        "verification" => "failed",
+        "source_kind" => "local_caller"
+      }
+
+      refused =
+        Map.merge(valid, %{
+          "event_id" => EventId.generate(),
+          "outcome" => "unknown",
+          "verification" => "verified"
+        })
+
+      File.mkdir_p!(Path.join(data, "outcomes"))
+
+      File.write!(
+        Path.join([data, "outcomes", "repair-status.jsonl"]),
+        Enum.map_join([valid, refused], "", &(Jason.encode!(&1) <> "\n"))
+      )
+
+      receipts_path = Path.join(data, "receipts")
+      File.write!(receipts_path, "blocked")
+
+      log =
+        capture_log(fn ->
+          assert {0, 2} = Receipt.repair(data, recipe_id)
+
+          assert %{written: 0, pending: 1, refused: 1} =
+                   Receipt.repair_with_status(data, recipe_id)
+
+          File.rm!(receipts_path)
+
+          assert %{written: 1, pending: 0, refused: 1} =
+                   Receipt.repair_with_status(data, recipe_id)
+
+          assert {0, 1} = Receipt.repair(data, recipe_id)
+        end)
+
+      assert log =~ "receipt_refused event_id=#{refused["event_id"]}"
+      assert log =~ "receipt_pending event_id=#{valid["event_id"]}"
+      assert [%{"event_id" => id}] = Receipt.all(data)
+      assert id == valid["event_id"]
+      assert length(rows(data)) == 2
+    end
+
     test "the row write fails: nothing else runs and no receipt is written", %{
       root: root,
       data: data
