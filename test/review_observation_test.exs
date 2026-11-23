@@ -111,6 +111,7 @@ defmodule Hypatia.ReviewObservationTest do
 
   test "two different API event identifiers remain different even with identical findings" do
     first = ReviewObservation.admit(@sample, @a)
+
     second =
       ReviewObservation.admit(
         Map.put(@sample, "source_event_id", "github:comment:4660874700"),
