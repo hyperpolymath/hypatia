@@ -49,11 +49,9 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   defp api_responses(comments \\ [], reviews \\ []) do
-    %{
-      @path => {:ok, pr()},
-      @path <> "/comments?per_page=100&page=1" => {:ok, comments},
-      @path <> "/reviews?per_page=100&page=1" => {:ok, reviews}
-    }
+    %{@path => {:ok, pr()}}
+    |> Map.put(@path <> "/comments?per_page=100&page=1", {:ok, comments})
+    |> Map.put(@path <> "/reviews?per_page=100&page=1", {:ok, reviews})
   end
 
   defp fake_api(responses) do
@@ -190,16 +188,21 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   test "a changing PR head invalidates the entire snapshot" do
     {:ok, counter} = Agent.start_link(fn -> 0 end)
 
-    api = fn
-      @path ->
-        calls = Agent.get_and_update(counter, fn count -> {count, count + 1} end)
-        {:ok, pr(if(calls == 0, do: @sha, else: @other))}
+    api = fn endpoint ->
+      cond do
+        endpoint == @path ->
+          calls = Agent.get_and_update(counter, fn count -> {count, count + 1} end)
+          {:ok, pr(if(calls == 0, do: @sha, else: @other))}
 
-      @path <> "/comments?per_page=100&page=1" ->
-        {:ok, [comment()]}
+        endpoint == @path <> "/comments?per_page=100&page=1" ->
+          {:ok, [comment()]}
 
-      @path <> "/reviews?per_page=100&page=1" ->
-        {:ok, []}
+        endpoint == @path <> "/reviews?per_page=100&page=1" ->
+          {:ok, []}
+
+        true ->
+          {:error, :unexpected_endpoint}
+      end
     end
 
     assert {:error, :head_changed_during_collection} =
@@ -215,8 +218,10 @@ defmodule Hypatia.ReviewGithubCollectorTest do
       |> Map.put(@path <> "/comments?per_page=100&page=1", {:ok, full_page})
     )
 
-    assert {:error, {:page_budget_exhausted, @path <> "/comments"}} =
+    assert {:error, {:page_budget_exhausted, path}} =
              Collector.collect(@repo, @number, api: api, page_budget: 1)
+
+    assert path == @path <> "/comments"
   end
 
   test "pagination reads a second page and does not invent a missing event" do
