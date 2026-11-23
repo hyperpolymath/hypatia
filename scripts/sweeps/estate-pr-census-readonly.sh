@@ -37,6 +37,12 @@ command -v gh >/dev/null || { echo 'gh CLI is required' >&2; exit 2; }
 command -v jq >/dev/null || { echo 'jq is required' >&2; exit 2; }
 
 mkdir -p -- "$OUT_DIR"
+# A failed refresh must never leave a previous successful census looking current.
+# Use a fresh output directory for every run until versioned publication exists.
+if [[ -e "$OUT_DIR/pr-inventory.jsonl" || -e "$OUT_DIR/pr-census.json" ]]; then
+  echo "output already contains census artifacts; use a new --out-dir" >&2
+  exit 2
+fi
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
 : > "$TMP/pr-inventory.jsonl"
