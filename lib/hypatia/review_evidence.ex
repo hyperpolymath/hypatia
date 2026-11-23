@@ -144,13 +144,15 @@ defmodule Hypatia.ReviewEvidence do
   end
 
   defp check_each(records, snapshot) do
-    Enum.reduce_while(records, {:ok, []}, fn observation, {:ok, accepted} ->
-      case validated_observation(observation, snapshot) do
-        {:ok, record} -> {:cont, {:ok, [record | accepted]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
+    result =
+      Enum.reduce_while(records, {:ok, []}, fn observation, {:ok, accepted} ->
+        case validated_observation(observation, snapshot) do
+          {:ok, record} -> {:cont, {:ok, [record | accepted]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case result do
       {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
       error -> error
     end
