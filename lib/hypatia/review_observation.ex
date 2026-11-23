@@ -112,21 +112,31 @@ defmodule Hypatia.ReviewObservation do
 
   defp valid_sha?(sha), do: is_binary(sha) and Regex.match?(@sha, sha)
 
-  defp valid_repo?(repo),
-    do: is_binary(repo) and Regex.match?(@repo, repo) and not String.contains?(repo, "..")
+  defp valid_repo?(repo) when is_binary(repo) do
+    Regex.match?(@repo, repo) and
+      Enum.all?(String.split(repo, "/"), &(&1 not in [".", ".."]))
+  end
+
+  defp valid_repo?(_), do: false
 
   defp valid_event_id?(id), do: is_binary(id) and Regex.match?(@event_id, id)
 
   # The URL is a GitHub provenance locator, not an authenticity attestation.
-  # Match the precise PR path; /pull/17-evil must not count as /pull/17.
+  # Require the PR permalink path itself; review comment links use fragments.
+  # This rejects malformed ports, PR suffix tricks and dot-segment traversal
+  # (including encoded segments) without interpreting untrusted URL paths.
   defp valid_url?(url, repo, number)
        when is_binary(url) and is_binary(repo) and is_integer(number) and number > 0 do
-    uri = URI.parse(url)
     expected = String.downcase("/" <> repo <> "/pull/" <> Integer.to_string(number))
-    path = String.downcase(uri.path || "")
 
-    uri.scheme == "https" and uri.host == "github.com" and is_nil(uri.userinfo) and
-      (path == expected or String.starts_with?(path, expected <> "/"))
+    case URI.new(url) do
+      {:ok, uri} ->
+        uri.scheme == "https" and uri.authority == "github.com" and
+          String.downcase(uri.path || "") == expected
+
+      {:error, _reason} ->
+        false
+    end
   end
 
   defp valid_url?(_url, _repo, _number), do: false
