@@ -11,6 +11,16 @@ The parent is https://github.com/hyperpolymath/hypatia/pull/1220[#1220].
 This adapter **does not** trigger pre-commit.ci, rerun jobs, autofix,
 post a comment, approve a merge, or authorise Bayesian learning.
 
+For an operational, read-only inspection of one PR, run:
+
+----
+mix hypatia.review_check_collect --repo stuff-of-awe/awesome-zig --pr 20
+----
+
+The command reports exact source IDs and native statuses only. It neither
+writes receipts nor runs the hooks. A missing check is explicitly
+"NOT OBSERVED", not success, compliance or a checked installation.
+
 The upstream ReviewObservation.admit/2 already permits provider
 pre-commit.ci with scope hooks. The new collector emits those observations
 through a distinct GitHub native Check Runs API intake.
