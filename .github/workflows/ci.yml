@@ -27,6 +27,23 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # M0 census/enrichment contracts are local-only: fake gh, no API tokens,
+  # no review requests, no mutations, no dependence on live estate data.
+  pr-backlog-readonly-contracts:
+    name: Read-only PR backlog contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+      - name: Verify read-only PR census and enrichment
+        run: |
+          set -euo pipefail
+          bash tests/estate-pr-census-readonly-test.sh
+          bash tests/estate-pr-enrich-readonly-test.sh
+
   # ============================================================================
   # Rust Jobs (adapters, cli, fixer, data)
   # ============================================================================
