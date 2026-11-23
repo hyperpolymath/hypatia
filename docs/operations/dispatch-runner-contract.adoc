@@ -16,8 +16,27 @@ documents the contract that side must implement.
 
 == The contract
 
+=== Amendment approved 2026-11-23: versioned fleet attempts
+
+For producer rows declaring `attempt_contract = "fleet-attempt/1"`, the owner
+has approved the existing trusted fleet importer as the sole attempt admission
+path. The runner MUST publish the identified row to the configured fleet
+`shared-context/learning/fix-outcomes.jsonl` and MUST NOT independently invoke
+`mix hypatia.record_outcome` for that attempt. Rescan observations belong to
+the same admitted attempt; they are not a second learning trial.
+
+The detailed contract and its conservative first implementation are in
+`docs/design/fleet-attempt-admission.adoc`. A delayed scan without post-fix
+state binding remains unqualified diagnostic evidence; it cannot establish
+success or false-positive blame. The direct task below retains its existing
+public restrictions and remains available to its other callers, including
+the separate policy-refusal reporting path. No quarantine or activation
+permission changes with this amendment.
+
+=== Existing direct-call interface
+
 After a fix script runs against a target repository, the runner
-MUST invoke:
+under the legacy direct-call contract MUST invoke:
 
   mix hypatia.record_outcome \
       --recipe   <recipe-id>          # from the dispatch manifest

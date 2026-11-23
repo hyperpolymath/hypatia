@@ -1,0 +1,333 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= NS-02: Single fleet admission and unbound rescan evidence
+:toc:
+:toclevels: 2
+
+Date: 2026-11-23. Consumer base: Hypatia #1224,
+`10be2b996e9bd6d037b36b5cfad6101a2cfde9f2`.
+Paired producer: gitbot-fleet
+`37ea58c5b577485de9dc1e2af46af1d09e7056e6`, following #709.
+
+Jonathan approved single fleet admission and correlated rescans on
+2026-11-23. The bounded contract is
+`docs/design/fleet-attempt-admission.adoc`; the versioned route amendment is
+in `docs/operations/dispatch-runner-contract.adoc`. This note records the
+consumer implementation and its executed focused and paired evidence.
+Approval and these results grant no production activation, quarantine
+removal, E0 closeout or Kautz promotion.
+
+== Problem and scope
+
+The previous delivery route could admit one actual producer attempt twice:
+once through direct outcome recording and once through fleet import. The
+executed counterexample and route decision are preserved in fleet PR #709
+and its `docs/design/e0-12-outcome-route-decision.adoc`.
+
+For `fleet-attempt/1`, the configured fleet reader is the sole production
+admission writer. The paired producer emits an identified source row without
+calling `mix hypatia.record_outcome` for that attempt. The consumer admits
+one canonical outcome with that producer ID. A scan, when actually performed,
+is embedded evidence on that outcome, not another outcome, receipt or
+training sample. Existing direct recording remains available for its other
+callers under its existing restrictions.
+
+The production consumer changes are confined to `lib/hypatia/fleet_admission.ex`,
+`lib/learning_scheduler.ex`, `lib/outcome_tracker.ex`,
+and `lib/hypatia/receipt.ex`, with new controls in
+`test/fleet_admission_test.exs`. A separate validation-fixture repair is
+described below. The #1224
+dependency maintenance remains in the base; this slice adds no dependency,
+CI policy or source-advisory exception.
+
+== Source admission and public boundaries
+
+The actual reader is `LearningScheduler.ingest_fleet_outcomes/1`. Its only
+versioned source is the configured fleet root's
+`shared-context/learning/fix-outcomes.jsonl`. A complete source row must have
+the exact `attempt_contract = "fleet-attempt/1"`, a canonical valid
+ADR-008 event ID, `bot = "dispatch-runner"`, and the existing recipe and
+repository subject fields. Explicit unknown or malformed versions and
+invalid IDs are refused; they do not acquire legacy interpretation.
+Untagged historical E0-11 rows retain their existing semantics.
+
+The internal import entry captures the selected destination store and the
+reader's source locator and raw-line digest. The admission helper re-reads
+that complete line from the configured source and checks its digest before
+constructing consumer metadata. A complete JSON value without its final LF
+is not a complete versioned source row. The entry accepts no trusted
+admission map, caller-selected receipt context or public trust switch. This
+works through actual ingest under `mix run --no-start`; it does not require
+a globally registered scheduler process.
+
+Public outcome paths strip caller-supplied identity and consumer-owned
+admission/observation fields. Raw feed fields cannot install trusted
+verification or observations. The canonical record retains an allowlisted
+`producer_assertion` and nested `producer_source` containing the source
+`path`, relative `log`, original `line`, `row_sha256` and source `bot`.
+The raw digest is SHA-256 of the exact read line excluding its terminating
+LF. The canonical outcome has `admission_version = "fleet-attempt/1"`,
+the producer event ID, `source_kind = "fleet_import"`, origin
+`gitbot-fleet`, and consumer bot `hypatia`.
+
+== Qualification and observations
+
+Producer fixes can leave dirty mutable working trees. A later scan can see
+changes unrelated to the named attempt; neither HEAD equality nor the
+producer's per-run lock binds that scan to the attempt's post-state.
+Consequently every v1 success claim remains audit-only. A clean observation
+adds no positive credit, and an adverse observation adds no false-positive
+blame. The qualified-count path enforces this independently of caller
+verification labels.
+
+[cols="3,3",options="header"]
+|===
+|Producer evidence |Canonical contribution
+|`failed` / `failure`, nonzero integer `exit_code`
+|One qualified failure under the existing numeric gate.
+|`incomplete`, existing allowed `success` or `failure` outcome, positive integer `after_hits`
+|One qualified failure under the existing numeric gate.
+|Otherwise eligible `verified` / `success`, positive integer `before_hits`, integer `after_hits = 0`
+|Audit only; may receive an actual unbound current-target scan.
+|`no_op`, `unverified`, inconsistent or insufficient evidence
+|Audit only; a scan cannot upgrade this evidence.
+|===
+
+Only an otherwise eligible success is considered for scanning. An actual
+scan creates one embedded `rescan_observation` with a distinct generated
+`observation_id`, `attempt_event_id`, `source_row_sha256` matching
+`producer_source.row_sha256`, `observer = "hypatia"`,
+`binding = "unbound"`, observation time and resolved target. The closed
+result vocabulary is `verified`, `still_present`, `ambiguous`,
+`cannot_locate` and `scan_failed`. Malformed scanner output is retained as
+an actual `scan_failed` observation.
+
+If the scan is not run, `rescan_not_run` states why and no observation ID is
+invented. Failed/incomplete and other ineligible assertions use
+`not_eligible_success`. Missing scanner, root, target or registry evidence
+also leaves an explicit gap. No second admitted event is created for an
+embedded observation.
+
+Target resolution requires an explicitly configured `HYPATIA_REPOS_DIR` and
+a safe `repo_relative_path` naming the actual repository beneath it. Absolute
+paths, traversal and unsafe path components are refused. The implementation
+conservatively refuses every symlink in the root/target/file path, including
+internal symlinks. The target must exist; a specified file must be regular.
+The category comes only from the captured local recipe registry, matched by
+recipe ID. Missing, unreadable or ambiguous mappings/categories do not cause
+a guessed scan. A producer's arbitrary category is not trusted. These
+optional scan prerequisites do not change the existing failed/incomplete
+numeric criteria.
+
+== Replay, conflicts and destination separation
+
+Committed identity is checked before observation. A matching producer ID
+with the same raw-source digest, source path and source bot returns the
+committed identity and repairs a missing receipt when needed. It performs no
+new scan and adds no outcome, observation or qualified contribution. The
+original source line remains provenance; a moved line with the same bytes
+and binding is replay. Distinct valid IDs remain distinct attempts even if
+their other inputs match.
+
+Changed bytes or source binding for a committed ID produce a visible
+conflict. The attempted raw bytes, their digest and locator, the committed
+source binding, event ID and observation time are preserved with
+`authorising = false` under
+`admission-conflicts/YYYY-MM-DD.jsonl`. They do not enter the outcomes
+ledger, retract the original event or change its existing count. Removing
+or changing the version on a committed identity still reaches this conflict
+handling. Failure to preserve conflict evidence is an error. Repeated
+conflict evidence is not promised to be deduplicated.
+
+The reader refuses configured-feed aliases into both `outcomes/*.jsonl`
+and `receipts/*.jsonl`, using physical device/inode identity so symlink and
+hardlink aliases are covered. A raw same-ID source row already in the
+outcome ledger is conflicted or refused, rather than admitted again. Raw rows carrying
+top-level `attempt_contract` cannot count as canonical evidence even when
+they forge `admission_version`. Duplicate committed identities and malformed
+or incomplete destination logs fail closed.
+
+== Commit, retry and receipt proof
+
+The canonical outcome append is the commit point. A failure before append,
+including an append failure after an actual scan, leaves no committed
+outcome, receipt, observation or qualified count, and the source is retryable.
+The selected store is captured before scanning. Source/store configuration
+is checked again before append; changing the selected destination while the
+scanner runs cannot redirect the result into either store.
+
+A receipt failure after a successful outcome append retains that committed
+admission. Its qualified count is returned once from the stored row, not
+from the pre-scan classification. Replay repairs the missing receipt without
+rescanning or readmission. A deferred source scan or later incomplete tail
+does not discard the count of earlier committed rows. Diagnostics describe
+the scan as deferred and the committed admissions as retained; a pending
+receipt is not an uncommitted event.
+
+For v1, receipt construction reads the exact persisted canonical outcome
+bytes. The receipt uses:
+
+[source,text]
+----
+source.kind = "fleet_import"
+source.log = "outcomes/YYYY-MM.jsonl"
+source.line = "<canonical outcome line number>"
+proof_or_test_ref.row_sha256 = SHA-256(canonical outcome line without LF)
+parent_event_ids = []
+----
+
+Thus the receipt digest covers the embedded consumer evidence as well as
+the retained producer provenance. The producer's raw-feed digest remains
+nested in the stored outcome. Caller-supplied receipt context cannot
+replace a persisted v1 row. Selection requires its exact root event ID and
+canonical shape and rejects raw tagged rows, ambiguous same-ID evidence
+and feed aliases. Removing the caller's admission marker cannot force a
+legacy fallback for a persisted versioned identity; an ID mentioned only
+inside another row is not a matching receipt source.
+
+Unbound v1 observations remain missing in receipt `observations.rescan`;
+only genuinely bound evidence could populate that slot. No bound path is
+implemented here. Legacy receipt context, empty revision ancestry and the
+existing `e0-receipt/1` Nickel schema are unchanged.
+
+== Executed evidence
+
+The focused consumer runs used the task-scoped Elixir 1.19.4 /
+Erlang/OTP 27.3.4.19 runtime. The same focused command was run before the
+source changes and after the final controls were added:
+
+[source,shell]
+----
+# Use the matching consumer checkout with the pinned BEAM runtime and dependencies.
+cd /absolute/hypatia
+MIX_ENV=test mix test test/fleet_admission_test.exs
+----
+
+[cols="2,3,2",options="header"]
+|===
+|Stage |Evidence |Result
+|Initial regression against unchanged consumer source
+|Actual-ingest version, evidence, replay and receipt controls
+|13 tests, 11 failures; exit 2
+|Final consumer focused set
+|All final admission, trust-boundary and failure controls
+|28 tests, 0 failures; exit 0
+|Actual paired producer/consumer delivery
+|Direct configured-feed delivery, four attempts, receipt contracts and replay
+|1 test, 0 failures
+|===
+
+The final 28-test set exercises actual ingest, including clean and adverse
+unbound scans; exact failure criteria; distinct attempts and replay;
+unknown/malformed versions; forged raw/public metadata; changed bytes,
+bindings and removed versions; source/ledger symlink and hardlink aliases;
+raw forged-marker ledger rows; nested and ambiguous IDs; persisted-byte
+receipt digest and repair; missing scanner/category/root/target; malformed
+scanner output; outcome failure before and after scanning; receipt failure
+after commit; store switching during an actual scan; and incomplete-row/
+tail handling with count retention. An independent read-only source review
+closed the alias, raw-row, receipt-selection and committed-acknowledgement
+findings. Formatting and `git diff --check` passed; the final focused log
+contained no compilation warnings.
+
+The coordinator executed the paired witness from the consumer checkout:
+
+[source,shell]
+----
+cd /absolute/hypatia
+NICKEL=/absolute/nickel \
+  MIX_ENV=test mix run --no-start \
+  /absolute/gitbot-fleet/tests/hypatia-single-admission-test.exs
+----
+
+Its disposable runner writes directly to the consumer's configured feed;
+the original delivery requires no file copying into that feed. Four unique
+IDs agree across source outcomes, canonical outcomes, receipts and start
+records. Two failed attempts yield two qualified failures. Two success
+claims yield clean/adverse unbound observations and two audit-only outcomes;
+the totals remain zero successes, two failures, zero false positives and
+two ignored outcomes. There are four receipts: two `credited_failure` and
+two `audit_only`. All four validate against the unchanged schema using
+Nickel 1.11.0. Injected duplicate transport plus warm and cold signature
+replay leaves stored bytes and the two-scan count unchanged. The witness
+uses the established disposable interlock-removal test seam; production
+quarantine is unchanged.
+
+The fixer and scanner in that witness are controlled fixture executables.
+The scanner runs through the consumer's real subprocess boundary and checks
+its target argument. This validates invocation, interpretation and binding
+rules; it does not measure the production scanner's effectiveness on repairs.
+
+Execution logs are retained in the task's
+`notes/continuation/admission-red.log`, `admission-focused.log` and
+`single-admission-green-delivery.log`. This note records only the executed
+focused and paired results above. The broad-regression checkpoint is below;
+hosted CI and deployment remain separate evidence.
+
+== Validation-fixture repair
+
+The first full run reported `3752 tests, 1 failure (246 excluded)`. The
+failure was the existing Kin default-predictor timeout test's assumption
+that the long-lived application neural cohort remained ready. The log shows
+an application scheduler poll during an earlier E0-04 temporary-store test,
+followed by a latched VAE source mismatch. Restoring the global path did not
+clear that correctly retained refusal. These fixtures predate this change;
+NS-03 does not itself repair this timeout fixture.
+
+A deterministic control reproduced the same failed post-resume ready barrier
+using a test-owned prior cohort and an actual VAE source mismatch: one test,
+one failure. The correction is confined to
+`test/neural_source_store_lifecycle_test.exs`. It preserves and suspends the
+application Coordinator PID, temporarily lends its registered name to owned
+real cohorts, proves the prior cohort remains blocked, then supplies a fresh
+complete cohort for the timeout check. Cleanup restores the original root,
+registration and PID. The existing hold/deadline assertions and strict ready
+barrier remain. The focused corrected control passed one test, zero failures.
+No production source guard was reset or weakened.
+
+The corrected consumer head then passed `mix compile --warnings-as-errors`,
+repository-wide `mix format --check-formatted` and `mix test --seed 0`:
+`3752 tests, 0 failures (246 excluded)`, with Nickel available and no skipped
+tests. README counts/local links, the no-active-Logtalk check and whitespace
+checks passed. The 246 exclusions remain the repository's declared
+`verisim_data`, `kyq_differential`, `yaml_test_suite`, `baseline_helper` and
+`act_integration` groups. The earlier failed full run remains recorded above;
+the green result follows an identified test-fixture correction.
+
+The coordinator also applied this admission slice and its fixture repair in a
+separate checkout of #1224, together with the exact NS-01 commit
+`7d4e8c35ea31c17a07635cdb447e1cc2c95abe91` and NS-03 commit
+`ed7587eea1d0599d8199d454d976fc6ff79e3317`. Both patches applied cleanly.
+Compilation with warnings as errors and repository-wide formatting passed.
+`mix test --seed 0` then reported
+`3770 tests, 0 failures (246 excluded)`, with no skipped tests and Nickel
+available. The paired delivery witness was repeated on that combined code
+and passed one test, zero failures, including its four receipt-contract
+checks. These results establish local compatibility of the three slices;
+they do not merge the separate review branches or certify excluded suites,
+hosted CI, a qualified corpus or production deployment.
+
+== Programme dependencies and remaining limits
+
+NS-02 is based on #1224 and does not duplicate NS-01 or NS-03. The combined
+programme also requires NS-01's scheduler recovery of committed fleet
+receipts/derived state and NS-03's truthful neural contribution and advisory
+readiness boundary. Their separate local combined regression is recorded
+above; the published branches still require integration review. V1 replay
+repair in this slice is not
+a replacement for NS-01's scheduler recovery work.
+
+The import lock serializes this reader within one BEAM VM only. It does not
+provide cross-VM writer atomicity, a multi-file transaction, power-loss
+durability or exactly-once neural parameter updates. The stored raw digest
+describes the captured/read source snapshot. Post-scan validation checks
+source/store configuration; it does not re-hash source bytes or lock mutable
+target bytes through append. Initial physical alias checks are not a
+filesystem snapshot guarantee. Canonical shape validation assumes a trusted
+destination ledger and is not cryptographic protection against an arbitrary
+ledger writer.
+
+Snapshot-bound positive attribution, later evidence revision and withdrawal
+remain subsequent work. The present implementation establishes bounded
+single admission and correlated unbound audit evidence, with the qualified
+failed/incomplete contributions and failure boundaries described above.

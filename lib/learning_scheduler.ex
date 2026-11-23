@@ -753,6 +753,24 @@ defmodule Hypatia.LearningScheduler do
   # --- Fleet outcomes: verified evidence only, restart-safe replay ---
 
   @doc false
+  def classify_fleet_record(
+        %{"attempt_contract" => "fleet-attempt/1", "bot" => "dispatch-runner"} = record
+      ) do
+    if Hypatia.EventId.valid?(record["event_id"]) do
+      case classify_fleet_record(Map.delete(record, "attempt_contract")) do
+        {:ok, recipe, repo, file, :success, "verified"} ->
+          {:audit, recipe, repo, file, :success, "unqualified"}
+
+        result ->
+          result
+      end
+    else
+      :skip
+    end
+  end
+
+  def classify_fleet_record(%{"attempt_contract" => _}), do: :skip
+
   def classify_fleet_record(record) when is_map(record) do
     recipe_id = Map.get(record, "recipe_id") || Map.get(record, "pattern")
     repo = Map.get(record, "repo")
@@ -913,14 +931,31 @@ defmodule Hypatia.LearningScheduler do
             })
           )
 
-        if signature == previous_signature do
+        versioned? =
+          content
+          |> String.split("\n", trim: true)
+          |> Enum.any?(fn line ->
+            case Jason.decode(line) do
+              {:ok, row} when is_map(row) -> Map.has_key?(row, "attempt_contract")
+              _ -> false
+            end
+          end)
+
+        if signature == previous_signature and not versioned? do
           {0, signature}
         else
           case Hypatia.OutcomeTracker.imported_fleet_ids() do
             {:ok, known_ids} ->
-              case import_fleet_lines(content, known_ids) do
+              case import_fleet_lines(content, known_ids, fleet_file, versioned?) do
                 {:ok, imported} ->
                   {imported, signature}
+
+                {:error, reason, committed_count} ->
+                  Logger.warning(
+                    "LearningScheduler: fleet source scan deferred; committed admissions retained: #{inspect(reason)}"
+                  )
+
+                  {committed_count, previous_signature}
 
                 {:error, reason} ->
                   Logger.warning(
@@ -945,7 +980,7 @@ defmodule Hypatia.LearningScheduler do
     end
   end
 
-  defp import_fleet_lines(content, known_ids) do
+  defp import_fleet_lines(content, known_ids, fleet_file, versioned?) do
     lines = String.split(content, "\n", trim: false)
     final_line = length(lines)
 
@@ -964,61 +999,82 @@ defmodule Hypatia.LearningScheduler do
           {:ok, %{"kind" => "start"}} ->
             {:cont, {:ok, seen, count}}
 
+          {:ok, %{"attempt_contract" => _}} ->
+            import_versioned_fleet_line(line, line_number, fleet_file, seen, count)
+
           {:ok, record} ->
-            case classify_fleet_record(record) do
-              {kind, recipe_id, repo, file, outcome, verification} when kind in [:ok, :audit] ->
-                case fleet_identity(record, line, line_number) do
-                  {:invalid, reason} ->
-                    # Present and not valid: not imported, and the rows after it
-                    # still are. It stays in the append-only source as evidence.
-                    Logger.warning(
-                      "LearningScheduler: fleet row #{line_number}: event_id is not a valid " <>
-                        "ADR-008 version 8 id (#{reason}); not imported"
-                    )
+            # A v1 identity cannot escape conflict detection by removing its
+            # version field or damaging another field on replay. Historical
+            # identities retain their old duplicate interpretation.
+            if is_map(record) and Hypatia.EventId.valid?(record["event_id"]) and
+                 MapSet.member?(seen, record["event_id"]) do
+              import_versioned_fleet_line(line, line_number, fleet_file, seen, count)
+            else
+              case classify_fleet_record(record) do
+                {kind, recipe_id, repo, file, outcome, verification} when kind in [:ok, :audit] ->
+                  case fleet_identity(record, line, line_number) do
+                    {:invalid, reason} ->
+                      # Present and not valid: not imported, and the rows after it
+                      # still are. It stays in the append-only source as evidence.
+                      Logger.warning(
+                        "LearningScheduler: fleet row #{line_number}: event_id is not a valid " <>
+                          "ADR-008 version 8 id (#{reason}); not imported"
+                      )
 
-                    {:cont, {:ok, seen, count}}
-
-                  {:ok, id, producer_id} ->
-                    if MapSet.member?(seen, id) do
                       {:cont, {:ok, seen, count}}
-                    else
-                      if kind == :audit and fleet_fields_disagree?(record) do
-                        Logger.warning(
-                          "LearningScheduler: fleet row #{line_number}: verdict " <>
-                            "#{inspect(Map.get(record, "verdict"))} disagrees with outcome " <>
-                            "#{inspect(Map.get(record, "outcome"))}; stored as an audit row"
-                        )
+
+                    {:ok, id, producer_id} ->
+                      if MapSet.member?(seen, id) do
+                        {:cont, {:ok, seen, count}}
+                      else
+                        if kind == :audit and fleet_fields_disagree?(record) do
+                          Logger.warning(
+                            "LearningScheduler: fleet row #{line_number}: verdict " <>
+                              "#{inspect(Map.get(record, "verdict"))} disagrees with outcome " <>
+                              "#{inspect(Map.get(record, "outcome"))}; stored as an audit row"
+                          )
+                        end
+
+                        case Hypatia.OutcomeTracker.record_fleet_outcome(
+                               recipe_id,
+                               repo,
+                               file,
+                               outcome,
+                               id,
+                               verification,
+                               fleet_receipt_context(record, line, line_number, producer_id)
+                             ) do
+                          # An audit row is stored and acknowledged, and it is not
+                          # counted as a processed outcome.
+                          {:ok, _record} ->
+                            {:cont,
+                             {:ok, MapSet.put(seen, id), count + if(kind == :ok, do: 1, else: 0)}}
+
+                          {:error, reason} ->
+                            {:halt,
+                             fleet_import_failure(
+                               {:write_failed, line_number, reason},
+                               count,
+                               versioned?
+                             )}
+                        end
                       end
+                  end
 
-                      case Hypatia.OutcomeTracker.record_fleet_outcome(
-                             recipe_id,
-                             repo,
-                             file,
-                             outcome,
-                             id,
-                             verification,
-                             fleet_receipt_context(record, line, line_number, producer_id)
-                           ) do
-                        # An audit row is stored and acknowledged, and it is not
-                        # counted as a processed outcome.
-                        {:ok, _record} ->
-                          {:cont,
-                           {:ok, MapSet.put(seen, id), count + if(kind == :ok, do: 1, else: 0)}}
-
-                        {:error, reason} ->
-                          {:halt, {:error, {:write_failed, line_number, reason}}}
-                      end
-                    end
-                end
-
-              :skip ->
-                {:cont, {:ok, seen, count}}
+                :skip ->
+                  {:cont, {:ok, seen, count}}
+              end
             end
 
           {:error, reason} ->
             if line_number == final_line and not String.ends_with?(content, "\n") do
               # The producer may still be writing the last record. Retry it.
-              {:halt, {:error, {:incomplete_fleet_tail, line_number, reason}}}
+              {:halt,
+               fleet_import_failure(
+                 {:incomplete_fleet_tail, line_number, reason},
+                 count,
+                 versioned?
+               )}
             else
               # A permanently malformed historical row must not starve later
               # valid events. It remains in the append-only source as evidence.
@@ -1034,6 +1090,31 @@ defmodule Hypatia.LearningScheduler do
     |> case do
       {:ok, _seen, count} -> {:ok, count}
       error -> error
+    end
+  end
+
+  defp fleet_import_failure(reason, count, true), do: {:error, reason, count}
+  defp fleet_import_failure(reason, _count, false), do: {:error, reason}
+
+  defp import_versioned_fleet_line(line, line_number, fleet_file, seen, count) do
+    case Hypatia.OutcomeTracker.import_fleet_attempt(line, line_number, fleet_file) do
+      {:stored, row} ->
+        increment = if Hypatia.OutcomeTracker.qualified_outcome?(row), do: 1, else: 0
+        {:cont, {:ok, MapSet.put(seen, row["event_id"]), count + increment}}
+
+      {status, row} when status in [:replayed, :conflict] ->
+        {:cont, {:ok, MapSet.put(seen, row["event_id"]), count}}
+
+      {:stored_pending, row, reason} ->
+        increment = if Hypatia.OutcomeTracker.qualified_outcome?(row), do: 1, else: 0
+        {:halt, {:error, {:receipt_pending, row["event_id"], reason}, count + increment}}
+
+      {:rejected, reason} ->
+        Logger.warning("LearningScheduler: fleet row #{line_number} rejected: #{inspect(reason)}")
+        {:cont, {:ok, seen, count}}
+
+      {:error, reason} ->
+        {:halt, {:error, {:admission_failed, line_number, reason}, count}}
     end
   end
 
