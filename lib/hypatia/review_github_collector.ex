@@ -75,34 +75,57 @@ defmodule Hypatia.ReviewGithubCollector do
 
   defp collect_snapshot(repo, number, api, budget) do
     pr_path = "repos/#{repo}/pulls/#{number}"
+    comments_path = pr_path <> "/comments"
+    reviews_path = pr_path <> "/reviews"
 
+    # Two reads of each paginated inventory detect ordinary additions,
+    # deletions, edits and page shifts even when the PR head has not moved.
+    # These REST reads are not atomic: success is a *repeated observation*,
+    # not a proof that no concurrent mutation was possible.
     with {:ok, start_pr} <- fetch_object(api, pr_path),
          {:ok, head} <- subject_head(start_pr, repo, number),
-         {:ok, comments} <- fetch_pages(api, pr_path <> "/comments", budget),
-         {:ok, reviews} <- fetch_pages(api, pr_path <> "/reviews", budget),
+         {:ok, comments} <- fetch_pages(api, comments_path, budget),
+         {:ok, reviews} <- fetch_pages(api, reviews_path, budget),
+         {:ok, comments_again} <- fetch_pages(api, comments_path, budget),
+         {:ok, reviews_again} <- fetch_pages(api, reviews_path, budget),
+         :ok <- inventory_agrees(comments, comments_again, comments_path),
+         :ok <- inventory_agrees(reviews, reviews_again, reviews_path),
          {:ok, end_pr} <- fetch_object(api, pr_path),
          {:ok, ^head} <- subject_head(end_pr, repo, number) do
-      {observations, ignored} =
-        (Enum.map(comments, &from_comment(&1, repo, number, head)) ++
-           Enum.map(reviews, &from_review(&1, repo, number, head)))
-        |> Enum.reduce({[], 0}, fn
-          {:ok, observation}, {found, skipped} -> {[observation | found], skipped}
-          {:ignore, _reason}, {found, skipped} -> {found, skipped + 1}
-        end)
+      # Never downgrade a malformed, positively identified finding to an
+      # ignored event. Its schema failure invalidates the whole snapshot.
+      events =
+        Enum.map(comments, &from_comment(&1, repo, number, head)) ++
+          Enum.map(reviews, &from_review(&1, repo, number, head, comments))
 
-      {:ok,
-       %{
-         "repository" => repo,
-         "pull_request" => number,
-         "head_sha" => head,
-         "collection" => "complete_bounded_snapshot",
-         "source" => "github_rest_via_gh",
-         "transport_provenance" => "github_api_observed",
-         "coverage" => "bot_comment_and_review_submissions_only",
-         "ignored_source_events" => ignored,
-         "observations" =>
-           Enum.sort_by(observations, &get_in(&1, ["source", "event_id"]))
-       }}
+      case Enum.reduce_while(events, {:ok, {[], 0}}, fn
+             {:ok, observation}, {:ok, {found, skipped}} ->
+               {:cont, {:ok, {[observation | found], skipped}}}
+
+             {:ignore, _reason}, {:ok, {found, skipped}} ->
+               {:cont, {:ok, {found, skipped + 1}}}
+
+             {:error, reason}, _acc ->
+               {:halt, {:error, {:invalid_source_event, reason}}}
+           end) do
+        {:ok, {observations, ignored}} ->
+          {:ok,
+           %{
+             "repository" => repo,
+             "pull_request" => number,
+             "head_sha" => head,
+             "collection" => "repeated_stable_observation",
+             "source" => "github_rest_via_gh",
+             "transport_provenance" => "github_api_observed",
+             "coverage" => "bot_comment_and_review_submissions_only",
+             "ignored_source_events" => ignored,
+             "observations" =>
+               Enum.sort_by(observations, &get_in(&1, ["source", "event_id"]))
+           }}
+
+        {:error, _reason} = error ->
+          error
+      end
     else
       {:ok, _moved_head} ->
         {:error, :head_changed_during_collection}
@@ -112,24 +135,40 @@ defmodule Hypatia.ReviewGithubCollector do
     end
   end
 
+  defp inventory_agrees(left, right, _path) when left == right, do: :ok
+  defp inventory_agrees(_left, _right, path), do: {:error, {:source_inventory_changed, path}}
+
   defp valid_repo?(repo) do
     Regex.match?(@repo, repo) and
       Enum.all?(String.split(repo, "/"), &(&1 not in [".", ".."]))
   end
 
-  defp subject_head(pr, repo, number) do
-    head = get_in(pr, ["head", "sha"])
-    actual_repo = get_in(pr, ["base", "repo", "full_name"])
-
+  defp subject_head(
+         %{
+           "number" => actual_number,
+           "head" => %{"sha" => head},
+           "base" => %{"repo" => %{"full_name" => actual_repo}}
+         },
+         repo,
+         number
+       ) do
     cond do
-      pr["number"] != number -> {:error, :pull_request_number_mismatch}
+      actual_number != number ->
+        {:error, :pull_request_number_mismatch}
+
       not (is_binary(actual_repo) and String.downcase(actual_repo) == String.downcase(repo)) ->
         {:error, :pull_request_repository_mismatch}
+
       not (is_binary(head) and Regex.match?(@sha, head)) ->
         {:error, :missing_or_invalid_head}
-      true -> {:ok, String.downcase(head)}
+
+      true ->
+        {:ok, String.downcase(head)}
     end
   end
+
+  defp subject_head(_unexpected, _repo, _number),
+    do: {:error, :unexpected_pull_request_shape}
 
   defp fetch_object(api, path) do
     case api.(path) do
@@ -140,7 +179,12 @@ defmodule Hypatia.ReviewGithubCollector do
     end
   end
 
-  defp fetch_pages(api, path, budget), do: fetch_page(api, path, 1, budget, [])
+  defp fetch_pages(api, path, budget) do
+    with {:ok, records} <- fetch_page(api, path, 1, budget, []),
+         :ok <- validate_event_ids(records, path) do
+      {:ok, records}
+    end
+  end
 
   defp fetch_page(api, path, page, budget, acc) do
     endpoint = "#{path}?per_page=#{@page_size}&page=#{page}"
@@ -163,6 +207,20 @@ defmodule Hypatia.ReviewGithubCollector do
 
       _ ->
         {:error, {:unexpected_api_result, endpoint}}
+    end
+  end
+
+  defp validate_event_ids(records, path) do
+    ids =
+      Enum.map(records, fn
+        %{"id" => id} when is_integer(id) and id > 0 -> id
+        _ -> nil
+      end)
+
+    if Enum.all?(ids, &is_integer/1) and length(Enum.uniq(ids)) == length(ids) do
+      :ok
+    else
+      {:error, {:invalid_or_duplicate_event_ids, path}}
     end
   end
 
