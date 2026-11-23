@@ -62,5 +62,9 @@ jq -e '.draft_unmeasured == 2' "$TMP/missing_draft/pr-census.json" >/dev/null
 for name in incomplete duplicate missing_author wrong_owner cap network; do run_fail "$name"; done
 MOCK_SCENARIO=zero "$CENSUS" --out-dir "$TMP/zero" --org hyperpolymath >/dev/null 2>&1
 jq -e '.total_open == 0 and .status == "complete_first_pass"' "$TMP/zero/pr-census.json" >/dev/null
+if MOCK_SCENARIO=network "$CENSUS" --out-dir "$TMP/success" --org hyperpolymath > "$TMP/stale.log" 2>&1; then
+  echo "FAIL: stale census output must not be reused" >&2; exit 1
+fi
+[[ $(jq -r .total_open "$TMP/success/pr-census.json") == 2 ]]
 bash -n "$CENSUS"
 echo 'PASS: success, unknown draft, incomplete, duplicate, author, owner, cap, network, zero, shell syntax'
