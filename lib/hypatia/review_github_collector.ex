@@ -63,6 +63,7 @@ defmodule Hypatia.ReviewGithubCollector do
 
       not is_function(api, 1) ->
         {:error, :invalid_api_client}
+
       not (is_integer(budget) and budget >= 1 and budget <= @max_page_budget) ->
         {:error, :invalid_page_budget}
 
@@ -420,6 +421,4 @@ defmodule Hypatia.ReviewGithubCollector do
       :exit, _ -> {:error, :github_api_unavailable}
     end
   end
-
-
 end
