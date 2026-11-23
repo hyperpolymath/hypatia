@@ -20,11 +20,18 @@ actual="$(git -C "$source_dir" rev-parse HEAD)" ||
 [ "$actual" = "$pin" ] ||
   { echo "::error::canonicaliser revision differs from declared pin"; exit 2; }
 
-# Refuse a binary from an older checkout that lacks the strict file profiles.
-"$binary" --help | grep -q -- '--profile' ||
-  { echo "::error::pinned CLI lacks strict file profiles"; exit 2; }
-"$binary" --help | grep -q -- 'check-jsonl' ||
-  { echo "::error::pinned CLI lacks JSONL framing check"; exit 2; }
+# Consume the entire help output before testing it. A quiet grep pipeline
+# can exit early, SIGPIPE its producer under pipefail and mask a sound CLI.
+help_text="$("$binary" --help)" ||
+  { echo "::error::canonicaliser help probe failed"; exit 2; }
+case "$help_text" in
+  *--profile*) ;;
+  *) echo "::error::pinned CLI lacks strict file profiles"; exit 2 ;;
+esac
+case "$help_text" in
+  *check-jsonl*) ;;
+  *) echo "::error::pinned CLI lacks JSONL framing check"; exit 2 ;;
+esac
 
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
