@@ -13,8 +13,8 @@ defmodule Hypatia.Neural.Coordinator do
   @moduledoc """
   Neural Network Coordinator for Hypatia (blackboard architecture).
 
-  Orchestrates 8 neural network subsystems through 6 execution phases,
-  coordinated via a shared ETS blackboard. Each network reads accumulated
+  Orchestrates 8 subsystems through 6 execution phases, coordinated via a
+  shared ETS blackboard. Each subsystem reads accumulated
   context before computing and writes its results for downstream phases.
 
   ## Networks (8 total)
@@ -23,12 +23,12 @@ defmodule Hypatia.Neural.Coordinator do
   |-----------|-------|-------------------------------------------|
   | RBF       | 1     | Novelty detection -- novel vs known        |
   | PageRank  | 2     | Trust-weighted routing over graph          |
-  | GNN       | 2     | Agent interaction graph structure          |
+  | GNN       | 2     | Graph diagnostics; confidence placeholder  |
   | MoE       | 3     | Domain-specific confidence estimation      |
   | ESN       | 4     | Confidence trajectory forecasting          |
   | LSM       | 4     | Temporal anomaly detection                 |
-  | VAE       | 5     | Hermeneutic interpretation clustering      |
-  | Sequence  | 6     | Choreography trace prediction              |
+  | VAE       | 5     | Interpretation placeholder                 |
+  | Sequence  | 6     | Last-observation heuristic                 |
 
   ## Phase execution order
 
@@ -42,8 +42,19 @@ defmodule Hypatia.Neural.Coordinator do
   ## Architecture change
 
   Previous: hub-and-spoke with fixed weights (0.6 MoE + 0.25 RBF + 0.15 LSM).
-  Current: blackboard with phased execution. Confidence derives from the full
-  reasoning trace, not a hardcoded weighted sum.
+  Current: blackboard with phased execution. Confidence is a fixed weighted
+  mean over valid outputs from locally trained MoE/RBF/LSM/ESN components.
+  Weights are renormalized over contributors. GNN/VAE placeholders, the
+  sequence heuristic and trust routing have no confidence weight.
+
+  `confidence_readiness` describes local training bookkeeping for this round,
+  checked against coordinator-owned model state. It does not attest corpus
+  identity, calibration, held-out evaluation or operational qualification.
+  This contract is advisory: even a high raw score is capped at review before
+  the existing outcome-maturity gate. A future capability-promotion contract
+  requires its own evidence and review; no caller flag bypasses this ceiling.
+  `network_count` and `networks_consulted` count consulted subsystems, not
+  trained or experimentally qualified models.
   """
 
   use GenServer
@@ -82,6 +93,27 @@ defmodule Hypatia.Neural.Coordinator do
 
   @network_count 8
   @phase_count 6
+  @confidence_components [
+    {:moe, :domain_confidence, :confidence, 0.35},
+    {:rbf, :novelty_result, :similarity, 0.20},
+    {:lsm, :temporal_result, :score, 0.15},
+    {:esn, :trajectory_result, :predicted_next, 0.15}
+  ]
+  @diagnostic_components %{
+    gnn: :placeholder,
+    vae: :placeholder,
+    sequence: :heuristic,
+    pagerank: :trust_routing
+  }
+  @component_statuses [
+    :contributing,
+    :untrained,
+    :untrained_selected_experts,
+    :missing_expert_selection,
+    :missing_model_state,
+    :missing_output,
+    :invalid_output
+  ]
 
   # ── GenServer API ───────────────────────────────────────
 
@@ -458,6 +490,7 @@ defmodule Hypatia.Neural.Coordinator do
     SourceStore.reply(state, source, fn ->
       ensure_cohort!(state)
       {trace, updated_state} = run_phased_analysis(finding, state)
+      assessment = confidence_assessment(trace, updated_state)
 
       analysis = %{
         # Legacy fields for backward compatibility
@@ -469,8 +502,9 @@ defmodule Hypatia.Neural.Coordinator do
         gnn: trace_field(trace, :gnn, :graph_metrics),
         vae: trace_field(trace, :vae, :interpretation),
         sequence: trace_field(trace, :sequence, :prediction),
-        # Derived confidence from full reasoning trace
-        aggregated_confidence: derive_confidence(trace),
+        # Only locally trained components with valid outputs contribute.
+        aggregated_confidence: assessment.confidence,
+        confidence_readiness: assessment.readiness,
         is_novel: is_novel?(trace),
         # Blackboard metadata
         round: trace.round,
@@ -489,14 +523,24 @@ defmodule Hypatia.Neural.Coordinator do
       ensure_cohort!(state)
       {trace, updated_state} = run_phased_analysis(finding, state)
 
-      confidence = derive_confidence(trace)
+      assessment = confidence_assessment(trace, updated_state)
+      confidence = assessment.confidence
       novel = is_novel?(trace)
 
       # Trust graph: find best bots
       trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
       trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
 
-      raw_strategy = raw_strategy(novel, confidence)
+      raw_strategy =
+        if confidence_ready?(assessment.readiness),
+          do: raw_strategy(novel, confidence),
+          else: :report_only
+
+      # Local training bookkeeping cannot promote an autonomous capability.
+      # Removing placeholder weights may raise the honest aggregate above 0.95;
+      # keep that raw diagnostic while preserving an advisory review ceiling.
+      advisory_strategy = if raw_strategy == :auto_execute, do: :review, else: raw_strategy
+      advisory_clamped = advisory_strategy != raw_strategy
 
       # Annealing gate: clamp strategy based on recipe's outcome maturity.
       # A recipe with only 3 outcomes cannot reach :auto_execute regardless
@@ -506,17 +550,26 @@ defmodule Hypatia.Neural.Coordinator do
         |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
 
       strategy =
-        Hypatia.OutcomeTracker.annealed_strategy_from_store(recipe_id, raw_strategy, source)
+        Hypatia.OutcomeTracker.annealed_strategy_from_store(recipe_id, advisory_strategy, source)
 
       recommendation = %{
         strategy: strategy,
         raw_strategy: raw_strategy,
         confidence: confidence,
+        confidence_readiness: assessment.readiness,
         preferred_bots: Enum.take(trusted_bots, 3),
         preferred_recipes: Enum.take(trusted_recipes, 5),
         is_novel: novel,
-        reason: dispatch_reason(strategy, confidence, novel, novelty_untrained?(trace)),
-        annealing_clamped: strategy != raw_strategy,
+        reason:
+          dispatch_reason(
+            strategy,
+            confidence,
+            novel,
+            novelty_untrained?(trace),
+            advisory_clamped
+          ),
+        advisory_clamped: advisory_clamped,
+        annealing_clamped: strategy != advisory_strategy,
         architecture: :blackboard,
         networks_consulted: @network_count
       }
@@ -913,128 +966,143 @@ defmodule Hypatia.Neural.Coordinator do
   # ── Confidence Derivation ───────────────────────────────
 
   @doc false
-  def derive_confidence(trace) do
-    # Derive confidence from the full reasoning trace rather than
-    # hardcoded fixed weights. Each network contributes evidence.
-    networks = trace.networks || %{}
+  # Legacy trace-only callers cannot establish model state. Production uses
+  # confidence_assessment/2 after SourceStore and cohort checks, in the server.
+  def derive_confidence(trace, state \\ nil), do: confidence_assessment(trace, state).confidence
 
-    # Extract individual confidence signals
-    moe_conf =
-      extract_confidence(networks, :moe, :domain_confidence, fn r -> r.confidence end, 0.5)
+  @doc false
+  def confidence_assessment(trace, state) do
+    networks =
+      case trace do
+        %{networks: networks} when is_map(networks) -> networks
+        _ -> %{}
+      end
 
-    rbf_conf = extract_confidence(networks, :rbf, :novelty_result, fn r -> r.similarity end, 0.0)
-    lsm_score = extract_confidence(networks, :lsm, :temporal_result, fn r -> r.score end, 0.5)
+    contributions =
+      Enum.map(@confidence_components, fn {network, entry, field, weight} ->
+        case confidence_result(networks, network, entry) do
+          {:ok, result} ->
+            case training_status(state, network, result) do
+              :trained ->
+                case Map.get(result, field) do
+                  score when is_number(score) and score >= 0.0 and score <= 1.0 ->
+                    {network, :contributing, score, weight}
 
-    esn_pred =
-      extract_confidence(networks, :esn, :trajectory_result, fn r -> r.predicted_next end, 0.5)
+                  _ ->
+                    {network, :invalid_output, 0.0, 0.0}
+                end
 
-    # Adaptive weighting: if a network contributed, its weight counts.
-    # Networks that didn't contribute get zero weight.
-    weights = [
-      {moe_conf, if(has_network?(networks, :moe), do: 0.35, else: 0.0)},
-      {rbf_conf, if(has_network?(networks, :rbf), do: 0.20, else: 0.0)},
-      {lsm_score, if(has_network?(networks, :lsm), do: 0.15, else: 0.0)},
-      {esn_pred, if(has_network?(networks, :esn), do: 0.15, else: 0.0)},
-      # New networks contribute smaller initial weights (they're untrained)
-      {gnn_confidence(networks), if(has_network?(networks, :gnn), do: 0.05, else: 0.0)},
-      # A network that returns a fixed placeholder adds nothing (E0-23).
-      {vae_confidence(networks),
-       if(has_network?(networks, :vae) and not placeholder?(networks, :vae, :interpretation),
-         do: 0.05,
-         else: 0.0
-       )},
-      {seq_confidence(networks), if(has_network?(networks, :sequence), do: 0.05, else: 0.0)}
-    ]
-
-    total_weight = weights |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-
-    if total_weight > 0 do
-      weighted_sum =
-        weights
-        |> Enum.map(fn {val, w} -> val * w end)
-        |> Enum.sum()
-
-      (weighted_sum / total_weight)
-      |> max(0.0)
-      |> min(1.0)
-    else
-      0.5
-    end
-  end
-
-  defp extract_confidence(networks, network_key, entry_key, extractor, default) do
-    case Map.get(networks, network_key) do
-      entries when is_list(entries) ->
-        case Enum.find(entries, fn e -> e.key == entry_key end) do
-          %{value: value} ->
-            try do
-              extractor.(value)
-            rescue
-              _ -> default
+              status ->
+                {network, status, 0.0, 0.0}
             end
 
-          nil ->
-            default
+          :missing ->
+            {network, :missing_output, 0.0, 0.0}
         end
+      end)
 
-      _ ->
-        default
-    end
+    total_weight = Enum.reduce(contributions, 0.0, fn {_, _, _, weight}, acc -> acc + weight end)
+
+    weighted_sum =
+      Enum.reduce(contributions, 0.0, fn {_, _, score, weight}, acc -> acc + score * weight end)
+
+    contributors = for {network, :contributing, _, _} <- contributions, do: network
+
+    components =
+      contributions
+      |> Map.new(fn {network, status, _, _} -> {network, status} end)
+      |> Map.merge(@diagnostic_components)
+
+    %{
+      confidence: if(total_weight > 0.0, do: weighted_sum / total_weight, else: 0.5),
+      readiness: %{
+        scope: :local_training_state,
+        ready: contributors != [],
+        contributing_models: contributors,
+        components: components
+      }
+    }
   end
 
-  defp has_network?(networks, key), do: Map.has_key?(networks, key)
+  @doc false
+  # Recognize the complete local bookkeeping contract, not a proof of training
+  # data, calibration or operational qualification. A bare ready/trained label
+  # is insufficient. This does not authenticate an arbitrary caller's map.
+  def confidence_ready?(%{
+        scope: :local_training_state,
+        ready: true,
+        contributing_models: contributors,
+        components: components
+      })
+      when is_list(contributors) and is_map(components) do
+    models = Enum.map(@confidence_components, &elem(&1, 0))
+    recorded = Enum.filter(models, &(Map.get(components, &1) == :contributing))
 
-  # Does the entry say that it is a placeholder? Only the mark `placeholder: true`
-  # does: an entry with no mark, or with `placeholder: false`, is evidence.
-  defp placeholder?(networks, network_key, entry_key) do
-    case Map.get(networks, network_key) do
+    contributors != [] and Enum.uniq(contributors) == contributors and
+      Enum.sort(contributors) == Enum.sort(recorded) and
+      Enum.all?(models, &(Map.get(components, &1) in @component_statuses)) and
+      Enum.all?(@diagnostic_components, fn {network, kind} ->
+        Map.get(components, network) == kind
+      end)
+  end
+
+  def confidence_ready?(_missing_or_unready), do: false
+
+  defp confidence_result(networks, network, entry) do
+    case Map.get(networks, network) do
       entries when is_list(entries) ->
-        match?(
-          %{value: %{placeholder: true}},
-          Enum.find(entries, fn e -> e.key == entry_key end)
-        )
+        Enum.find_value(entries, :missing, fn
+          %{key: ^entry, value: result} when is_map(result) -> {:ok, result}
+          _ -> nil
+        end)
 
       _ ->
-        false
+        :missing
     end
   end
 
-  defp gnn_confidence(networks) do
-    extract_confidence(
-      networks,
-      :gnn,
-      :graph_metrics,
-      fn r ->
-        Map.get(r, :interaction_strength, 0.5)
-      end,
-      0.5
-    )
+  # Every expert used for this prediction must have local training history.
+  # Training a different expert does not qualify the selected default experts.
+  defp training_status(
+         %__MODULE__{moe: %MixtureOfExperts{last_trained: %DateTime{}} = moe},
+         :moe,
+         %{experts: [_ | _] = experts}
+       )
+       when is_map(moe.experts) and is_map(moe.expert_stats) do
+    if Enum.uniq(experts) == experts and
+         Enum.all?(experts, fn domain ->
+           Map.has_key?(moe.experts, domain) and
+             match?(
+               %{total: total} when is_integer(total) and total > 0,
+               moe.expert_stats[domain]
+             )
+         end),
+       do: :trained,
+       else: :untrained_selected_experts
   end
 
-  defp vae_confidence(networks) do
-    extract_confidence(
-      networks,
-      :vae,
-      :interpretation,
-      fn r ->
-        # VAE doesn't produce a confidence directly; use cluster coherence
-        if r.cluster_id != nil, do: 0.6, else: 0.3
-      end,
-      0.3
-    )
+  defp training_status(%__MODULE__{moe: %MixtureOfExperts{}}, :moe, %{experts: [_ | _]}),
+    do: :untrained
+
+  defp training_status(%__MODULE__{moe: %MixtureOfExperts{}}, :moe, _),
+    do: :missing_expert_selection
+
+  defp training_status(%__MODULE__{} = state, network, _) when network in [:rbf, :lsm, :esn] do
+    module =
+      case network do
+        :rbf -> RadialNeuralNetwork
+        :lsm -> LiquidStateMachine
+        :esn -> EchoStateNetwork
+      end
+
+    case Map.get(state, network) do
+      %{__struct__: ^module, trained: true} -> :trained
+      %{__struct__: ^module, trained: false} -> :untrained
+      _ -> :missing_model_state
+    end
   end
 
-  defp seq_confidence(networks) do
-    extract_confidence(
-      networks,
-      :sequence,
-      :prediction,
-      fn r ->
-        Map.get(r, :confidence, 0.0)
-      end,
-      0.0
-    )
-  end
+  defp training_status(_missing_state, _network, _result), do: :missing_model_state
 
   defp is_novel?(trace) do
     case Map.get(trace.networks || %{}, :rbf) do
@@ -1095,12 +1163,12 @@ defmodule Hypatia.Neural.Coordinator do
     end
   end
 
-  defp dispatch_reason(strategy, confidence, novel, untrained?) do
+  defp dispatch_reason(strategy, confidence, novel, untrained?, advisory_clamped) do
     base =
       case strategy do
         :auto_execute -> "High confidence (#{Float.round(confidence, 3)})"
-        :review -> "Moderate confidence (#{Float.round(confidence, 3)}), needs human review"
-        :report_only -> "Low confidence (#{Float.round(confidence, 3)})"
+        :review -> "Confidence (#{Float.round(confidence, 3)}), needs human review"
+        :report_only -> "Confidence (#{Float.round(confidence, 3)}), report only"
       end
 
     cond do
@@ -1109,6 +1177,9 @@ defmodule Hypatia.Neural.Coordinator do
 
       novel ->
         base <> "; NOVEL finding forced to report_only"
+
+      advisory_clamped ->
+        base <> "; local training state is advisory and permits at most review"
 
       true ->
         base

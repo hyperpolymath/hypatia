@@ -1,0 +1,230 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= NS-03: truthful neural contribution and local readiness
+:toc:
+:toclevels: 2
+
+Date: 2026-11-23. Base revision: `d158aed87f76b93e4f291e995bef9f26559c7fb2`.
+Scope: the coordinator confidence calculation and its consumption by
+`PatternAnalyzer`. This is a reinforcement of the existing advisory path, not
+a Kautz-level acceptance result or an autonomous-capability promotion.
+
+== Problem and implemented boundary
+
+The previous calculation counted the GNN's fixed interaction score and the
+sequence model's last-observation heuristic in its weighted mean. A VAE result
+with a missing or false `placeholder` label also counted. Presence of an entry
+was enough to admit other untrained outputs. Downstream, an aggregate outside
+`0.70..0.76` was interpreted as evidence of training.
+
+The coordinator now consults its own component state, inside the existing
+source-store/cohort transaction. Only an eligible component with local
+training bookkeeping and a numeric output in `[0, 1]` contributes. The same
+eligibility decision controls its numerator and denominator weight. Changing
+a trace's `trained`, `model_trained` or `placeholder` label cannot create
+training state.
+
+Removing placeholder weights can raise an honest aggregate above `0.95`.
+That arithmetic change is not permission to activate automatic execution.
+The only readiness contract implemented here is advisory: the coordinator
+retains the honest `confidence` and `raw_strategy` diagnostics, then limits
+the strategy to at most `:review` before applying the existing outcome-maturity
+gate. `PatternAnalyzer` independently enforces the same ceiling. There is no
+configuration switch or caller-supplied qualification flag that bypasses it.
+A future promotion requires a separately reviewed capability contract and
+evaluation evidence.
+
+== Contributor contract
+
+[cols="1,3,1,3",options="header"]
+|===
+|Component |Local state required |Weight |Limits
+|MoE
+|A `MixtureOfExperts` state with a training timestamp and positive training
+counts for every selected, registered expert. Missing or repeated selections
+do not qualify.
+|0.35
+|Training another expert does not qualify the experts used for this finding.
+This is local bookkeeping, including legitimately restored bookkeeping.
+|RBF
+|The actual coordinator-owned RBF state has `trained: true`.
+|0.20
+|The consumed value remains the existing distance-based similarity. It is
+not a calibrated probability of a repair succeeding.
+|LSM
+|The actual coordinator-owned LSM state has `trained: true`.
+|0.15
+|Reservoir activity alone is not training. This patch does not add a
+production caller for its training function.
+|ESN
+|The actual coordinator-owned ESN state has `trained: true`.
+|0.15
+|The existing train/serve signal mismatch is not repaired by this status.
+|GNN
+|Not eligible: current interaction score is a placeholder.
+|0
+|Graph diagnostics remain visible.
+|VAE
+|Not eligible: current interpretation is a placeholder.
+|0
+|Changing or omitting the placeholder label has no effect.
+|Sequence
+|Not eligible: current prediction is a last-observation heuristic.
+|0
+|The diagnostic identity is `:heuristic`; stored weights are not used by
+the current inference implementation.
+|PageRank / trust graph
+|Not a learned confidence contributor.
+|0
+|Trust routing remains separately available.
+|===
+
+Weights are fixed, then renormalized over eligible contributors. They are
+not an adaptive learned mixture. Missing, malformed or out-of-range outputs
+have zero weight even when the associated model's local state is trained.
+If no component contributes, the numeric fallback is `0.5`, readiness is
+false and the coordinator's raw strategy is `:report_only`. The fallback is
+an explicitly unready diagnostic value, not neural evidence.
+
+The legacy undocumented `Coordinator.derive_confidence/1` has no model-state
+argument and therefore returns that conservative fallback. The production
+server calls `confidence_assessment/2` with its own state after its existing
+source checks. Its two-argument helper is a pure policy seam for testing;
+it does not authenticate arbitrary caller-created state or traces.
+
+== Returned metadata and consumer behavior
+
+Both `Coordinator.analyze/2` and `dispatch_recommendation/3` add
+`confidence_readiness`. A representative shape is:
+
+[source,elixir]
+----
+%{
+  scope: :local_training_state,
+  ready: true,
+  contributing_models: [:rbf, :esn],
+  components: %{
+    moe: :untrained,
+    rbf: :contributing,
+    lsm: :untrained,
+    esn: :contributing,
+    gnn: :placeholder,
+    vae: :placeholder,
+    sequence: :heuristic,
+    pagerank: :trust_routing
+  }
+}
+----
+
+Here, `ready` means at least one locally trained component supplied a valid
+score in this round. It does not mean that all consulted subsystems are
+trained. `network_count` / `networks_consulted` continue to count eight
+consulted subsystems. The explicit contributor list supplies the narrower
+count relevant to the aggregate.
+
+`confidence_ready?/1` recognizes the complete local contract: scope, boolean
+readiness, a nonempty and nonrepeated contributor list, consistent component
+statuses, and the fixed diagnostic classifications. A bare `ready: true` or
+`trained: true` is insufficient. This is structural contract checking, not
+a signature or independent attestation of model provenance.
+
+`PatternAnalyzer.apply_neural_recommendation/2` is the actual pure production
+composition used by the analysis pipeline and the regression tests. It:
+
+. Preserves novel and report-only refusals.
+. Applies an advisory review ceiling, including to complete local-readiness
+  recommendations that claim `:auto_execute`.
+. Caps missing, malformed or legacy readiness conservatively before invoking
+  the existing dispatch guard, preserving the original recipe confidence for
+  the audit trail.
+. Uses a valid local prediction only to lower the recipe confidence. A
+  trained value of `0.73` is usable; an untrained value outside the former
+  numerical band is not interpreted as training.
+. Records the effective boolean `"neural_confidence_ready"` and the supplied
+  `"neural_confidence_readiness"` metadata alongside the retained recipe, or
+  on a control-tier pattern. The supplied metadata is diagnostic; the
+  effective boolean records whether this consumer accepted its contract.
+
+Dispatch recommendations now distinguish two clamps:
+
+* `advisory_clamped`: the raw strategy exceeded the local-readiness advisory
+  ceiling.
+* `annealing_clamped`: the outcome-maturity gate lowered the already
+  advisory-capped strategy.
+
+The reason text identifies an advisory clamp explicitly. This avoids
+misreporting the new ceiling as an outcome-maturity decision.
+
+== Verification
+
+The regression checks use synthetic fixtures and isolated test stores. They
+do not dispatch repairs or establish effectiveness on a deployed corpus.
+The runtime is Elixir `1.19.4` on OTP `27.3.4.19`, matching the repository pin.
+
+Before the implementation, the three revised placeholder tests ran against
+the base production source and all three failed: a trace with no component
+state scored approximately `0.99`, and a placeholder-only graph result scored
+`1.0`. These are confidence-calculation counterexamples, not evidence that a
+production actuator executed a repair.
+
+The focused suite exercises:
+
+* Exact numerator/denominator exclusion and invariance under placeholder
+  presence, namespace, value and label changes.
+* Empty, malformed, missing-state and placeholder-only fallbacks.
+* Selected-expert MoE readiness, invalid outputs, trained-in-band and
+  untrained-outside-band converse controls.
+* The actual PatternAnalyzer composition, including prior-confidence audit,
+  demote-only behavior, legacy metadata, novelty and unavailable-coordinator
+  refusals.
+* A real fitted RBF at high similarity, a mature recipe with 71 qualified
+  synthetic outcomes, the actual source-bound coordinator and the production
+  consumer: raw `:auto_execute` remains effective `:review`. Removing the
+  fixture maturity history restricts further to `:report_only`; the two clamp
+  flags identify their different causes.
+* Real cohort state before and after training, RBF restoration, cold ESN/LSM
+  after restart, and the existing source-lifecycle refusal tests.
+
+[source,shell]
+----
+MIX_ENV=test mix compile --warnings-as-errors
+MIX_ENV=test mix test \
+  test/placeholder_network_test.exs \
+  test/neural_readiness_test.exs \
+  test/neural_dispatch_guard_test.exs \
+  test/novelty_fail_closed_test.exs \
+  test/neural_source_store_lifecycle_test.exs \
+  test/neural_training_qualification_test.exs \
+  test/neural_trust_restart_test.exs
+----
+
+At this change, compilation with warnings as errors passed and the focused
+suite passed 82 tests with zero failures. The three failed-before controls
+were rerun as part of that suite. The focused result and any subsequent
+combined-suite result belong to their specific reviewed revision. The default
+test helper excludes several tagged
+external-data/integration suites; this command is not a claim that those
+suites or a live deployment were qualified.
+
+The coordinator subsequently combined the independently reviewed NS-01 and
+NS-03 source patches in a separate checkout of the same base. Compilation
+with warnings as errors and repository-wide formatting passed. With the
+CI-pinned Nickel 1.11.0 validator available, `mix test --seed 0` reported
+`3742 tests, 0 failures (246 excluded)` and no skips. README claims, the
+no-active-Logtalk check and diff whitespace checks also passed. This is a
+local result for the combined source; it does not substitute for hosted CI,
+the excluded suites, a held-out neural benchmark or deployment evidence.
+
+== Remaining obligations
+
+This patch changes no model algorithm, learned-parameter persistence schema,
+training admission, source lifecycle or outcome qualification. It grants no
+additional actuator permission. ESN/LSM remain cold after restart because their persistence
+is summary-only. Local restored flags and counters are not proof of the
+contents or quality of a training corpus.
+
+Content-bound model provenance, reproducible corpus splits, train/serve
+parity, calibration, held-out utility and ablations, online-learning receipts
+and operational promotion remain separate work. Source-store identity is
+still pathname identity, not content attestation. The patch improves the
+truthfulness and conservatism of the existing path; it earns no additional
+Kautz level by itself.
