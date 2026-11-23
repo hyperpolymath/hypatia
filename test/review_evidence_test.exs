@@ -85,6 +85,16 @@ defmodule Hypatia.ReviewEvidenceTest do
     assert result["body"]["assurance"]["coverage_verdict"] == "not_established"
   end
 
+  test "rejects invalid repository dot components with zero observations" do
+    for repo <- ["../repo", "owner/..", "./repo", "owner/.", "owner//repo"] do
+      assert {:error, :invalid_repository} =
+               ReviewEvidence.build(Map.put(snapshot([]), "repository", repo), @revision)
+    end
+
+    assert {:ok, _} =
+             ReviewEvidence.build(snapshot([]), @revision)
+  end
+
   test "retains exact historical reviewed SHA and stale verdict" do
     historical = observation(303, reviewed_sha: @older)
 
