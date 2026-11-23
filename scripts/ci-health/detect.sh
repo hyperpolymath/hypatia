@@ -23,6 +23,8 @@
 set -euo pipefail
 O="${OWNER:-hyperpolymath}"; R="$1"
 HERE="$(cd "$(dirname "$0")" && pwd)"   # for action-superset.txt (allow-list coverage)
+# shellcheck source=SCRIPTDIR/burn-trigger.sh
+. "$HERE/burn-trigger.sh"   # BURN_TRIGGER_ERE (D-BURN)
 emit(){ printf '%s\t%s\t%s\t%s\n' "$R" "$1" "$2" "$3"; }
 api() {
   local out
@@ -59,12 +61,12 @@ for fail_id in "${fail_ids[@]}"; do
       emit B-TRACKER-TOKEN HIGH "Pin updater reports missing write credential (run $fail_id) → compare pins read-only before provisioning repository-scoped write access"
       tracker_token_seen=true
     fi
-    if [ "$billing_seen" = false ] && printf '%s' "$msg" | grep -iE 'payments have failed|spending limit' >/dev/null; then
+    if [[ "$billing_seen" = false ]] && grep -qiE 'payments have failed|spending limit' <<<"$msg"; then
       emit A-BILLING CRITICAL "Actions billing/spending-limit wall blocks all billable jobs → OWNER: GitHub Settings -> Billing & plans"
       billing_seen=true
     fi
-    if [ "$lockfile_seen" = false ] && printf '%s' "$msg" | grep -iE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' >/dev/null; then
-      first_lock_msg=$(printf '%s\n' "$msg" | grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin')
+    if [[ "$lockfile_seen" = false ]] && grep -qiE 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg"; then
+      first_lock_msg=$(grep -iEm1 'lockfile pin .* does not match ref|lockfile verification did not produce a result|unreachable-pin' <<<"$msg")
       emit B-LOCKFILE HIGH "Actions lockfile verification failed (${first_lock_msg}) → run gh actions-lock --verify, repair, then commit actions.lock"
       lockfile_seen=true
     fi
@@ -106,8 +108,10 @@ fi
 
 # --- D: burn anti-pattern (bare [push, pull_request] double-trigger), via API
 for path in $(api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' || true); do
-  if api "repos/$O/$R/contents/$path" --jq '.content' | base64 -d \
-       | grep -E '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]' >/dev/null; then
+  # Captured, then matched: piping into `grep -q` under pipefail can read a
+  # match as no match (SIGPIPE, RE011). A failed fetch or decode is no match.
+  if wf_text=$(api "repos/$O/$R/contents/$path" --jq '.content' | base64 -d) \
+       && grep -qE "$BURN_TRIGGER_ERE" <<<"$wf_text"; then
     emit D-BURN MEDIUM "ERR-WF-014: $path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
   fi
 done

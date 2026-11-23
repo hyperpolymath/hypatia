@@ -100,7 +100,7 @@ fix_agpl_references() {
 
   for f in $agpl_files; do
     # Skip mock/fixture files that simulate external API responses
-    if echo "$f" | grep -E 'mock|fixture.*github' >/dev/null; then
+    if grep -qE 'mock|fixture.*github' <<<"$f"; then
       continue
     fi
     warn "AGPL-3.0 reference in: $f (should be MPL-2.0)"

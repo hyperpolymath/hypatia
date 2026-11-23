@@ -24,10 +24,13 @@ is_binary_crate() {
   [[ -f "${REPO}/src/main.rs" ]] && return 0
   grep -q '^\[\[bin\]\]' "${REPO}/Cargo.toml" 2>/dev/null && return 0
   if grep -q '^\[workspace\]' "${REPO}/Cargo.toml" 2>/dev/null; then
-    find "${REPO}" -name "main.rs" \
+    # Captured, then matched: `find | grep -q .` can lose a match to SIGPIPE
+    # under pipefail (RE011). A failed find is still no match.
+    local main_rs
+    main_rs=$(find "${REPO}" -name "main.rs" \
       -not -path "*/.git/*" \
-      -not -path "*/target/*" \
-      | grep >/dev/null . && return 0
+      -not -path "*/target/*") \
+      && grep -q . <<<"$main_rs" && return 0
   fi
   return 1
 }

@@ -14,7 +14,10 @@ REPO="${1:?Usage: fix-scorecard-ci-tests.sh <repo-path>}"
 WF_DIR="${REPO}/.github/workflows"
 
 # Already has CI if any workflow runs tests
-if ls "${WF_DIR}"/*.yml "${WF_DIR}"/*.yaml 2>/dev/null | xargs grep -l 'mix test\|cargo test\|deno test\|gleam test' 2>/dev/null | grep >/dev/null .; then
+# Captured, then matched (RE011). The capture keeps the writers' pipefail
+# status, so a failed ls or xargs is still "no test workflow", as before.
+if test_wfs=$(ls "${WF_DIR}"/*.yml "${WF_DIR}"/*.yaml 2>/dev/null | xargs grep -l 'mix test\|cargo test\|deno test\|gleam test' 2>/dev/null) \
+   && grep -q . <<<"$test_wfs"; then
   echo "[fix-scorecard-ci-tests] CI test workflow already present"
   exit 0
 fi

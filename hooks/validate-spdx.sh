@@ -11,7 +11,7 @@ for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
     [ -f "$workflow" ] || continue
     
     first_line=$(head -n1 "$workflow")
-    if ! echo "$first_line" | grep -E "$SPDX_PATTERN" >/dev/null; then
+    if ! grep -qE "$SPDX_PATTERN" <<<"$first_line"; then
         echo "ERROR: Missing SPDX header in $workflow"
         echo "  First line should be: # SPDX-License-Identifier: MPL-2.0"
         ERRORS=$((ERRORS + 1))
