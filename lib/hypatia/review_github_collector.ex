@@ -376,14 +376,26 @@ defmodule Hypatia.ReviewGithubCollector do
   credentials or response bodies. This decodes GitHub's API payload; it does
   not claim strict I-JSON/JCS canonicalisation of output.
   """
+  @api_timeout_ms 20_000
+
   def gh_get(path) when is_binary(path) do
+    # System.cmd itself has no timeout. A linked task owns the port; shutting
+    # it down bounds a stalled read without logging untrusted response text.
+    task = Task.async(fn -> gh_command(path) end)
+
+    case Task.yield(task, @api_timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      {:exit, _reason} -> {:error, :github_api_unavailable}
+      nil -> {:error, :github_api_timeout}
+    end
+  end
+
+  defp gh_command(path) do
     try do
       case System.cmd(
              "gh",
              ["api", "--hostname", "github.com", "--method", "GET", path],
              env: [{"GH_PROMPT_DISABLED", "1"}],
-             # Capture error text rather than relaying it into the caller's
-             # stderr; the failure branch discards it without echoing secrets.
              stderr_to_stdout: true
            ) do
         {body, 0} when byte_size(body) <= @max_response_bytes ->
@@ -399,7 +411,9 @@ defmodule Hypatia.ReviewGithubCollector do
           {:error, :github_api_unavailable}
       end
     rescue
-      ErlangError -> {:error, :github_cli_unavailable}
+      _ -> {:error, :github_cli_unavailable}
+    catch
+      :exit, _ -> {:error, :github_api_unavailable}
     end
   end
 
