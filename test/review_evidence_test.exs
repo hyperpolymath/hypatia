@@ -59,8 +59,10 @@ defmodule Hypatia.ReviewEvidenceTest do
     assert result["file_record_bytes"] == bytes <> "\n"
     refute String.ends_with?(bytes, "\n")
     assert byte_size(result["library_sha256"]) == 64
+
     assert result["library_sha256"] ==
-             (:crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower))
+             :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+
     refute String.contains?(bytes, "Potential bad lock")
   end
 
