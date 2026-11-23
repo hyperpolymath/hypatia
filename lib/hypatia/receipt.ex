@@ -137,6 +137,10 @@ defmodule Hypatia.Receipt do
 
   # The verification as the gate reads it. A rollback that the gate does not credit
   # (no batch fields) is "unqualified", so the verdict can be derived from the pair.
+  defp qualification_of(%{"admission_version" => "fleet-attempt/1"} = row, verdict) do
+    if verdict == "credited_failure", do: row["verification"], else: "unqualified"
+  end
+
   defp qualification_of(row, verdict) do
     case Map.get(row, "verification") do
       v when v in @qualifications -> v
@@ -168,8 +172,9 @@ defmodule Hypatia.Receipt do
         _ -> hits
       end
 
-    case {kind, Map.get(row, "verification")} do
-      {:local_rescan, v} when v in @rescans -> Map.put(base, "rescan", v)
+    case {Map.get(row, "admission_version"), kind, Map.get(row, "verification")} do
+      {"fleet-attempt/1", _, _} -> base
+      {_, :local_rescan, v} when v in @rescans -> Map.put(base, "rescan", v)
       _ -> base
     end
   end
@@ -336,8 +341,8 @@ defmodule Hypatia.Receipt do
   def write(data_root, row, opts \\ []) when is_binary(data_root) and is_map(row) do
     with {:ok, event_id} <- fetch_event_id(row),
          :ok <- not_yet_written(data_root, event_id),
-         {:ok, ctx} <- context(data_root, row, opts),
-         receipt = build(row, ctx),
+         {:ok, stored_row, ctx} <- receipt_input(data_root, row, opts),
+         receipt = build(stored_row, ctx),
          :ok <- check(receipt),
          {:ok, line} <- encode(receipt) do
       append(data_root, line)
@@ -402,6 +407,75 @@ defmodule Hypatia.Receipt do
   end
 
   # ── Context: where the evidence sits ───────────────────────────────────
+
+  # An admission receipt binds the canonical outcome, including its embedded
+  # unbound observation. Caller context and a caller's altered copy of that row
+  # cannot replace the persisted evidence. Legacy context remains unchanged.
+  defp receipt_input(data_root, row, opts) do
+    event_id = Map.fetch!(row, "event_id")
+    located = locate_admission(data_root, event_id)
+
+    case located do
+      {:ok, log, line, bytes} ->
+        case Jason.decode(bytes) do
+          {:ok, %{"admission_version" => "fleet-attempt/1", "event_id" => ^event_id} = stored} ->
+            {:ok, stored,
+             %{
+               kind: :fleet_import,
+               log: log,
+               line: Integer.to_string(line),
+               row_sha256: sha(bytes)
+             }}
+
+          _ ->
+            legacy_receipt_input(data_root, row, opts)
+        end
+
+      :error ->
+        legacy_receipt_input(data_root, row, opts)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  # Only root event identity counts. A public row's unrelated nested JSON may
+  # mention an ID; that mention is not the committed admission's location.
+  defp locate_admission(data_root, event_id) do
+    matches =
+      for path <- Path.wildcard(Path.join([data_root, "outcomes", "*.jsonl"])),
+          {bytes, line} <- path |> File.stream!() |> Stream.with_index(1),
+          bytes = String.trim_trailing(bytes, "\n"),
+          {:ok, %{"event_id" => ^event_id} = stored} <- [Jason.decode(bytes)] do
+        {path, line, bytes, stored}
+      end
+
+    versioned? =
+      Enum.any?(matches, fn {_, _, _, stored} ->
+        Map.has_key?(stored, "admission_version") or Map.has_key?(stored, "attempt_contract")
+      end)
+
+    case {versioned?, matches} do
+      {false, _} ->
+        :error
+
+      {true, [{path, line, bytes, stored}]} ->
+        if OutcomeTracker.canonical_fleet_admission?(stored) and
+             not Hypatia.FleetAdmission.source_alias?(path),
+           do: {:ok, "outcomes/" <> Path.basename(path), line, bytes},
+           else: {:error, :invalid_admission_row}
+
+      {true, _} ->
+        {:error, :ambiguous_admission_identity}
+    end
+  end
+
+  defp legacy_receipt_input(_data_root, %{"admission_version" => "fleet-attempt/1"}, _opts),
+    do: {:error, :row_not_in_log}
+
+  defp legacy_receipt_input(data_root, row, opts) do
+    with {:ok, ctx} <- context(data_root, row, opts), do: {:ok, row, ctx}
+  end
 
   defp context(data_root, row, opts) do
     case Keyword.fetch(opts, :ctx) do

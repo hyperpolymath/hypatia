@@ -37,6 +37,9 @@ defmodule Hypatia.OutcomeTracker do
     "source_bot"
   ]
 
+  # Consumer-owned v1 evidence cannot be supplied through public metadata.
+  @admission_keys ~w(attempt_contract admission_version producer_assertion producer_source rescan_observation rescan_not_run observation_id attempt_event_id observer binding)
+
   @doc """
   Record an outcome from a fix attempt.
 
@@ -64,7 +67,7 @@ defmodule Hypatia.OutcomeTracker do
       metadata
       |> canonical_fields()
       |> untrusted_verification()
-      |> Map.drop(@receipt_context_keys),
+      |> Map.drop(@receipt_context_keys ++ @admission_keys ++ ["fleet_import_id", "origin"]),
       true,
       :local_caller
     )
@@ -176,7 +179,7 @@ defmodule Hypatia.OutcomeTracker do
       repo,
       file,
       outcome,
-      Map.merge(canonical_fields(audit), %{
+      Map.merge(Map.drop(canonical_fields(audit), @admission_keys), %{
         "fleet_import_id" => source_id,
         "origin" => "gitbot-fleet",
         "verification" => verification
@@ -184,6 +187,30 @@ defmodule Hypatia.OutcomeTracker do
       false,
       :fleet_import
     )
+  end
+
+  @doc false
+  def import_fleet_attempt(line, line_number, source_path) when is_binary(line) do
+    store = capture_outcome_store()
+    digest = :crypto.hash(:sha256, line) |> Base.encode16(case: :lower)
+
+    # This entry accepts a file locator, never an admission map. The helper
+    # rereads that exact row from the configured feed before constructing facts.
+    Hypatia.FleetAdmission.import(line_number, source_path, digest, store.data_root, fn recipe,
+                                                                                        repo,
+                                                                                        file,
+                                                                                        outcome,
+                                                                                        verification,
+                                                                                        metadata ->
+      fields =
+        Map.merge(metadata, %{
+          "fleet_import_id" => metadata["event_id"],
+          "origin" => "gitbot-fleet",
+          "verification" => verification
+        })
+
+      do_persist_outcome(recipe, repo, file, outcome, fields, false, :fleet_import, store)
+    end)
   end
 
   @doc """
@@ -248,7 +275,28 @@ defmodule Hypatia.OutcomeTracker do
          publish_to_fleet?,
          kind \\ :local_caller
        ) do
-    store = capture_outcome_store()
+    do_persist_outcome(
+      recipe_id,
+      repo,
+      file,
+      outcome,
+      metadata,
+      publish_to_fleet?,
+      kind,
+      capture_outcome_store()
+    )
+  end
+
+  defp do_persist_outcome(
+         recipe_id,
+         repo,
+         file,
+         outcome,
+         metadata,
+         publish_to_fleet?,
+         kind,
+         store
+       ) do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     outcome_str = Atom.to_string(outcome)
 
@@ -441,6 +489,46 @@ defmodule Hypatia.OutcomeTracker do
     )
 
     result
+  end
+
+  @doc false
+  def observe_fleet_target(repo_path, category, file, line) do
+    case System.find_executable("panic-attack") do
+      nil ->
+        {:not_run, :scanner_unavailable}
+
+      executable ->
+        try do
+          result =
+            System.cmd(executable, ["assail", repo_path, "--output-format", "json", "--quiet"],
+              stderr_to_stdout: true
+            )
+
+          verdict =
+            case result do
+              {output, 0} ->
+                case Jason.decode(output) do
+                  {:ok, %{"weak_points" => points}} when is_list(points) ->
+                    if Enum.all?(points, &is_map/1),
+                      do: judge(points, category, file, line),
+                      else: :scan_failed
+
+                  _ ->
+                    :scan_failed
+                end
+
+              _ ->
+                :scan_failed
+            end
+
+          {:ran, verdict}
+        rescue
+          error in ErlangError ->
+            if error.original in [:enoent, :eacces],
+              do: {:not_run, :scanner_unavailable},
+              else: reraise(error, __STACKTRACE__)
+        end
+    end
   end
 
   defp do_verify_fix(repo_path, pattern_id, category, file, line) do
@@ -670,7 +758,12 @@ defmodule Hypatia.OutcomeTracker do
   the map, so the map can add a field but cannot change what the rescan found.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
-    extra = opts |> Keyword.get(:metadata, %{}) |> canonical_fields()
+    extra =
+      opts
+      |> Keyword.get(:metadata, %{})
+      |> canonical_fields()
+      |> Map.drop(@receipt_context_keys ++ @admission_keys ++ ["fleet_import_id", "origin"])
+
     category = Keyword.get(opts, :category, "")
     verify_requested? = Keyword.get(opts, :verify, false) and outcome == :success
 
@@ -902,6 +995,20 @@ defmodule Hypatia.OutcomeTracker do
     Enum.reduce(outcomes, %{successes: 0, failures: 0, false_positives: 0, ignored: 0}, fn row,
                                                                                            acc ->
       case row do
+        %{"attempt_contract" => _} ->
+          # Tagged producer bytes cannot stamp themselves as an admission.
+          %{acc | ignored: acc.ignored + 1}
+
+        %{"admission_version" => "fleet-attempt/1"} ->
+          # v1 has no implemented snapshot binding. Neither a success claim nor
+          # an adverse current-target rescan can contribute positive/FP weight.
+          if canonical_fleet_admission?(row) and qualified_fleet_failure?(row),
+            do: %{acc | failures: acc.failures + 1},
+            else: %{acc | ignored: acc.ignored + 1}
+
+        %{"admission_version" => _} ->
+          %{acc | ignored: acc.ignored + 1}
+
         %{"outcome" => "success", "verification" => "verified"} ->
           %{acc | successes: acc.successes + 1}
 
@@ -927,6 +1034,52 @@ defmodule Hypatia.OutcomeTracker do
       end
     end)
   end
+
+  defp qualified_fleet_failure?(%{
+         "outcome" => "failure",
+         "verification" => "failed",
+         "producer_assertion" => %{
+           "verdict" => "failed",
+           "outcome" => "failure",
+           "exit_code" => code
+         }
+       })
+       when is_integer(code) and code != 0, do: true
+
+  defp qualified_fleet_failure?(%{
+         "outcome" => "failure",
+         "verification" => "incomplete",
+         "producer_assertion" => %{
+           "verdict" => "incomplete",
+           "outcome" => outcome,
+           "after_hits" => hits
+         }
+       })
+       when outcome in ["success", "failure"] and is_integer(hits) and hits > 0, do: true
+
+  defp qualified_fleet_failure?(_), do: false
+
+  @doc false
+  def canonical_fleet_admission?(row) when is_map(row) do
+    source = row["producer_source"]
+    assertion = row["producer_assertion"]
+    id = row["event_id"]
+
+    row["admission_version"] == "fleet-attempt/1" and
+      not Map.has_key?(row, "attempt_contract") and Hypatia.EventId.valid?(id) and
+      row["event_id_source"] == "producer" and row["fleet_import_id"] == id and
+      row["bot"] == "hypatia" and row["origin"] == "gitbot-fleet" and
+      row["source_kind"] == "fleet_import" and is_map(assertion) and
+      assertion["attempt_contract"] == "fleet-attempt/1" and assertion["event_id"] == id and
+      assertion["bot"] == "dispatch-runner" and is_map(source) and
+      source["bot"] == "dispatch-runner" and is_binary(source["path"]) and
+      Path.type(source["path"]) == :absolute and
+      source["log"] == "shared-context/learning/fix-outcomes.jsonl" and
+      is_integer(source["line"]) and source["line"] > 0 and
+      is_binary(source["row_sha256"]) and Regex.match?(~r/\A[0-9a-f]{64}\z/, source["row_sha256"])
+  end
+
+  def canonical_fleet_admission?(_), do: false
 
   @doc """
   Bayesian confidence update using Beta distribution conjugate prior.

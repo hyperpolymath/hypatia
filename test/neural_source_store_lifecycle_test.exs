@@ -721,11 +721,31 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   end
 
   test "Kin's default predictor holds before its outer review deadline", ctx do
-    # Exercise the actual default named-server route, with the application's
-    # original source restored so its queued call cannot observe a test root.
-    Application.put_env(:hypatia, :verisimdb_data_path, ctx.original)
-    server = Process.whereis(Coordinator)
-    assert is_pid(server)
+    take_coordinator_name(ctx.original)
+
+    # A prior cohort can stay blocked after another test restores the global
+    # source. Reproduce that state with owned processes, not application peers.
+    prior_cohort = isolated_cohort()
+    prior = named_coordinator(prior_cohort)
+    assert {:ok, %{source_status: :ready}} = barrier(prior, ctx.first)
+    vae = Keyword.fetch!(prior_cohort, :named_networks).vae
+    Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+
+    assert {:error, {:source_store_changed, first, second}} =
+             GenServer.call(vae, {:snapshot, ctx.first})
+
+    assert {first, second} == {ctx.first, ctx.second}
+    Application.put_env(:hypatia, :verisimdb_data_path, ctx.first)
+
+    assert {:error, {:neural_source_unavailable, %{source_status: :blocked}}} =
+             barrier(prior, ctx.first)
+
+    # The timeout fixture owns a fresh complete cohort under the production
+    # name; an inherited application cohort is not a readiness precondition.
+    stop_supervised!(Coordinator)
+    server = named_coordinator(isolated_cohort())
+    assert Process.whereis(Coordinator) == server
+    assert {:ok, %{source_status: :ready}} = barrier(server, ctx.first)
     :ok = :sys.suspend(server)
 
     action = %{
@@ -742,9 +762,9 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       after
         if Process.alive?(task.pid), do: Task.shutdown(task, :brutal_kill)
         :sys.resume(server)
-        # Drain the ordinary dispatch request while the original root is
-        # still selected; a system-state query would bypass this mailbox.
-        assert {:ok, %{source_status: :ready}} = barrier(server, ctx.original)
+        # Drain the ordinary dispatch request while its source is still
+        # selected; a system-state query would bypass this mailbox.
+        assert {:ok, %{source_status: :ready}} = barrier(server, ctx.first)
       end
 
     assert {:ok, {:hold, reason}} = result
@@ -839,6 +859,43 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       end)
 
     [named_networks: networks, blackboard: isolated_process(Blackboard, isolated: true)]
+  end
+
+  # Keep the application child and its state intact while the real default-name
+  # API uses a test-supervised cohort. Register restoration before the handoff.
+  defp take_coordinator_name(original_source) do
+    original = Process.whereis(Coordinator)
+    assert is_pid(original)
+
+    on_exit(fn ->
+      Application.put_env(:hypatia, :verisimdb_data_path, original_source)
+
+      case Process.whereis(Coordinator) do
+        ^original ->
+          :ok
+
+        other ->
+          if is_pid(other) do
+            :ok = :sys.resume(other)
+            :ok = GenServer.stop(other, :normal, 5_000)
+          end
+
+          assert Process.register(original, Coordinator)
+      end
+
+      :ok = :sys.resume(original)
+    end)
+
+    :ok = :sys.suspend(original)
+    assert Process.unregister(Coordinator)
+  end
+
+  defp named_coordinator(cohort) do
+    start_supervised!(%{
+      id: Coordinator,
+      start: {GenServer, :start_link, [Coordinator, cohort, [name: Coordinator]]},
+      restart: :temporary
+    })
   end
 
   defp named_sequence(name) do

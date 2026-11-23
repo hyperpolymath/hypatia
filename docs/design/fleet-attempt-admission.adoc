@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Fleet attempt admission: one attempt, correlated evidence
+:toc:
+:date: 2026-11-23
+
+Status: owner direction APPROVED on 2026-11-23. Jonathan approved the
+recommendation that the existing trusted fleet importer admits each attempt
+once and that rescans add correlated evidence rather than independently
+recording another qualified attempt. This document defines the bounded first
+implementation; its acceptance evidence is recorded in
+link:../operations/nesy-reinforcement/NS-02-fleet-admission.adoc[the NS-02 evidence note]. Approval does
+not grant production activation, quarantine removal, E0 sign-off or a Kautz
+promotion.
+
+== S-01: Decision and scope
+
+For versioned producer attempts, the E0-11 fleet reader is the sole production
+admission writer. The dispatch runner appends one identified source event to
+the configured fleet feed and does not call `mix hypatia.record_outcome` for
+that event. This explicitly amends the mandatory callback in
+`docs/operations/dispatch-runner-contract.adoc` for these versioned attempts.
+The existing direct task remains available for its other callers; its public
+identity and verification restrictions remain in force.
+
+The motivation is an executed counterexample on Hypatia
+`d158aed87f76b93e4f291e995bef9f26559c7fb2`: one actual emitted failure became two
+qualified failures and two receipts after direct recording plus explicit
+fleet import. The decision and reproduction are preserved in fleet PR #709,
+`docs/design/e0-12-outcome-route-decision.adoc`. The old diagnostic remains
+historical evidence; acceptance of this route exercises the actual chosen
+flow, without introducing its forbidden second admission.
+
+== Versioned transport
+
+The producer writes `attempt_contract = "fleet-attempt/1"`, a valid canonical
+`event_id`, and `repo_relative_path`, the actual resolved target relative to
+its configured repository root. Existing verdict and numeric evidence fields
+remain. The exact six-field start schema is unchanged and stays in
+`shared-context/learning/fix-attempts.jsonl`.
+
+The source outcome is appended to
+`shared-context/learning/fix-outcomes.jsonl` under the fleet root. Primary and
+central monthly mirrors live in `dispatch/fleet-outcomes/`, outside the
+consumer's `outcomes/` ledger. Every copy has identical serialized bytes and
+the same event ID. Two distinct attempts with identical inputs still have
+different IDs.
+
+Producer and consumer must select the same physical fleet root. A successful
+append establishes source persistence, not consumer admission. A failed
+mirror after source persistence does not make the fix happen again and does
+not justify a new event ID. Policy refusals are not executable attempts and
+retain their separate existing reporting behavior.
+
+An explicitly unknown or malformed attempt-contract version is refused; it
+does not fall back to legacy admission. Untagged historical E0-11 input keeps
+its prior interpretation. Mixed-version rollout therefore requires the new
+consumer before the new producer. Quarantine remains the current containment
+boundary; a field on a source row cannot authorize deployment.
+
+== One canonical admission
+
+The file reader supplies the exact source bytes, locator, digest and captured
+destination. The raw producer does not supply trusted `verification`,
+`admission_version`, receipt context or a trusted observation.
+
+The consumer writes `admission_version = "fleet-attempt/1"` on one canonical
+outcome whose `event_id` is the producer's ID. It retains the original
+producer assertion and source provenance. Any scan it actually performs is
+embedded as a `rescan_observation`, with a distinct observation ID, the
+attempt ID, the same raw-source digest, the observer, resolved target,
+observation time and result. A decision not to scan records its reason; it
+does not invent an observation or claim that a scan occurred.
+
+The embedded observation is not another outcome, receipt or training sample.
+It is committed with the canonical outcome. An observation ID identifies the
+observation; it does not express receipt revision ancestry. The receipt's
+`parent_event_ids` remains empty.
+
+The public recorder continues stripping caller-selected identity and the new
+consumer-owned admission fields. A syntax-valid UUID is not provenance. This
+design introduces no public flag that lets a caller stamp a trusted outcome.
+
+== S-02: What a rescan can establish
+
+A current-target scan may describe changes made after the named attempt.
+Current shell fixes can leave dirty working trees, and the producer's per-run
+locks do not exclude a different runner. HEAD equality alone does not bind
+those uncommitted bytes. Calling a scanner later is consequently insufficient
+to establish either success or false-positive blame for that attempt.
+
+The first implementation records any such rescan as explicitly *unbound*.
+It may retain useful diagnostic evidence about the resolved target, but it
+cannot promote or blame the attempt. If no safe target/category can be
+resolved or the scanner is unavailable, that gap is explicit.
+
+[cols="3,3",options="header"]
+|===
+|Producer evidence |Initial qualified contribution in this slice
+|`failed` / `failure` with a nonzero integer exit code
+|One failure, under the existing gate.
+|`incomplete` with positive post-fix hits and the existing allowed outcome
+|One failure, under the existing gate.
+|Eligible `verified` / `success`, but no implemented post-state binding
+|Audit only. Neither a later clean scan nor a later adverse scan adds credit or blame.
+|`no_op`, `unverified`, inconsistent or insufficient evidence
+|Audit only. A scan cannot upgrade the producer's insufficient evidence.
+|===
+
+`qualified_outcome_counts/1` retains its existing success, failure and separate
+qualified-false-positive accounting. This slice adds no new bypass or
+qualification category. A future bound initial scan can select one qualified
+success or one qualified false positive under that existing gate; those
+branches must not become reachable before a binding mechanism is implemented
+and tested.
+
+Target resolution is constrained to an explicitly configured
+`HYPATIA_REPOS_DIR`. The producer's relative target is validated and physically
+checked before invocation. This conservative preflight rejects all symlinks,
+including internal ones; an absent mapping or unsafe path never selects a
+guessed checkout. It is not a locked filesystem snapshot or a guarantee
+against a concurrent filesystem mutation. The category comes from the trusted
+local recipe registry, not an arbitrary producer category claim.
+
+== Replay, conflicts and failure
+
+Replay is resolved before any scan. A committed producer ID with matching
+raw-source digest/binding represents the existing attempt; it creates no new
+outcome, observation or credit. A repeated ID with different source bytes or
+binding is a visible conflict. Preserve that evidence outside the learning
+ledger and refuse another admission. Do not silently revise the previous
+qualification or infer that equal content means two IDs are one attempt.
+
+The canonical outcome append remains the commit point. A failed append leaves
+the source unacknowledged. A failed receipt write after that commit retains
+the ruled `receipt_pending`/repair behavior. Capture the selected store for
+the operation; a scanner can run long enough for runtime configuration to
+change. The new evidence must not be written into a different store halfway
+through admission.
+
+The raw-source digest records the bytes reread at admission. Configuration and
+the selected store are revalidated after a scan; the source bytes themselves
+are not locked or reread after it. Feed aliases with existing outcomes or
+receipt files are rejected, and tagged raw producer rows cannot qualify
+themselves as canonical admissions.
+
+The production writer in this slice is the scheduler. This is not a promise
+of cross-process or distributed exactly-once execution, multi-file atomicity,
+power-loss durability or exactly-once neural parameter updates.
+
+== Receipt evidence binding
+
+For a stored row with consumer-owned `admission_version = "fleet-attempt/1"`,
+the receipt indexes the exact canonical admitted outcome bytes. Its source
+kind remains `fleet_import`; source log/line identify the canonical monthly
+outcome, and `proof_or_test_ref.row_sha256` hashes that row. The raw producer
+source and digest remain provenance inside it. Consequently, the receipt
+binds the embedded evidence rather than hashing only the original assertion.
+
+Legacy fleet rows keep their existing raw-feed receipt interpretation. The
+existing `e0-receipt/1` field schema and D7 revision meaning remain unchanged.
+Only a trusted *bound* rescan may populate the receipt's rescan proof field;
+unbound diagnostic scans do not remove that missing-evidence declaration.
+Unavailable scan artifacts, tool versions and subject identity remain named
+as missing.
+
+== Acceptance and next dependency
+
+Acceptance must exercise actual producer delivery into the configured source
+feed, with no manual test copy; prove no direct-record callback for identified
+attempts; and cover distinct identical attempts, mirrors, warm/cold replay,
+changed payload conflicts, forged evidence, path confinement, unbound clean
+and adverse scans, outcome/receipt failures and store changes. Receipts must
+pass the existing Nickel contract and bind the intended exact bytes.
+
+This slice does not implement qualification revisions. E0-07 and E0-35 remain
+the dependencies for changing an already committed qualification. A later
+observation cannot silently promote an audit-only attempt or erase its
+history.
+
+The next positive-verification package must capture an immutable post-fix
+snapshot (including the actual supported dirty/untracked state), or enforce
+a shared execution/verification window with a trustworthy state binding.
+It must demonstrate that a later change cannot be attributed to an earlier
+attempt. Unsupported states remain audit-only. Only after that evidence and
+the remaining E0 gates may this route support an operational K2 claim.
