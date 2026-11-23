@@ -240,7 +240,8 @@ defmodule Hypatia.ReviewGithubCollectorTest do
   end
 
   test "unavailable API, malformed JSON-shaped response and wrong PR identity fail closed" do
-    unavailable = Map.put(api_responses(), @path <> "/reviews?per_page=100&page=1", {:error, :rate_limited})
+    unavailable =
+      Map.put(api_responses(), @path <> "/reviews?per_page=100&page=1", {:error, :rate_limited})
 
     assert {:error, :rate_limited} =
              Collector.collect(@repo, @number, api: fake_api(unavailable))
@@ -250,7 +251,12 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     assert {:error, {:unexpected_api_shape, _}} =
              Collector.collect(@repo, @number, api: fake_api(bad_list))
 
-    wrong_repo = Map.put(api_responses(), @path, {:ok, put_in(pr(), ["base", "repo", "full_name"], "elsewhere/other")})
+    wrong_repo =
+      Map.put(
+        api_responses(),
+        @path,
+        {:ok, put_in(pr(), ["base", "repo", "full_name"], "elsewhere/other")}
+      )
 
     assert {:error, :pull_request_repository_mismatch} =
              Collector.collect(@repo, @number, api: fake_api(wrong_repo))
