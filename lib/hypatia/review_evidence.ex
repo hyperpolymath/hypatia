@@ -85,8 +85,7 @@ defmodule Hypatia.ReviewEvidence do
          "body" => envelope,
          "library_bytes" => bytes,
          "file_record_bytes" => bytes <> "\n",
-         "library_sha256" =>
-           :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower),
+         "library_sha256" => :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower),
          "canonicaliser" => "Hypatia.Receipt.restricted_encoder",
          "qualification" => "requires_ijson_jcs_differential"
        }}
@@ -105,21 +104,21 @@ defmodule Hypatia.ReviewEvidence do
         {:error, :invalid_head_sha}
 
       not (is_binary(snapshot["repository"]) and
-             Regex.match?(~r/\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/, snapshot["repository"])) ->
+               Regex.match?(~r/\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/, snapshot["repository"])) ->
         {:error, :invalid_repository}
 
       not (is_integer(snapshot["pull_request"]) and snapshot["pull_request"] > 0) ->
         {:error, :invalid_pull_request}
 
       not (is_integer(snapshot["ignored_source_events"]) and
-             snapshot["ignored_source_events"] >= 0) ->
+               snapshot["ignored_source_events"] >= 0) ->
         {:error, :invalid_ignored_count}
 
       snapshot["collection"] != "repeated_stable_observation" ->
         {:error, :unsupported_collection}
 
       snapshot["source"] != "github_rest_via_gh" or
-          snapshot["transport_provenance"] != "github_api_observed" or
+        snapshot["transport_provenance"] != "github_api_observed" or
           snapshot["coverage"] != "bot_comment_and_review_submissions_only" ->
         {:error, :unsupported_source}
 
@@ -163,8 +162,10 @@ defmodule Hypatia.ReviewEvidence do
     subject = observation["subject"]
 
     cond do
-      Enum.sort(Map.keys(observation)) not in
-          [@observation_keys, Enum.sort(["provider_run_status" | @observation_keys])] ->
+      Enum.sort(Map.keys(observation)) not in [
+        @observation_keys,
+        Enum.sort(["provider_run_status" | @observation_keys])
+      ] ->
         {:error, :unexpected_observation_fields}
 
       not (is_map(source) and is_map(subject)) ->
@@ -178,7 +179,7 @@ defmodule Hypatia.ReviewEvidence do
         {:error, :invalid_source_event_id}
 
       subject["repo"] != snapshot["repository"] or
-          subject["pull_request"] != snapshot["pull_request"] or
+        subject["pull_request"] != snapshot["pull_request"] or
           subject["current_head_sha"] != snapshot["head_sha"] ->
         {:error, :subject_mismatch}
 
