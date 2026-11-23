@@ -58,8 +58,11 @@ defmodule Hypatia.ReviewGithubCollector do
     budget = Keyword.get(opts, :page_budget, @default_page_budget)
 
     cond do
-      not valid_repo?(repo) -> {:error, :invalid_repository}
-      not is_function(api, 1) -> {:error, :invalid_api_client}
+      not valid_repo?(repo) ->
+        {:error, :invalid_repository}
+
+      not is_function(api, 1) ->
+        {:error, :invalid_api_client}
       not (is_integer(budget) and budget >= 1 and budget <= @max_page_budget) ->
         {:error, :invalid_page_budget}
 
@@ -119,8 +122,7 @@ defmodule Hypatia.ReviewGithubCollector do
              "transport_provenance" => "github_api_observed",
              "coverage" => "bot_comment_and_review_submissions_only",
              "ignored_source_events" => ignored,
-             "observations" =>
-               Enum.sort_by(observations, &get_in(&1, ["source", "event_id"]))
+             "observations" => Enum.sort_by(observations, &get_in(&1, ["source", "event_id"]))
            }}
 
         {:error, _reason} = error ->
