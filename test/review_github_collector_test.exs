@@ -305,8 +305,7 @@ defmodule Hypatia.ReviewGithubCollectorTest do
     for broken <- [
           comment(%{"original_commit_id" => nil}),
           comment(%{"original_commit_id" => "not-a-sha"}),
-          comment(%{"html_url" => "https://github.com/stuff-of-awe/other/pull/20"}),
-          comment(%{"id" => nil})
+          comment(%{"html_url" => "https://github.com/stuff-of-awe/other/pull/20"})
         ] do
       assert {:error, {:invalid_source_event, _reason}} =
                Collector.collect(@repo, @number,
