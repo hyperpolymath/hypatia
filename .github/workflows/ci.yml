@@ -361,6 +361,7 @@ jobs:
             test/workflow_test.exs \
             test/review_observation_test.exs \
             test/review_github_collector_test.exs \
+            test/review_evidence_test.exs \
             test/egress_decision_mirror_test.exs \
             test/deed_test.exs \
             test/kyaml_test.exs \
