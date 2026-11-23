@@ -103,8 +103,7 @@ defmodule Hypatia.ReviewEvidence do
       not (is_binary(snapshot["head_sha"]) and Regex.match?(@sha, snapshot["head_sha"])) ->
         {:error, :invalid_head_sha}
 
-      not (is_binary(snapshot["repository"]) and
-               Regex.match?(~r/\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/, snapshot["repository"])) ->
+      not valid_repo?(snapshot["repository"]) ->
         {:error, :invalid_repository}
 
       not (is_integer(snapshot["pull_request"]) and snapshot["pull_request"] > 0) ->
@@ -129,6 +128,15 @@ defmodule Hypatia.ReviewEvidence do
         :ok
     end
   end
+
+  # Match ReviewObservation's owner/repository component rules, including
+  # for zero-event snapshots (which never reach observation re-admission).
+  defp valid_repo?(repo) when is_binary(repo) do
+    Regex.match?(~r/\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/, repo) and
+      Enum.all?(String.split(repo, "/"), &(&1 not in [".", ".."]))
+  end
+
+  defp valid_repo?(_), do: false
 
   defp check_observations(observations, snapshot) do
     with {:ok, records} <- check_each(observations, snapshot) do
