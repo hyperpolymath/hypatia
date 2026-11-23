@@ -102,7 +102,8 @@ defmodule Hypatia.ReviewObservation do
       {"source_event_id", valid_event_id?(row["source_event_id"])},
       {"source_url", valid_url?(row["source_url"], repo, number)},
       {"status", row["status"] in @statuses},
-      {"has_findings", Map.has_key?(row, "has_findings") and
+      {"has_findings",
+       Map.has_key?(row, "has_findings") and
          (is_boolean(row["has_findings"]) or is_nil(row["has_findings"]))}
     ]
 
