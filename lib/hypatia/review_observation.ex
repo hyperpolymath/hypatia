@@ -131,7 +131,12 @@ defmodule Hypatia.ReviewObservation do
 
     case URI.new(url) do
       {:ok, uri} ->
-        uri.scheme == "https" and uri.authority == "github.com" and
+        # URI.new/1 validates the URL but deliberately leaves the deprecated
+        # :authority field nil. Use the parsed components *and* an exact
+        # canonical-prefix check, not that deprecated field.
+        String.starts_with?(url, "https://github.com/") and
+          uri.scheme == "https" and uri.host == "github.com" and
+          uri.port == 443 and is_nil(uri.userinfo) and
           String.downcase(uri.path || "") == expected
 
       {:error, _reason} ->
