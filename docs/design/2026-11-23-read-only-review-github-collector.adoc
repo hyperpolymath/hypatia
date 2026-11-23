@@ -7,8 +7,10 @@
 
 == Scope
 
-This is a follow-up, stacked on draft
-https://github.com/hyperpolymath/hypatia/pull/1216[PR #1216] and tracked by
+This was developed in the stacked
+https://github.com/hyperpolymath/hypatia/pull/1218[PR #1218] and merged into the
+feature branch of https://github.com/hyperpolymath/hypatia/pull/1216[PR #1216],
+which remains unmerged into main. It is tracked by
 https://github.com/hyperpolymath/hypatia/issues/1217[review programme #1217].
 It implements *S-01 (bounded GitHub retrieval)* feeding *S-02 (unqualified
 admission)*. It does not implement a durable I-JSON/JCS ledger, a bot-review
@@ -34,9 +36,15 @@ single repository and PR, rather than scanning all 530 repos.
   is five pages of 100 records *per endpoint*. A full final page returns
   `page_budget_exhausted`: no partial evidence is silently passed off as
   complete.
+. Read both paginated event inventories *twice* and compare their complete
+  decoded sequences. Missing/duplicate API event IDs or differences in the
+  repeated inventory abort collection. This detects ordinary offset-pagination
+  shifts during edits/deletions but is not an atomic snapshot or a guarantee
+  against every concurrent mutation. Report `repeated_stable_observation`,
+  never `complete_bounded_snapshot`.
 . Read PR head *again* after pagination. If it moved, abort with
-  `head_changed_during_collection`. The owner of a subsequent decision
-  must still re-check the live head before acting.
+  `head_changed_during_collection`. A subsequent decision must still
+  re-check the live head before acting.
 . Admit only the two positively identified GitHub bot accounts below.
   An identical login string with a different numeric GitHub user ID is
   rejected. This is evidence of API-reported account identity, *not*
@@ -46,9 +54,16 @@ single repository and PR, rather than scanning all 530 repos.
   Do not interpret any other comment text as an instruction, classifier
   rule, fix command, signature or successful test. Replies and arbitrary
   Markdown are ignored.
-. For GitHub review submissions, preserve a review as
-  `has_findings=nil`. Even an API `APPROVED` state does *not* set
-  Hypatia `merge_approval`, and an empty review is **not** a clean scan.
+. For GitHub review submissions, require an unambiguous native
+  `pull_request_review_id` association with bot-authored, scoped inline
+  findings. Otherwise the submission has unknown scope and is not admitted.
+  Preserve any admitted submission as `has_findings=nil` with provider
+  execution status unknown. A `COMMENTED` submission may be quota exhaustion,
+  an `APPROVED` state grants no Hypatia merge authority, and `DISMISSED`
+  observations are withdrawn/cancelled. Empty reviews are **not** clean scans.
+. Bind inline findings to `original_commit_id` rather than the mutable
+  `commit_id` attachment; missing or malformed original provenance must
+  fail the entire collection, not silently disappear into ignored counts.
 . Feed those restricted maps to `Hypatia.ReviewObservation.admit/2`,
   retaining its `external_assertion`, `unverified`, `unqualified`,
   `learning_eligible=false` and `merge_approval=false` fields.
@@ -105,8 +120,17 @@ explicit source re-verification before updating the allowlist.
 |Unreachable API / absent `gh` / token permissions
 |Error, not zero-findings
 
-|Unexpected JSON shape
-|Error, not an empty list
+|Unexpected JSON or nested PR shape
+|Structured error, not a crash or an empty list
+
+|Missing/duplicate event IDs or malformed identified bot findings
+|Error, not a successful collection with silently dropped findings
+
+|Comment inventory changes between repeated reads
+|Error, not a complete snapshot (REST lacks atomic read isolation)
+
+|Stalled GitHub CLI request
+|Bounded task timeout, error rather than infinite wait
 
 |Last page full at budget
 |Error, incomplete pagination
@@ -117,8 +141,14 @@ explicit source re-verification before updating the allowlist.
 |Unknown human or unknown bot account
 |Ignored *as external-review evidence*, count retained
 
-|Bot review with no native findings signal
-|`finding_summary_missing`, not a pass
+|Bot review with no independently attributable scope
+|Ignored as unknown scope, not a pass or invented code/security coverage
+
+|Linked review submitted as `COMMENTED` or `APPROVED`
+|`unavailable` provider-run status, not a verified completion or approval
+
+|Linked review dismissed
+|`cancelled`; linked findings treated as withdrawn
 
 |Existing external review at an older commit
 |`stale_head`, kept for historical comparison only
@@ -127,8 +157,10 @@ explicit source re-verification before updating the allowlist.
 == Regression and acceptance
 
 `test/review_github_collector_test.exs` mocks the API. It tests bot ID
-spoofing, marker scope, stale SHA, no-findings ambiguity, malicious content
-redaction, unexpected API shapes, pagination, moving heads and budget failures.
+spoofing, marker scope, stale and remapped original SHAs, cancelled reviews,
+no-findings ambiguity, malicious content redaction, malformed nested API
+shapes, duplicate identities, repeated pagination consistency, moving heads
+and budget failures.
 The tests are included explicitly in the CI Elixir regression job; they do not
 require an external GitHub token.
 
@@ -138,6 +170,6 @@ on an approved repository. The latter should capture only source-event IDs,
 head SHA and counts, not full review prose. Validate source-ID parity against
 GitHub API before promoting this collector beyond advisory use.
 
-The branch is intentionally based on #1216. If that branch changes, rebase
-or amend under normal review; never regard passing checks on the old parent
-SHA as evidence for the new branch head.
+The collector is now part of the feature branch for #1216. Check the full
+branch head, its tests and its inherited Rust security blockers before
+merge. Earlier commits or reviews do not qualify the latest revision.
