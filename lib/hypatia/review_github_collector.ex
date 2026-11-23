@@ -95,7 +95,7 @@ defmodule Hypatia.ReviewGithubCollector do
       # Never downgrade a malformed, positively identified finding to an
       # ignored event. Its schema failure invalidates the whole snapshot.
       events =
-        Enum.map(comments, &from_comment(&1, repo, number, head)) ++
+        Enum.map(comments, &from_comment(&1, repo, number, head, reviews)) ++
           Enum.map(reviews, &from_review(&1, repo, number, head, comments))
 
       case Enum.reduce_while(events, {:ok, {[], 0}}, fn
@@ -224,60 +224,105 @@ defmodule Hypatia.ReviewGithubCollector do
     end
   end
 
-  defp from_comment(%{} = comment, repo, number, head) do
+  defp from_comment(%{} = comment, repo, number, head, reviews) do
     with {:ok, provider} <- known_bot(comment),
          true <- is_nil(comment["in_reply_to_id"]),
-         {:ok, scope} <- comment_scope(provider, comment["body"]),
-         {:ok, id} <- positive_id(comment["id"]) do
-      ReviewObservation.admit(
-        %{
-          "provider" => provider,
-          "scope" => scope,
-          "repo" => repo,
-          "pr_number" => number,
-          "reviewed_sha" => comment["commit_id"],
-          "source_event_id" => "github:review_comment:#{id}",
-          "source_url" => comment["html_url"],
-          "status" => "completed",
-          "has_findings" => true
-        },
-        head
-      )
-      |> admit_or_ignore()
+         {:ok, scope} <- comment_scope(provider, comment["body"]) do
+      with {:ok, id} <- positive_id(comment["id"]),
+           {:ok, observation} <-
+             ReviewObservation.admit(
+               %{
+                 "provider" => provider,
+                 "scope" => scope,
+                 "repo" => repo,
+                 "pr_number" => number,
+                 # The current attachment may move on rebase; the original
+                 # reviewed commit does not. Never fall back to commit_id.
+                 "reviewed_sha" => comment["original_commit_id"],
+                 "source_event_id" => "github:review_comment:#{id}",
+                 "source_url" => comment["html_url"],
+                 "status" => comment_review_status(comment, reviews),
+                 "has_findings" => true
+               },
+               head
+             ) do
+        {:ok, Map.put(observation, "provider_run_status", "unknown")}
+      else
+        other -> {:error, {:malformed_recognised_finding, other}}
+      end
     else
       _ -> {:ignore, :not_a_verified_root_finding_comment}
     end
   end
 
-  defp from_comment(_other, _repo, _number, _head),
+  defp from_comment(_other, _repo, _number, _head, _reviews),
     do: {:ignore, :invalid_comment}
 
-  defp from_review(%{} = review, repo, number, head) do
-    with {:ok, provider} <- known_bot(review),
-         {:ok, id} <- positive_id(review["id"]),
-         {:ok, status} <- review_status(review["state"]) do
-      ReviewObservation.admit(
-        %{
-          "provider" => provider,
-          "scope" => "code",
-          "repo" => repo,
-          "pr_number" => number,
-          "reviewed_sha" => review["commit_id"],
-          "source_event_id" => "github:review:#{id}",
-          "source_url" => review["html_url"],
-          "status" => status,
-          # GitHub review submission itself does not attest to zero findings.
-          "has_findings" => nil
-        },
-        head
-      )
-      |> admit_or_ignore()
+  defp comment_review_status(comment, reviews) do
+    review_id = comment["pull_request_review_id"]
+
+    if Enum.any?(reviews, fn
+         %{"id" => ^review_id, "state" => "DISMISSED"} when is_integer(review_id) -> true
+         _ -> false
+       end) do
+      "cancelled"
     else
-      _ -> {:ignore, :not_a_verified_review_submission}
+      # A published finding exists, but it does not certify that the
+      # provider's wider review run completed successfully.
+      "completed"
     end
   end
 
-  defp from_review(_other, _repo, _number, _head), do: {:ignore, :invalid_review}
+  defp from_review(%{} = review, repo, number, head, comments) do
+    with {:ok, provider} <- known_bot(review),
+         {:ok, scope} <- review_scope(review, comments, provider) do
+      with {:ok, id} <- positive_id(review["id"]),
+           {:ok, status} <- review_status(review["state"]),
+           {:ok, observation} <-
+             ReviewObservation.admit(
+               %{
+                 "provider" => provider,
+                 "scope" => scope,
+                 "repo" => repo,
+                 "pr_number" => number,
+                 "reviewed_sha" => review["commit_id"],
+                 "source_event_id" => "github:review:#{id}",
+                 "source_url" => review["html_url"],
+                 "status" => status,
+                 # Submission status is not a completed provider-run verdict.
+                 "has_findings" => nil
+               },
+               head
+             ) do
+        {:ok, Map.put(observation, "provider_run_status", "unknown")}
+      else
+        other -> {:error, {:malformed_recognised_review, other}}
+      end
+    else
+      _ -> {:ignore, :unknown_review_scope}
+    end
+  end
+
+  defp from_review(_other, _repo, _number, _head, _comments),
+    do: {:ignore, :invalid_review}
+
+  # Without a provider-authored finding linked by native GitHub review ID,
+  # the review submission has no reliable code/security scope. Do not
+  # assign "code" to unknown security reviews or quota-only submissions.
+  defp review_scope(review, comments, provider) do
+    scopes =
+      for comment <- comments,
+          comment["pull_request_review_id"] == review["id"],
+          {:ok, ^provider} <- [known_bot(comment)],
+          is_nil(comment["in_reply_to_id"]),
+          {:ok, scope} <- [comment_scope(provider, comment["body"])],
+          do: scope
+
+    case Enum.uniq(scopes) do
+      [scope] -> {:ok, scope}
+      _ -> {:ignore, :unknown_or_mixed_review_scope}
+    end
+  end
 
   defp known_bot(%{"user" => %{"id" => id, "login" => login, "type" => "Bot"}}) do
     case Map.get(@bot_accounts, id) do
@@ -312,15 +357,17 @@ defmodule Hypatia.ReviewGithubCollector do
   defp comment_scope(_provider, _body), do: {:ignore, :missing_finding_marker}
 
   defp review_status("PENDING"), do: {:ok, "running"}
-  defp review_status(state) when state in ~w(COMMENTED APPROVED CHANGES_REQUESTED DISMISSED),
-    do: {:ok, "completed"}
+  defp review_status("DISMISSED"), do: {:ok, "cancelled"}
+
+  # GitHub submission state is not provider execution status. In particular,
+  # COMMENTED may mean quota exhaustion and APPROVED is not a Hypatia verdict.
+  defp review_status(state) when state in ~w(COMMENTED APPROVED CHANGES_REQUESTED),
+    do: {:ok, "unavailable"}
+
   defp review_status(_state), do: {:ignore, :unknown_review_state}
 
   defp positive_id(id) when is_integer(id) and id > 0, do: {:ok, id}
-  defp positive_id(_), do: {:ignore, :invalid_source_event_id}
-
-  defp admit_or_ignore({:ok, observation}), do: {:ok, observation}
-  defp admit_or_ignore({:error, reason}), do: {:ignore, {:invalid_source_record, reason}}
+  defp positive_id(_), do: {:error, :invalid_source_event_id}
 
   @doc """
   Fetch one endpoint through an existing authenticated gh session.
