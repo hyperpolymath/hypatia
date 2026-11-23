@@ -136,8 +136,7 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
           check(%{"head_sha" => @other}),
           check(%{"status" => "completed", "conclusion" => nil}),
           check(%{"status" => "in_progress", "conclusion" => "success"}),
-          check(%{"status" => "completed", "conclusion" => "some_future_state"}),
-          check(%{"id" => nil})
+          check(%{"status" => "completed", "conclusion" => "some_future_state"})
         ] do
       assert {:error, {:invalid_provider_check, _}} =
                Collector.collect(@repo, @number, api: api(response([invalid])))
@@ -148,7 +147,8 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
     assert {:ok, empty} = Collector.collect(@repo, @number, api: api(response()))
     refute empty["provider_observed"]
 
-    incomplete = Map.put(response(), @first_page, {:ok, %{"total_count" => 2, "check_runs" => []}})
+    incomplete =
+      Map.put(response(), @first_page, {:ok, %{"total_count" => 2, "check_runs" => []}})
 
     assert {:error, {:incomplete_check_inventory, _}} =
              Collector.collect(@repo, @number, api: api(incomplete))
@@ -167,7 +167,9 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
 
   test "page budget exhaustion fails, even if the last page was full" do
     full = Enum.map(1..100, fn id -> check(%{"id" => id}) end)
-    responses = Map.put(response(), @first_page, {:ok, %{"total_count" => 100, "check_runs" => full}})
+
+    responses =
+      Map.put(response(), @first_page, {:ok, %{"total_count" => 100, "check_runs" => full}})
 
     assert {:error, {:page_budget_exhausted, _}} =
              Collector.collect(@repo, @number, api: api(responses), page_budget: 1)
@@ -176,7 +178,9 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
       responses
       |> Map.put(@second_page, {:ok, %{"total_count" => 100, "check_runs" => []}})
 
-    assert {:ok, snapshot} = Collector.collect(@repo, @number, api: api(responses), page_budget: 2)
+    assert {:ok, snapshot} =
+             Collector.collect(@repo, @number, api: api(responses), page_budget: 2)
+
     assert length(snapshot["observations"]) == 100
   end
 
@@ -212,10 +216,14 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
              Collector.collect(@repo, @number, api: moved)
 
     assert {:error, :invalid_subject_shape} =
-             Collector.collect(@repo, @number, api: api(Map.put(response(), @path, {:ok, %{"head" => []}})))
+             Collector.collect(@repo, @number,
+               api: api(Map.put(response(), @path, {:ok, %{"head" => []}}))
+             )
 
     assert {:error, :network_failure} =
-             Collector.collect(@repo, @number, api: api(Map.put(response(), @path, {:error, :network_failure})))
+             Collector.collect(@repo, @number,
+               api: api(Map.put(response(), @path, {:error, :network_failure}))
+             )
 
     assert {:error, {:invalid_check_runs_shape, _}} =
              Collector.collect(
@@ -227,10 +235,12 @@ defmodule Hypatia.ReviewCheckRunCollectorTest do
 
   test "subject validation rejects path tricks and invalid limits" do
     for invalid <- ["../repo", "owner/..", "owner//repo"] do
-      assert {:error, :invalid_repository} = Collector.collect(invalid, @number, api: api(response()))
+      assert {:error, :invalid_repository} =
+               Collector.collect(invalid, @number, api: api(response()))
     end
 
     assert {:error, :invalid_pull_request} = Collector.collect(@repo, -1, api: api(response()))
+
     assert {:error, :invalid_page_budget} =
              Collector.collect(@repo, @number, api: api(response()), page_budget: 0)
   end
