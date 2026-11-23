@@ -109,11 +109,17 @@ defmodule Hypatia.ReviewCheckRunCollector do
          number
        ) do
     cond do
-      actual_number != number -> {:error, :subject_number_mismatch}
+      actual_number != number ->
+        {:error, :subject_number_mismatch}
+
       not (is_binary(actual_repo) and String.downcase(actual_repo) == String.downcase(repo)) ->
         {:error, :subject_repository_mismatch}
-      not (is_binary(sha) and Regex.match?(@sha, sha)) -> {:error, :invalid_head_sha}
-      true -> {:ok, String.downcase(sha)}
+
+      not (is_binary(sha) and Regex.match?(@sha, sha)) ->
+        {:error, :invalid_head_sha}
+
+      true ->
+        {:ok, String.downcase(sha)}
     end
   end
 
@@ -156,10 +162,11 @@ defmodule Hypatia.ReviewCheckRunCollector do
           true ->
             records = accumulated |> Enum.reverse() |> List.flatten()
 
-            ids = Enum.map(records, fn
-              %{"id" => id} when is_integer(id) and id > 0 -> id
-              _ -> nil
-            end)
+            ids =
+              Enum.map(records, fn
+                %{"id" => id} when is_integer(id) and id > 0 -> id
+                _ -> nil
+              end)
 
             if Enum.all?(ids, &is_integer/1) and length(ids) == length(Enum.uniq(ids)) do
               {:ok, records}
@@ -196,8 +203,12 @@ defmodule Hypatia.ReviewCheckRunCollector do
     end
   end
 
-  defp from_run(%{"name" => @check_name, "app" => %{"id" => @app_id, "slug" => @app_slug}} = run,
-         repo, number, head) do
+  defp from_run(
+         %{"name" => @check_name, "app" => %{"id" => @app_id, "slug" => @app_slug}} = run,
+         repo,
+         number,
+         head
+       ) do
     with {:ok, id} <- positive_id(run["id"]),
          :ok <- matching_sha(run["head_sha"], head),
          {:ok, status, conclusion} <- check_state(run["status"], run["conclusion"]),
