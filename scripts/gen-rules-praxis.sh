@@ -193,7 +193,8 @@ for f in lib/rules/*.ex; do
     # Skip only an id already emitted from the severity table above; a
     # provenance table (`| BP001 | CIS GH 1.1.x | ... |`) is not one.
     grep -qE "^ *\| $id \| (critical|high|medium|low|info|warn) \| " "$f" && continue
-    IFS=$'\037' read -r sev adv desc <<<"$(near "$f" "$id")"
+    rec=$(near "$f" "$id") || { echo "gen-rules-praxis: cannot read $f for $id" >&2; exit 1; }
+    IFS=$'\037' read -r sev adv desc <<<"$rec"
     text=$(text_of "$f" "$id")
     [ -z "$text" ] && text=$(printf '%s' "$desc" | clean)
     d=""
@@ -337,11 +338,13 @@ moved() { grep -qE "rule_id: \"hypatia/[a-z_]+/$2\"" "$1" && ! grep -qE "rule_id
 # $1 module, $2 names (one per line), $3 hit regex builder: names read from `type:`
 # atoms or from lowercase `rule: "name"` strings.
 emit_found() { # <module> <names...>
-  local m=$1 f=lib/rules/$1.ex name sev adv desc; shift
+  local m=$1 f=lib/rules/$1.ex name sev adv desc rec; shift
   for name in $(printf '%s\n' "$@" | sort -u); do
     [ -z "$name" ] && continue
     moved "$f" "$name" "$m" && continue
-    IFS=$'\037' read -r sev adv desc <<<"$(near "$f" "$name" "(type|rule): (:|\")$name([^a-z0-9_]|\$)")"
+    rec=$(near "$f" "$name" "(type|rule): (:|\")$name([^a-z0-9_]|\$)") ||
+      { echo "gen-rules-praxis: cannot read $f for $name" >&2; exit 1; }
+    IFS=$'\037' read -r sev adv desc <<<"$rec"
     emit_name "$m" "$name" "$sev" "$desc" "$adv"
   done
 }
@@ -367,7 +370,8 @@ while IFS='~' read -r mod name f lit sev adv sf slit text; do
   grep -qF -- "$lit" "$f" || { echo "gen-rules-praxis: $f no longer has '$lit' ($mod/$name)" >&2; exit 1; }
   if [ "$sf" = "$f" ]; then  # same file: beside the literal (a trailing #any: anywhere in it)
     n=$(grep -nF -- "$lit" "$f" | sed -n 1p | cut -d: -f1)
-    grep -qF -- "$slit" <<<"$(sed -n "$((n - 3)),$((n + 3))p" "$f")" ||
+    beside=$(sed -n "$((n - 3)),$((n + 3))p" "$f") || { echo "gen-rules-praxis: cannot read $f" >&2; exit 1; }
+    grep -qF -- "$slit" <<<"$beside" ||
       { echo "gen-rules-praxis: $f no longer states '$slit' beside '$lit' ($mod/$name)" >&2; exit 1; }
   else
     sf=${sf%#any}
