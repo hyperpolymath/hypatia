@@ -65,13 +65,17 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
 
   # Every lib/ module that sends an Authorization header must turn off
   # automatic redirects on each :httpc request, so a credential never depends
-  # on the runtime pin alone (for example on the OTP 28.3 CI lanes).
+  # on the runtime pin alone (for example on the OTP 28.3 CI lanes). A module
+  # is credentialed when it names the header, or when it takes the header from
+  # a helper (`EchidnabotObligation.auth_headers/0`, used by LearningScheduler
+  # and FleetDispatcher), which the literal alone does not show (Codex on #1195).
+  @credential_marks ~r/authorization|\bauth_headers\(/i
   test "credentialed :httpc callers in lib/ disable automatic redirects" do
     offenders =
       Path.wildcard(Path.expand("../lib/**/*.ex", __DIR__))
       |> Enum.filter(fn path ->
         src = File.read!(path)
-        String.match?(src, ~r/authorization/i) and String.contains?(src, ":httpc.request")
+        String.match?(src, @credential_marks) and String.contains?(src, ":httpc.request")
       end)
       |> Enum.reject(fn path ->
         src = File.read!(path)
@@ -82,6 +86,13 @@ defmodule Hypatia.HttpcRedirectCredentialsTest do
       |> Enum.map(&Path.relative_to_cwd/1)
 
     assert offenders == []
+  end
+
+  test "a caller that takes its header from auth_headers/0 is counted as credentialed" do
+    src = File.read!(Path.expand("../lib/learning_scheduler.ex", __DIR__))
+    refute src =~ ~r/authorization/i
+    assert src =~ @credential_marks
+    assert String.contains?(src, ":httpc.request")
   end
 
   defp follow(method, status, where, cred \\ :header) do

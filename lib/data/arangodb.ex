@@ -83,6 +83,7 @@ defmodule Hypatia.Data.ArangoDB do
     last_sync: nil,
     sync_timer: nil,
     setup_timer: nil,
+    setup_task: nil,
     setup_attempts: 0
   ]
 
@@ -118,16 +119,21 @@ defmodule Hypatia.Data.ArangoDB do
   # every step; a collection or index created by an earlier attempt answers
   # 1207 and is accepted, and an existing graph (1925) is accepted once
   # check_existing_graph/1 has verified it. The sync timer starts only after
-  # setup succeeds.
-  defp setup(state) do
-    result =
-      if reachable?(state) do
-        with {:error, reason} <- ensure_schema(state),
-             do: {:error, "ArangoDB schema initialisation failed: #{inspect(reason)}"}
-      else
-        {:error, "ArangoDB not available at #{state.base_url}"}
-      end
+  # setup succeeds. The first attempt runs in init/1; a retry runs its
+  # network work in a task (see handle_info(:retry_setup, _)).
+  defp setup(state), do: apply_setup(state, run_setup(state))
 
+  # The network part of setup: no state change, so it can run in a task.
+  defp run_setup(state) do
+    if reachable?(state) do
+      with {:error, reason} <- ensure_schema(state),
+           do: {:error, "ArangoDB schema initialisation failed: #{inspect(reason)}"}
+    else
+      {:error, "ArangoDB not available at #{state.base_url}"}
+    end
+  end
+
+  defp apply_setup(state, result) do
     case result do
       :ok ->
         timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
@@ -386,14 +392,28 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
+  # A retry's requests (up to one per collection, index and graph, each with
+  # a 10 s timeout) run in a task, so the server keeps answering calls in
+  # degraded mode while ArangoDB is slow; the result is applied when it
+  # arrives. Task.async links the task, so a crash in it still crashes the
+  # server, as it did when setup ran inline.
   def handle_info(:retry_setup, state) do
-    {:noreply, setup(%{state | setup_timer: nil})}
+    task = Task.async(fn -> run_setup(state) end)
+    {:noreply, %{state | setup_timer: nil, setup_task: task.ref}}
   end
 
+  def handle_info({ref, result}, %{setup_task: ref} = state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, apply_setup(%{state | setup_task: nil}, result)}
+  end
+
+  # The next sync is scheduled after this one returns, so a sync that takes
+  # longer than the interval is never followed by another at once.
   def handle_info(:sync_from_verisimdb, state) do
     if state.connected do
+      state = sync_and_record(state)
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
-      {:noreply, %{sync_and_record(state) | sync_timer: timer}}
+      {:noreply, %{state | sync_timer: timer}}
     else
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
       {:noreply, %{state | sync_timer: timer}}
@@ -469,23 +489,14 @@ defmodule Hypatia.Data.ArangoDB do
   defp ensure_collections_and_graph(state) do
     db_url = db_url(state)
 
-    # Create document collections
-    documents =
-      Enum.map(@document_collections, fn name ->
-        http_post_status("#{db_url}/_api/collection", state.auth_header, %{
-          "name" => name,
-          "type" => 2
-        })
-      end)
-
-    # Create edge collections
-    edges =
-      Enum.map(@edge_collections, fn name ->
-        http_post_status("#{db_url}/_api/collection", state.auth_header, %{
-          "name" => name,
-          "type" => 3
-        })
-      end)
+    # Each resource is read before it is created. Creating a collection, an
+    # index or a graph needs Administrate on the database, which a data-only
+    # user of a pre-provisioned schema lacks (a 403); reading needs only
+    # Access. Only an answer that is the resource itself counts (a collection
+    # of that name and type, a persistent index on those fields, a graph);
+    # anything else is no evidence either way, and the create decides as before.
+    documents = Enum.map(@document_collections, &ensure_collection(state, &1, 2))
+    edges = Enum.map(@edge_collections, &ensure_collection(state, &1, 3))
 
     # Create indices for common queries
     indices = [
@@ -499,17 +510,23 @@ defmodule Hypatia.Data.ArangoDB do
       create_index(state, "bots", ["quarantined"])
     ]
 
-    # Create named graph
+    # The named graph: an existing one is checked, never replaced.
     graph =
-      case http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
-             "name" => @graph_name,
-             "edgeDefinitions" => @graph_edge_definitions
-           }) do
-        {:ok, status, %{"errorNum" => 1925}} when status in 400..499 ->
+      case http_get("#{db_url}/_api/gharial/#{@graph_name}", state.auth_header) do
+        {:ok, %{"graph" => %{}}} ->
           check_existing_graph(state)
 
-        created ->
-          created
+        _absent_or_unknown ->
+          case http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
+                 "name" => @graph_name,
+                 "edgeDefinitions" => @graph_edge_definitions
+               }) do
+            {:ok, status, %{"errorNum" => 1925}} when status in 400..499 ->
+              check_existing_graph(state)
+
+            created ->
+              created
+          end
       end
 
     results = documents ++ edges ++ indices ++ [graph]
@@ -575,13 +592,32 @@ defmodule Hypatia.Data.ArangoDB do
 
   defp schema_result_ok?(_), do: false
 
-  defp create_index(state, collection, fields) do
-    db_url = "#{state.base_url}/_db/#{state.database}"
+  defp ensure_collection(state, name, type) do
+    case http_get("#{db_url(state)}/_api/collection/#{name}", state.auth_header) do
+      {:ok, %{"name" => ^name, "type" => ^type} = existing} ->
+        {:ok, 200, existing}
 
-    http_post_status("#{db_url}/_api/index?collection=#{collection}", state.auth_header, %{
-      "type" => "persistent",
-      "fields" => fields
-    })
+      _absent_or_unknown ->
+        http_post_status("#{db_url(state)}/_api/collection", state.auth_header, %{
+          "name" => name,
+          "type" => type
+        })
+    end
+  end
+
+  # A persistent index on exactly these fields, in this order, already there
+  # is accepted; otherwise it is created.
+  defp create_index(state, collection, fields) do
+    url = "#{db_url(state)}/_api/index?collection=#{collection}"
+
+    with {:ok, %{"indexes" => indexes}} when is_list(indexes) <- http_get(url, state.auth_header),
+         %{} = index <-
+           Enum.find(indexes, &(&1["type"] == "persistent" and &1["fields"] == fields)) do
+      {:ok, 200, index}
+    else
+      _ ->
+        http_post_status(url, state.auth_header, %{"type" => "persistent", "fields" => fields})
+    end
   end
 
   defp do_upsert(state, collection, key, document) do

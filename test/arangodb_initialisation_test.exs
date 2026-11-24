@@ -360,7 +360,7 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
       Process.cancel_timer(state.sync_timer)
     end)
 
-    assert_received {:graph_write, "POST"}
+    # Read first: an existing graph is checked and never written to.
     refute_received {:graph_write, _}
   end
 
@@ -392,7 +392,6 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
 
       assert log =~ "graph_mismatch"
       refute log =~ "schema ensured"
-      assert_received {:graph_write, "POST"}
       refute_received {:graph_write, _}
     end
   end
@@ -443,6 +442,142 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
 
       assert eventually(fn -> :sys.get_state(pid).setup_attempts >= 4 end)
       assert %{connected: false, sync_timer: nil} = :sys.get_state(pid)
+    end)
+  end
+
+  # Codex on #1195: a data-only user (database Access, collection Read/Write)
+  # of a pre-provisioned schema cannot create anything; every create answers
+  # 403. Each resource is read first, so such a user still connects, and no
+  # create is sent.
+  test "a pre-provisioned schema connects a user who may not create anything" do
+    parent = self()
+
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", "/_db/hypatia/_api/database/current" ->
+        {200, %{"error" => false, "result" => %{"name" => "hypatia"}}}
+
+      "GET", "/_db/hypatia/_api/collection/" <> name ->
+        edges = Enum.map(required_edge_definitions(), & &1["collection"])
+        type = if name in edges, do: 3, else: 2
+        {200, %{"error" => false, "name" => name, "type" => type}}
+
+      "GET", "/_db/hypatia/_api/index" ->
+        # The query string is not part of request_path: every collection
+        # answers with every required index, which is enough here.
+        indexes =
+          for fields <- [
+                ["recipe_id", "timestamp"],
+                ["timestamp"],
+                ["recipe_id"],
+                ["repo", "severity"],
+                ["pattern_id"],
+                ["resolved", "timestamp"],
+                ["trust_score"],
+                ["quarantined"]
+              ],
+              do: %{"type" => "persistent", "fields" => fields}
+
+        {200, %{"error" => false, "indexes" => [%{"type" => "primary"} | indexes]}}
+
+      "GET", "/_db/hypatia/_api/gharial/hypatia_graph" ->
+        {200, graph(required_edge_definitions())}
+
+      "POST", path ->
+        send(parent, {:post, path})
+        {403, %{"error" => true, "errorNum" => 11, "errorMessage" => "forbidden"}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      assert state.connected
+      Process.cancel_timer(state.sync_timer)
+    end)
+
+    refute_received {:post, _}
+  end
+
+  test "a resource that is absent is still created, and a 403 then degrades" do
+    serve(fn
+      "GET", "/_api/version" ->
+        {200, %{"server" => "arango"}}
+
+      "GET", "/_db/hypatia/_api/database/current" ->
+        {200, %{"error" => false, "result" => %{"name" => "hypatia"}}}
+
+      "POST", _ ->
+        {403, %{"error" => true, "errorNum" => 11, "errorMessage" => "forbidden"}}
+    end)
+
+    capture_log(fn ->
+      assert {:ok, state} = ArangoDB.init([])
+      refute state.connected
+      cancel(state.setup_timer)
+    end)
+  end
+
+  # Codex on #1195: a retry runs its requests in a task, so a slow ArangoDB
+  # does not stop the server answering. Here the retry's first request takes
+  # 2 s; a call with a 500 ms timeout must still be answered, in degraded mode.
+  test "a slow retry does not block calls" do
+    put_retry_env(10, 10)
+    first = :atomics.new(1, [])
+
+    serve(fn "GET", "/_api/version" ->
+      if :atomics.exchange(first, 1, 1) == 1, do: Process.sleep(2_000)
+      {503, %{"error" => true}}
+    end)
+
+    capture_log(fn ->
+      {:ok, pid} = GenServer.start(ArangoDB, [])
+      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+      assert eventually(fn -> is_reference(:sys.get_state(pid).setup_task) end)
+      assert GenServer.call(pid, :connected?, 500) == false
+    end)
+  end
+
+  # Codex on #1195: the next sync is scheduled after this one returns, so a
+  # slow sync is not followed by another at once. Each upsert here takes
+  # 300 ms; the timer must still have (almost) the whole interval left.
+  test "the next sync is scheduled after the current one finishes" do
+    dir = Path.join(System.tmp_dir!(), "arango_sync_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join([dir, "scans", "r"]))
+    File.write!(Path.join([dir, "scans", "r", "latest.json"]), ~s({"findings": []}))
+    previous = Application.fetch_env(:hypatia, :verisimdb_data_path)
+    Application.put_env(:hypatia, :verisimdb_data_path, dir)
+
+    on_exit(fn ->
+      File.rm_rf!(dir)
+
+      case previous do
+        {:ok, old} -> Application.put_env(:hypatia, :verisimdb_data_path, old)
+        :error -> Application.delete_env(:hypatia, :verisimdb_data_path)
+      end
+    end)
+
+    url =
+      serve(fn "POST", _ ->
+        Process.sleep(300)
+        {201, %{"error" => false, "result" => [%{}]}}
+      end)
+
+    state = %ArangoDB{
+      base_url: url,
+      database: "hypatia",
+      auth_header: "Basic test-dummy",
+      connected: true
+    }
+
+    capture_log(fn ->
+      assert {:noreply, %{sync_timer: timer}} =
+               ArangoDB.handle_info(:sync_from_verisimdb, state)
+
+      left = Process.read_timer(timer)
+      Process.cancel_timer(timer)
+      assert left > 10 * 60 * 1_000 - 150
     end)
   end
 
