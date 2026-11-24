@@ -122,6 +122,37 @@ defmodule Hypatia.ReviewerRedirectTest do
     assert {:ok, "late"} = Reviewer.get_same_origin("#{a}/1", @headers, 3, 5_000)
   end
 
+  # Codex on #1195 asked whether a connect that completes late gets a second
+  # full budget for the response. On OTP 27.3.4.19 it does not: :httpc's
+  # `timeout` bounds connect and response together. This pins that. The
+  # listener's accept queue is full, so the connect stalls until it is
+  # drained (after ~0.5 s; the SYN is retried at ~1 s); the server then never
+  # answers. With a 1 500 ms budget the call must end well before 2 × 1 500.
+  test "a late connect does not get a second budget for the response" do
+    {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, backlog: 0, reuseaddr: true])
+    {:ok, port} = :inet.port(listen)
+    fillers = for _ <- 1..3, do: :gen_tcp.connect(~c"127.0.0.1", port, [active: false], 100)
+
+    drain =
+      spawn(fn ->
+        Process.sleep(500)
+        for _ <- 1..60, do: :gen_tcp.accept(listen, 50)
+        Process.sleep(:infinity)
+      end)
+
+    on_exit(fn ->
+      Process.exit(drain, :kill)
+      for {:ok, s} <- fillers, do: :gen_tcp.close(s)
+    end)
+
+    started = System.monotonic_time(:millisecond)
+
+    assert {:error, {:http_error, :timeout}} =
+             Reviewer.get_same_origin("http://127.0.0.1:#{port}/x", @headers, 3, 1_500)
+
+    assert System.monotonic_time(:millisecond) - started < 2_200
+  end
+
   defp serve(name, respond) do
     pid =
       start_supervised!(

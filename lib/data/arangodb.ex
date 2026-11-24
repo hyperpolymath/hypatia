@@ -592,32 +592,68 @@ defmodule Hypatia.Data.ArangoDB do
 
   defp schema_result_ok?(_), do: false
 
+  # A collection of this name and type is accepted. One of this name but
+  # another type (2 document, 3 edge) is a schema failure, never replaced:
+  # upserts into it would fail. A duplicate-name answer (1207) to the create
+  # is accepted only once a re-read shows the same name and type, as a
+  # duplicate graph is checked by check_existing_graph/1.
   defp ensure_collection(state, name, type) do
-    case http_get("#{db_url(state)}/_api/collection/#{name}", state.auth_header) do
+    case read_collection(state, name) do
       {:ok, %{"name" => ^name, "type" => ^type} = existing} ->
         {:ok, 200, existing}
 
+      {:ok, %{"name" => ^name, "type" => other}} ->
+        {:error, {:collection_type_mismatch, name, other}}
+
       _absent_or_unknown ->
-        http_post_status("#{db_url(state)}/_api/collection", state.auth_header, %{
-          "name" => name,
-          "type" => type
-        })
+        case http_post_status("#{db_url(state)}/_api/collection", state.auth_header, %{
+               "name" => name,
+               "type" => type
+             }) do
+          {:ok, status, %{"errorNum" => 1207}} when status in 400..499 ->
+            check_existing_collection(state, name, type)
+
+          created ->
+            created
+        end
     end
   end
 
-  # A persistent index on exactly these fields, in this order, already there
-  # is accepted; otherwise it is created.
+  defp read_collection(state, name),
+    do: http_get("#{db_url(state)}/_api/collection/#{name}", state.auth_header)
+
+  defp check_existing_collection(state, name, type) do
+    case read_collection(state, name) do
+      {:ok, %{"name" => ^name, "type" => ^type} = existing} ->
+        {:ok, 200, existing}
+
+      {:ok, %{"name" => ^name, "type" => other}} ->
+        {:error, {:collection_type_mismatch, name, other}}
+
+      other ->
+        {:error, {:collection_unreadable, name, other}}
+    end
+  end
+
+  # The index the client needs: persistent, on exactly these fields in this
+  # order, neither unique nor sparse. One already there is accepted; a
+  # unique or sparse one on the same fields is not that index (it rejects
+  # duplicates or leaves documents out), so the default one is created.
   defp create_index(state, collection, fields) do
     url = "#{db_url(state)}/_api/index?collection=#{collection}"
 
     with {:ok, %{"indexes" => indexes}} when is_list(indexes) <- http_get(url, state.auth_header),
-         %{} = index <-
-           Enum.find(indexes, &(&1["type"] == "persistent" and &1["fields"] == fields)) do
+         %{} = index <- Enum.find(indexes, &default_index?(&1, fields)) do
       {:ok, 200, index}
     else
       _ ->
         http_post_status(url, state.auth_header, %{"type" => "persistent", "fields" => fields})
     end
+  end
+
+  defp default_index?(index, fields) do
+    index["type"] == "persistent" and index["fields"] == fields and
+      index["unique"] in [false, nil] and index["sparse"] in [false, nil]
   end
 
   defp do_upsert(state, collection, key, document) do

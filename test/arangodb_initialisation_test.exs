@@ -113,9 +113,19 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
 
   for existing? <- [false, true] do
     test "schema succeeds with existing resources: #{existing?}" do
+      # The first read of a collection finds nothing, as if another client
+      # creates it concurrently; the create then answers 1207 and the re-read
+      # finds it, with the right type.
+      seen = :ets.new(:seen, [:public])
+
       serve(fn
         "GET", "/_api/version" ->
           {200, %{"server" => "arango"}}
+
+        "GET", "/_db/hypatia/_api/collection/" <> name ->
+          if :ets.insert_new(seen, {name}),
+            do: {404, %{"error" => true, "errorNum" => 1203}},
+            else: {200, collection_body(name)}
 
         "POST", path ->
           if unquote(existing?) do
@@ -415,6 +425,12 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
           do: {503, %{"error" => true, "errorNum" => 503}},
           else: {409, %{"error" => true, "errorNum" => 1207}}
 
+      # Readable once the first attempt is over: the retry finds them.
+      "GET", "/_db/hypatia/_api/collection/" <> name ->
+        if :atomics.get(first, 1) == 1,
+          do: {200, collection_body(name)},
+          else: {404, %{"error" => true, "errorNum" => 1203}}
+
       "POST", _ ->
         {201, %{"error" => false}}
     end)
@@ -579,6 +595,110 @@ defmodule Hypatia.Data.ArangoDBInitialisationTest do
       Process.cancel_timer(timer)
       assert left > 10 * 60 * 1_000 - 150
     end)
+  end
+
+  # Codex on #1195: a collection of the right name but the wrong type is a
+  # schema failure, whether the read finds it first or a 1207 sends us back
+  # to read it; it is never replaced.
+  for {label, first_read} <- [{"found by the read", :present}, {"behind a 1207", :absent_first}] do
+    test "a collection of the wrong type is a schema failure (#{label})" do
+      seen = :ets.new(:seen, [:public])
+      parent = self()
+
+      serve(fn
+        "GET", "/_api/version" ->
+          {200, %{"server" => "arango"}}
+
+        "GET", "/_db/hypatia/_api/collection/" <> name ->
+          wrong = %{collection_body(name) | "type" => 5 - collection_body(name)["type"]}
+
+          if unquote(first_read) == :absent_first and :ets.insert_new(seen, {name}),
+            do: {404, %{"error" => true, "errorNum" => 1203}},
+            else: {200, wrong}
+
+        "POST", "/_db/hypatia/_api/collection" ->
+          send(parent, :collection_create)
+          {409, %{"error" => true, "errorNum" => 1207}}
+
+        "POST", _ ->
+          {201, %{"error" => false}}
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, state} = ArangoDB.init([])
+          refute state.connected
+          cancel(state.setup_timer)
+        end)
+
+      assert log =~ "collection_type_mismatch"
+
+      if unquote(first_read) == :present,
+        do: refute_received(:collection_create),
+        else: assert_received(:collection_create)
+    end
+  end
+
+  # Codex on #1195: a unique or sparse index on the same fields is not the
+  # index the client needs, so the default one is still created.
+  for {label, extra} <- [{"unique", %{"unique" => true}}, {"sparse", %{"sparse" => true}}] do
+    test "a #{label} index on the same fields does not stand in for the default one" do
+      parent = self()
+
+      serve(fn
+        "GET", "/_api/version" ->
+          {200, %{"server" => "arango"}}
+
+        "GET", "/_db/hypatia/_api/index" ->
+          # Every required index is there as the default one, except that the
+          # one on ["timestamp"] carries the option.
+          indexes =
+            for fields <- required_index_fields() do
+              index = %{"type" => "persistent", "fields" => fields}
+
+              if fields == ["timestamp"],
+                do: Map.merge(index, unquote(Macro.escape(extra))),
+                else: index
+            end
+
+          {200, %{"error" => false, "indexes" => indexes}}
+
+        "POST", "/_db/hypatia/_api/index" ->
+          send(parent, :index_create)
+          {201, %{"error" => false}}
+
+        "POST", _ ->
+          {201, %{"error" => false}}
+      end)
+
+      capture_log(fn ->
+        assert {:ok, state} = ArangoDB.init([])
+        assert state.connected
+        Process.cancel_timer(state.sync_timer)
+      end)
+
+      # Exactly one create: the default index on ["timestamp"] (outcomes).
+      assert_received :index_create
+      refute_received :index_create
+    end
+  end
+
+  defp required_index_fields do
+    [
+      ["recipe_id", "timestamp"],
+      ["timestamp"],
+      ["recipe_id"],
+      ["repo", "severity"],
+      ["pattern_id"],
+      ["resolved", "timestamp"],
+      ["trust_score"],
+      ["quarantined"]
+    ]
+  end
+
+  defp collection_body(name) do
+    edges = Enum.map(required_edge_definitions(), & &1["collection"])
+    %{"error" => false, "name" => name, "type" => if(name in edges, do: 3, else: 2)}
   end
 
   defp serve_existing_graph(existing) do
