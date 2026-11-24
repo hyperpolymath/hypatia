@@ -15,8 +15,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   the patterns surfaced by commercial / academic research that aren't
   yet covered by the OSS auditors.
 
-  Rule IDs RE001-RE011. RE011 is the one rule here that also reads shell
-  sources, not only workflows.
+  Rule IDs RE001-RE012. RE011 and RE012 are the rules here that also read
+  shell sources, not only workflows.
 
   ## Provenance map
 
@@ -86,6 +86,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
     fail-open in a gate. Flag-only (`:review`, `advisory: true`). Reproduced
     in metadatastician/standards on 2026-11-17; the detector is a port of
     its `scripts/check-pipe-grep-q.sh`.
+  - **RE012** — A here-string fed by a command substitution
+    (`consumer <<<"$(cmd)"`) in a shell source or a workflow `run:` block.
+    Bash keeps only the status of the command the here-string feeds, so a
+    failed `cmd` reads as empty input, under `set -e` and `pipefail` alike.
+    Flag-only (`:review`, `advisory: true`). Raised by CodeRabbit on
+    hyperpolymath/hypatia#1208.
 
   ## Architecture
 
@@ -1887,19 +1893,19 @@ defmodule Hypatia.Rules.ResearchExtensions do
     do: re011_shell_findings(repo_path) ++ re011_workflow_findings(repo_path)
 
   defp re011_shell_findings(repo_path) do
-    for path <- re011_shell_files(repo_path),
+    for path <- shell_files(repo_path),
         rel = Path.relative_to(path, repo_path),
         {:ok, content} <- [File.read(path)],
         lines = String.split(content, "\n"),
         pipefail = re011_script_pipefail(content, "the file does not set it"),
         {line, _offset, text} <- pipe_grep_q_lines(content),
-        not re011_reviewed?(lines, line) do
+        not shell_line_reviewed?(lines, line, "RE011") do
       re011_finding(rel, line, text, pipefail)
     end
   end
 
   # The shell sources of a repo: by name, by directory, by shebang.
-  defp re011_shell_files(repo_path) do
+  defp shell_files(repo_path) do
     {output, _status} =
       System.cmd(
         "find",
@@ -1920,12 +1926,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
       rel = Path.relative_to(path, repo_path)
 
       String.ends_with?(rel, ".sh") or String.starts_with?(rel, ".githooks/") or
-        re011_shell_shebang?(path)
+        shell_shebang?(path)
     end)
     |> Enum.sort()
   end
 
-  defp re011_shell_shebang?(path) do
+  defp shell_shebang?(path) do
     with {:ok, "#!" <> _ = head} <- File.open(path, [:read, :binary], &IO.binread(&1, 256)) do
       Regex.match?(@re011_shebang, head |> String.split("\n", parts: 2) |> hd())
     else
@@ -1939,7 +1945,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         bytes = File.read!(path),
         source = String.split(bytes, "\n"),
         {line, text, pipefail} <- re011_workflow_hits(Workflow.parse(bytes, rel), bytes),
-        not re011_reviewed?(source, line) do
+        not shell_line_reviewed?(source, line, "RE011") do
       re011_finding(rel, line, text, pipefail)
     end
   end
@@ -1948,14 +1954,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp re011_workflow_hits({:ok, nil}, _bytes), do: []
 
   defp re011_workflow_hits({:ok, %Workflow{} = workflow}, _bytes) do
-    workflow_shell = re011_default_shell(workflow.doc)
-
-    for job <- workflow.jobs,
-        # `<- [...]`, not `=`: a nil shell is a value here, not a filter.
-        job_shell <- [re011_default_shell(job.node) || workflow_shell],
-        step <- job.steps,
-        {script, line_of} <- Workflow.strings(re011_child(step.node, "run")),
-        shell <- [Workflow.text(re011_child(step.node, "shell")) || job_shell],
+    for {script, line_of, shell} <- run_scripts(workflow),
         pipefail = re011_step_pipefail(script, shell),
         {_line, offset, text} <- pipe_grep_q_lines(script) do
       {line_of.(offset), text, pipefail}
@@ -1967,6 +1966,23 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp re011_workflow_hits({:error, _error}, bytes) do
     unknown = {:latent, "the workflow could not be read as KYAML, so its shell is unknown"}
     for {line, _offset, text} <- pipe_grep_q_lines(bytes), do: {line, text, unknown}
+  end
+
+  # Every `run:` script of a parsed workflow, as `{script, line_of, shell}`:
+  # `line_of` maps a byte offset in the script to its source line, and
+  # `shell` is the step's `shell:`, else the job's `defaults.run.shell`,
+  # else the workflow's, else nil. Read by RE011 and RE012.
+  defp run_scripts(%Workflow{} = workflow) do
+    workflow_shell = re011_default_shell(workflow.doc)
+
+    for job <- workflow.jobs,
+        # `<- [...]`, not `=`: a nil shell is a value here, not a filter.
+        job_shell <- [re011_default_shell(job.node) || workflow_shell],
+        step <- job.steps,
+        {script, line_of} <- Workflow.strings(re011_child(step.node, "run")),
+        shell <- [Workflow.text(re011_child(step.node, "shell")) || job_shell] do
+      {script, line_of, shell}
+    end
   end
 
   # A mapping's value for `key`, read through an alias as Hypatia.Workflow
@@ -2026,13 +2042,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
   end
 
-  # A line is reviewed when it, or the line above it, carries the directive.
-  defp re011_reviewed?(lines, line) do
+  # A line is reviewed for `rule` when it, or the line above it, carries the
+  # directive. Used by RE011 and RE012.
+  defp shell_line_reviewed?(lines, line, rule) do
     Hypatia.ScannerSuppression.inline_allowed?(
       Enum.at(lines, line - 1),
       line > 1 && Enum.at(lines, line - 2),
       "research_extensions",
-      "RE011"
+      rule
     )
   end
 
@@ -2178,6 +2195,278 @@ defmodule Hypatia.Rules.ResearchExtensions do
     Regex.match?(~r/(?:^|[^|&])\|$/, t) or String.ends_with?(t, "|&")
   end
 
+  # ─── RE012: a here-string fed by a command substitution ─────────────
+
+  @re012_fix "capture, then feed: `out=$(cmd) || <handle the failure>; consumer <<<\"$out\"`"
+
+  # A producer that cannot fail here: a lone `printf` or `echo` builtin with
+  # no redirection, pipe, list or nested substitution (`$var` is allowed).
+  @re012_benign ~r/\A[[:space:]]*(?:printf|echo)(?:[[:space:]]+(?:[^|;&`$<>()]|\$(?!\())*)?[[:space:]]*\z/
+
+  # Steps whose shell is not a POSIX-family shell: `<<<` means nothing there.
+  @re012_not_sh ~w(pwsh powershell python cmd)
+
+  @doc """
+  RE012: a here-string fed by a command substitution, `consumer <<<"$(cmd)"`,
+  in a shell source or in a workflow `run:` block.
+
+  Bash keeps only the status of the command the here-string feeds. The exit
+  status of `cmd` is discarded: `set -e` does not fire on it, `pipefail`
+  does not apply (there is no pipeline), and `shopt -s inherit_errexit` does
+  not change it. A failed `cmd` reads as empty input. `if grep -q BAD
+  <<<"$(scan)"` then reads a crashed scan as "nothing bad"; `while read …;
+  done <<<"$(list)"` runs zero times; `read -r v <<<"$(get)"` leaves `v`
+  empty with status 0. The fix is to capture first, in an assignment, whose
+  status is `cmd`'s: `out=$(cmd) || <handle>; consumer <<<"$out"`.
+  Provenance: CodeRabbit on hyperpolymath/hypatia#1208
+  (`scripts/check-readme-claims.sh`, `tests/rules-praxis-test.sh`); owner
+  decision of 2026-11-24, "a rule, every here-string". Reproduced on bash
+  5.2.21: `bash -ec 'read -r v <<<"$(exit 3)"; echo $?'` prints `0`.
+
+  ## What is read
+
+  The same sources as RE011: every shell source (`*.sh`, `.githooks/`, a
+  shell shebang), and the `run:` script of every step of every workflow,
+  read from the parsed workflow. A step whose shell is `pwsh`, `powershell`,
+  `python` or `cmd` is not read. A workflow the reader refuses is scanned as
+  plain lines.
+
+  ## What is detected
+
+  A `<<<` outside quotes and comments whose word holds a command
+  substitution, `$(…)` or a backquote, anywhere in it: `<<<"$(cmd)"`,
+  `<<< $(cmd)`, `<<<"prefix $(cmd)"`, `` <<<"`cmd`" ``. An arithmetic
+  expansion `$((…))` is not a command. A here-string inside a substitution
+  (`x=$(grep -c . <<<"$(cmd)")`) is read too. Each line is read on its own,
+  with full-line comments ignored.
+
+  Not detected: the word held in a variable; process substitution (`done <
+  <(cmd)`), which loses the status in the same way; a pipe (`cmd | while
+  read`), which is RE011's territory under pipefail. A heredoc body, or a
+  string that spans lines, that spells the form is a false positive.
+
+  ## Severity
+
+  `:warn` (medium), whatever `set -e` or `pipefail` say, since neither
+  reaches the lost status. `:info` when the substitution is a lone `printf`
+  or `echo` with no redirection, pipe, list or nested substitution: that
+  builtin does not fail on a here-string's buffer, so nothing is lost.
+
+  ## Flag-only
+
+  Action `:review`, every finding `advisory: true`, as RE011: the rule names
+  the fix and never applies it, and an advisory finding never counts toward
+  the CLI exit code. A reviewed line carries `hypatia: allow
+  research_extensions/RE012 -- <reason>` (or `hypatia:ignore RE012 --
+  <reason>`) on the line itself or on the line above.
+  """
+  def re012_here_string_substitution(repo_path),
+    do: re012_shell_findings(repo_path) ++ re012_workflow_findings(repo_path)
+
+  defp re012_shell_findings(repo_path) do
+    for path <- shell_files(repo_path),
+        rel = Path.relative_to(path, repo_path),
+        {:ok, content} <- [File.read(path)],
+        lines = String.split(content, "\n"),
+        {line, _offset, text, producer} <- here_string_substitution_lines(content),
+        not shell_line_reviewed?(lines, line, "RE012") do
+      re012_finding(rel, line, text, producer)
+    end
+  end
+
+  defp re012_workflow_findings(repo_path) do
+    for path <- Enum.sort(workflow_files(repo_path)),
+        rel = Path.relative_to(path, repo_path),
+        bytes = File.read!(path),
+        source = String.split(bytes, "\n"),
+        {line, text, producer} <- re012_workflow_hits(Workflow.parse(bytes, rel), bytes),
+        not shell_line_reviewed?(source, line, "RE012") do
+      re012_finding(rel, line, text, producer)
+    end
+  end
+
+  defp re012_workflow_hits({:ok, nil}, _bytes), do: []
+
+  defp re012_workflow_hits({:ok, %Workflow{} = workflow}, _bytes) do
+    for {script, line_of, shell} <- run_scripts(workflow),
+        not re012_not_sh?(shell),
+        {_line, offset, text, producer} <- here_string_substitution_lines(script) do
+      {line_of.(offset), text, producer}
+    end
+  end
+
+  defp re012_workflow_hits({:error, _error}, bytes) do
+    for {line, _offset, text, producer} <- here_string_substitution_lines(bytes),
+        do: {line, text, producer}
+  end
+
+  defp re012_not_sh?(nil), do: false
+
+  defp re012_not_sh?(shell) do
+    shell
+    |> String.split(~r/[[:space:]]+/, trim: true)
+    |> List.first()
+    |> Path.basename()
+    |> then(&(&1 in @re012_not_sh))
+  end
+
+  defp re012_finding(rel, line, text, producer) do
+    benign? = is_binary(producer) and Regex.match?(@re012_benign, producer)
+
+    reason =
+      if benign? do
+        "#{rel}:#{line} feeds a here-string from a lone `printf`/`echo`, which does not " <>
+          "fail here, so no status is lost; a plain expansion says the same. Fix: #{@re012_fix}"
+      else
+        "#{rel}:#{line} feeds a here-string from a command substitution: bash keeps only " <>
+          "the status of the command the here-string feeds, so the substituted command's " <>
+          "failure is discarded (set -e, pipefail and inherit_errexit alike) and reads as " <>
+          "empty input. Fix: #{@re012_fix}"
+      end
+
+    %{
+      rule: "RE012",
+      # Never part of an exit code or a gate: see "Flag-only" in the @doc.
+      advisory: true,
+      file: rel,
+      severity: if(benign?, do: :info, else: :warn),
+      reason: reason,
+      action: :review,
+      detail: %{
+        line: line,
+        text: String.trim(text),
+        producer: producer,
+        strategy: :review,
+        fix: "Flag-only, never applied for you: #{@re012_fix}"
+      }
+    }
+  end
+
+  @doc """
+  The lines of a shell text that feed a here-string from a command
+  substitution, as `{line number, byte offset of the line, line, producer}`.
+  `producer` is the text of the first substitution in the here-string's
+  word, or nil when it does not close on that line (or is a backquote).
+  """
+  def here_string_substitution_lines(text) when is_binary(text) do
+    {hits, _offset} =
+      text
+      |> String.split("\n")
+      |> Enum.with_index(1)
+      |> Enum.reduce({[], 0}, fn {raw, no}, {hits, offset} ->
+        line = String.replace_suffix(raw, "\r", "")
+        next = offset + byte_size(raw) + 1
+
+        if Regex.match?(~r/^[[:space:]]*#/, line) do
+          {hits, next}
+        else
+          case hs_walk(line, :none, true) do
+            {:hit, producer} -> {[{no, offset, line, producer} | hits], next}
+            :none -> {hits, next}
+          end
+        end
+      end)
+
+    Enum.reverse(hits)
+  end
+
+  # Walk a line in a quote state (:none, :single, :double); `word_start?` is
+  # true at the start of the line or after blank space, where `#` opens a
+  # comment. Returns {:hit, producer} at the first here-string fed by a
+  # command substitution, else :none.
+  defp hs_walk(<<>>, _state, _ws), do: :none
+  defp hs_walk(<<?', rest::binary>>, :single, _ws), do: hs_walk(rest, :none, false)
+  defp hs_walk(<<_, rest::binary>>, :single, _ws), do: hs_walk(rest, :single, false)
+  defp hs_walk(<<?\\, _, rest::binary>>, state, _ws), do: hs_walk(rest, state, false)
+  defp hs_walk(<<?\\>>, _state, _ws), do: :none
+  defp hs_walk(<<?", rest::binary>>, :double, _ws), do: hs_walk(rest, :none, false)
+  defp hs_walk(<<?", rest::binary>>, :none, _ws), do: hs_walk(rest, :double, false)
+  defp hs_walk(<<?', rest::binary>>, :none, _ws), do: hs_walk(rest, :single, false)
+  defp hs_walk(<<?#, _::binary>>, :none, true), do: :none
+
+  defp hs_walk(<<"<<<", rest::binary>>, :none, _ws) do
+    case hs_word(String.trim_leading(rest), :none) do
+      {:hit, _} = hit -> hit
+      :none -> hs_walk(rest, :none, false)
+    end
+  end
+
+  # A substitution in :none or :double: read inside it as a fresh line, then
+  # go on after it in the state we were in.
+  defp hs_walk(<<"$(", rest::binary>>, state, _ws) do
+    case hs_close(rest) do
+      {inner, after_} ->
+        with :none <- hs_walk(inner, :none, true), do: hs_walk(after_, state, false)
+
+      :open ->
+        hs_walk(rest, :none, true)
+    end
+  end
+
+  defp hs_walk(<<c, rest::binary>>, state, _ws),
+    do: hs_walk(rest, state, c in [?\s, ?\t, ?;, ?&, ?|, ?(])
+
+  # The word after `<<<`: a hit when it holds `$(` (not `$((`) or a backquote.
+  defp hs_word(<<>>, _state), do: :none
+  defp hs_word(<<?\\, _, rest::binary>>, state), do: hs_word(rest, state)
+  defp hs_word(<<"$((", rest::binary>>, state), do: hs_word(hs_skip_arith(rest), state)
+
+  defp hs_word(<<"$(", rest::binary>>, state) when state in [:none, :double] do
+    case hs_close(rest) do
+      {inner, _} -> {:hit, inner}
+      :open -> {:hit, nil}
+    end
+  end
+
+  defp hs_word(<<?`, _::binary>>, state) when state in [:none, :double], do: {:hit, nil}
+  defp hs_word(<<?", rest::binary>>, :none), do: hs_word(rest, :double)
+  defp hs_word(<<?", rest::binary>>, :double), do: hs_word(rest, :none)
+  defp hs_word(<<?', rest::binary>>, :none), do: hs_word(rest, :single)
+  defp hs_word(<<?', rest::binary>>, :single), do: hs_word(rest, :none)
+
+  defp hs_word(<<c, _::binary>>, :none) when c in [?\s, ?\t, ?;, ?&, ?|, ?), ?<, ?>],
+    do: :none
+
+  defp hs_word(<<_, rest::binary>>, state), do: hs_word(rest, state)
+
+  defp hs_skip_arith(text) do
+    case hs_close("(" <> text) do
+      {_inner, <<?), after_::binary>>} -> after_
+      {_inner, after_} -> after_
+      :open -> ""
+    end
+  end
+
+  # The text after `$(` up to its matching `)`, as {inner, after}, or :open
+  # when the line ends first. Quotes inside are honoured.
+  defp hs_close(text), do: hs_close(text, 0, :none, [])
+
+  defp hs_close(<<>>, _depth, _state, _acc), do: :open
+
+  defp hs_close(<<?), rest::binary>>, 0, :none, acc),
+    do: {acc |> Enum.reverse() |> IO.iodata_to_binary(), rest}
+
+  defp hs_close(<<c, rest::binary>>, depth, state, acc) do
+    {depth, state} =
+      case {c, state} do
+        {?', :none} -> {depth, :single}
+        {?', :single} -> {depth, :none}
+        {?", :none} -> {depth, :double}
+        {?", :double} -> {depth, :none}
+        {?(, :none} -> {depth + 1, :none}
+        {?), :none} -> {depth - 1, :none}
+        _ -> {depth, state}
+      end
+
+    case {c, rest, state} do
+      {?\\, <<n, rest2::binary>>, s} when s != :single ->
+        hs_close(rest2, depth, state, [n, c | acc])
+
+      _ ->
+        hs_close(rest, depth, state, [c | acc])
+    end
+  end
+
   # ─── Scan facade ────────────────────────────────────────────────────
 
   @doc """
@@ -2204,7 +2493,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
         re008_spoofable_bot_gate(repo_path) ++
         re009_fromjson_secret(repo_path) ++
         re010_workflow_run_artifact_no_provenance(repo_path) ++
-        re011_pipe_into_quiet_grep(repo_path)
+        re011_pipe_into_quiet_grep(repo_path) ++
+        re012_here_string_substitution(repo_path)
 
     %{
       findings: findings,

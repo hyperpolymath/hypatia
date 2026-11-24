@@ -3,7 +3,7 @@
 
 = Hypatia rule catalogue
 
-Generated from `+lib/rules/*.ex+` on 2026-11-18. Regenerate with:
+Generated from `+lib/rules/*.ex+` on 2026-11-24. Regenerate with:
 
 [source,bash]
 ----
@@ -43,7 +43,7 @@ a blank ID column means the module emits atom-keyed findings rather than prefixe
 |`+pr_automerge+` |— |Decide whether a pull request is an unambiguous bump or chore that may be
 |`+proof_obligation+` |— |ProofObligation recipe type for Hypatia.
 |`+proof_strategy_selection+` |— |Prover-strategy selection from VeriSimDB historical outcomes.
-|`+research_extensions+` |RE001 RE002 RE003 RE004 RE005 RE006 RE007 RE008 RE009 RE010 RE011 |Static detection of GitHub Actions workflow defects sourced from
+|`+research_extensions+` |RE001 RE002 RE003 RE004 RE005 RE006 RE007 RE008 RE009 RE010 RE011 RE012 |Static detection of GitHub Actions workflow defects sourced from
 |`+root_hygiene+` |ERR-GIT-001 |Root directory hygiene enforcement rules.
 |`+rsr_conformance+` |— |The RSR v2.0 conformance **oracle** (increment 3 of the HYP-S family):
 |`+rsr_criteria+` |— |Loads the **RSR v2.0 criteria SSOT** (`rsr-criteria-v2.a2ml` from
