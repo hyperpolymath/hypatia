@@ -75,7 +75,8 @@ for fixture in "$ROOT"/test/fixtures/ci-health/allowlist/*.json; do
 
   # Idempotent: a second run finds nothing missing and writes nothing.
   : > "$STATE_DIR/puts.log"
-  grep -q '^SKIP ' <<<"$(remediate)" || { echo "FAIL [$name]: second run was not a no-op" >&2; exit 1; }
+  again=$(remediate) || { echo "FAIL [$name]: the second run failed" >&2; exit 1; }
+  grep -q '^SKIP ' <<<"$again" || { echo "FAIL [$name]: second run was not a no-op" >&2; exit 1; }
   [[ ! -s "$STATE_DIR/puts.log" ]] || { echo "FAIL [$name]: second run wrote" >&2; exit 1; }
 
   # Converges with detect.sh: B-ALLOWLIST no longer fires.
@@ -147,10 +148,11 @@ put_paths=$(grep '^PUT ' "$STATE_DIR/writes.log" | cut -d' ' -f2 | sort | paste 
 grep -qx 'POST repos/test-owner/test-repo/git/refs | ref=refs/heads/ci/ci-health-auto-remediation | sha=cafe0001' "$STATE_DIR/writes.log" ||
   { echo "FAIL [D-BURN]: the branch was not cut from the commit the patches were read at" >&2; exit 1; }
 put_content() { # the decoded content written to <file>
-  local file=$1 line
+  local file=$1 line json
   line=$(grep "^PUT repos/test-owner/test-repo/contents/.github/workflows/$file " "$STATE_DIR/writes.log") ||
     { echo "FAIL [D-BURN]: no PUT for $file" >&2; exit 1; }
-  jq -r . <<<"$(sed -E 's/.* \| content=(".*") \| sha=.*/\1/' <<<"$line")"
+  json=$(sed -E 's/.* \| content=(".*") \| sha=.*/\1/' <<<"$line")
+  jq -r . <<<"$json"
 }
 for f in commented.yml has-concurrency.yml; do
   written=$(put_content "$f")

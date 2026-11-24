@@ -790,8 +790,9 @@ jobs:
               failed=1
             fi
           done
+          job_lines=$(printf '%s\n' "${all_jobs[@]}")
           for j in $needs_list; do
-            if ! grep -qx -- "$j" <<<"$(printf '%s\n' "${all_jobs[@]}")"; then
+            if ! grep -qx -- "$j" <<<"$job_lines"; then
               echo "::error::aggregator needs '$j' but no such job exists in this workflow (#847)."
               failed=1
             fi
