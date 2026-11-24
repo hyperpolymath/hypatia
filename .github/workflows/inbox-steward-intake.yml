@@ -53,7 +53,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -62,7 +62,7 @@ jobs:
             api.github.com:443
 
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -136,7 +136,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -147,7 +147,7 @@ jobs:
       # Read-only: nothing is pushed from this job, so the checkout needs no
       # PAT and keeps none in .git/config.
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -247,7 +247,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -256,7 +256,7 @@ jobs:
             api.github.com:443
 
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -309,7 +309,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # One gh api call: the dispatch to .git-private-farm.
