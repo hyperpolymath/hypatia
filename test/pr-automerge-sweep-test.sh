@@ -111,7 +111,7 @@ threads() { # PR NODES HAS_NEXT_PAGE
 }
 estate() { # head sha of PR 7
   put orgs__hyperpolymath__repos '[{"name":"r","fork":false,"disabled":false,"archived":false}]'
-  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1"),$(pr 13 'dependabot[bot]' "$SHA1"),$(pr 14 'dependabot[bot]' "$SHA1"),$(pr 15 'dependabot[bot]' "$SHA1"),$(pr 16 'dependabot[bot]' "$SHA1"),$(pr 17 'dependabot[bot]' "$SHA1")]"
+  put repos__hyperpolymath__r__pulls "[$(pr 7 'dependabot[bot]' "$1"),$(pr 8 alice "$SHA1"),$(pr 9 'dependabot[bot]' "$SHA1"),$(pr 10 'dependabot[bot]' "$SHA1"),$(pr 11 'dependabot[bot]' "$SHA1"),$(pr 12 'dependabot[bot]' "$SHA1"),$(pr 13 'dependabot[bot]' "$SHA1"),$(pr 14 'dependabot[bot]' "$SHA1"),$(pr 15 'dependabot[bot]' "$SHA1"),$(pr 16 'dependabot[bot]' "$SHA1"),$(pr 17 'dependabot[bot]' "$SHA1"),$(pr 18 'dependabot[bot]' "$SHA1"),$(pr 19 'dependabot[bot]' "$SHA1")]"
   put repos__hyperpolymath__r '{"archived":false,"default_branch":"main"}'
   put repos__hyperpolymath__r__pulls__7 "$(pr 7 'dependabot[bot]' "$1")"
   put repos__hyperpolymath__r__pulls__8 "$(pr 8 alice "$SHA1")"
@@ -132,11 +132,17 @@ estate() { # head sha of PR 7
   put repos__hyperpolymath__r__pulls__16__files '[{"filename":"docs/package.json","patch":"@@ -1 +1 @@\n-\"a\": \"1\"\n+\"a\": \"2\""}]'
   put repos__hyperpolymath__r__pulls__17 "$(pr 17 'dependabot[bot]' "$SHA1")"
   put repos__hyperpolymath__r__pulls__17__files '[{"filename":"requirements.txt","patch":"@@ -1 +1 @@\n-a==1.0\n+a==1.1"}]'
+  # A workflow edit that is not a pin substitution is `meta` (the decision
+  # contract): a doc file under .github/workflows/ is otherwise meta_only.
+  put repos__hyperpolymath__r__pulls__18 "$(pr 18 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__18__files '[{"filename":".github/workflows/README.md","patch":"@@ -1 +1 @@\n-old\n+new"}]'
+  put repos__hyperpolymath__r__pulls__19 "$(pr 19 'dependabot[bot]' "$SHA1")"
+  put repos__hyperpolymath__r__pulls__19__files '[{"filename":".github/workflows/ci.yml","patch":"@@ -1 +1 @@\n-    runs-on: a\n+    runs-on: b"}]'
   put repos__hyperpolymath__r__pulls__9__files '[{"filename":"go.sum","patch":"@@ -1 +1 @@\n-h1:old\n+h1:new"}]'
   put search__issues '{"total_count":2}'
   for n in 7 8; do put "repos__hyperpolymath__r__pulls__${n}__files" '[{"filename":"Cargo.lock","patch":"@@ -1 +1 @@\n-version = \"1.0.199\"\n+version = \"1.0.200\""}]'; done
   # R6: every PR's review threads resolved unless a case says otherwise
-  for n in 7 8 9 10 11 12 13 14 15 16 17; do threads "$n" '[{"isResolved":true}]' false; done
+  for n in 7 8 9 10 11 12 13 14 15 16 17 18 19; do threads "$n" '[{"isResolved":true}]' false; done
   # the merge_ready fixtures, for hyperpolymath/r
   for f in "$FIX"/repos__o__r__*; do cp "$f" "${f/repos__o__r__/repos__hyperpolymath__r__}"; done
 }
@@ -157,6 +163,12 @@ done
 for n in 16 17; do
   [ "$(disp $n)" = "flag/dependency_manifest_not_lockfile" ] || fail "a dependency manifest is never documentation: PR $n must be flagged, got $(disp $n)"
 done
+level() { jq -r --argjson n "$1" 'select(.pr.number == $n) | .change_level' "$WORK/out/pr-decisions.jsonl"; }
+[ "$(disp 18)" = "flag/meta_no_pin_exemption" ] || fail "a doc under .github/workflows/ is meta, not auto_merge: PR 18 got $(disp 18)"
+for n in 18 19; do
+  [ "$(level $n)" = "meta" ] || fail "a non-pin workflow edit is change_level meta: PR $n got $(level $n)"
+done
+[ "$(level 12)" != "meta" ] || fail "docs/guide.md is not a workflow edit: PR 12 must not be meta"
 cp "$WORK/out/pr-decisions.jsonl" "$WORK/plan.jsonl"
 
 rm -f "$FIX/pr.log"; run --execute --from "$WORK/plan.jsonl"
