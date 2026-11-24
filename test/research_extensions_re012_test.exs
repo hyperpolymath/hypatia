@@ -38,7 +38,7 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
   defp scan(files), do: files |> repo() |> ResearchExtensions.re012_here_string_substitution()
 
   defp lines(text),
-    do: text |> ResearchExtensions.here_string_substitution_lines() |> Enum.map(&elem(&1, 3))
+    do: text |> ResearchExtensions.here_string_substitution_lines() |> Enum.flat_map(&elem(&1, 3))
 
   # ─── The claim, checked against bash ────────────────────────────────
 
@@ -79,17 +79,30 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"unquoted, after a blank", ~S/read -r v <<< $(get a)/, "get a"},
           {"text before the substitution", ~S/cat <<<"pre $(cmd) post"/, "cmd"},
           {"after a ${var}", ~S/cat <<<"${v}$(z)"/, "z"},
-          {"a backquote", ~S/cat <<<"pre `cmd`"/, nil},
+          {"a backquote", ~S/cat <<<"pre `cmd`"/, "cmd"},
           {"inside an assignment's substitution", ~S/n=$(grep -c . <<<"$(cmd)")/, "cmd"},
           {"after an earlier here-string", ~S/y=$(a <<<b) && grep x <<<"$(z)"/, "z"},
           {"a quoted ) inside", ~S/cat <<<"a$(b "c)d" e)"/, ~S/b "c)d" e/},
           {"a substitution left open at the end of the line", ~S/cat <<<"$(/, nil},
           {"a carriage return at the end", "grep -q x <<<\"$(cmd)\"\r", "cmd"},
-          {"after a quoted word with ''", ~S/echo 'it''s' <<<"$(a)"/, "a"}
+          {"after a quoted word with ''", ~S/echo 'it''s' <<<"$(a)"/, "a"},
+          # Codex on #1232: a backslash escapes nothing inside single quotes,
+          # so the quote after it closes them and the substitution runs.
+          {"a backslash at the end of a single-quoted part", ~S/cat <<<'foo\'$(cmd)/, "cmd"},
+          # Codex on #1232: arithmetic runs no command, but one inside it does.
+          {"a substitution inside an arithmetic expansion", ~S/cat <<<"$(( $(count) + 1 ))"/,
+           "count"},
+          # CodeRabbit on #1232: a backquote body is a command.
+          {"a here-string inside a backquote body", ~S/r="`cat <<<"$(cmd)"`"/, "cmd"}
         ] do
       test label do
         assert [unquote(producer)] == lines(unquote(line))
       end
+    end
+
+    test "every here-string on one line, and every substitution in a word (#1232 review)" do
+      assert ["echo safe", "scan"] == lines(~S/cat <<<"$(echo safe)"; cat <<<"$(scan)"/)
+      assert ["printf '%s' p", "scan"] == lines(~S/cat <<<"$(printf '%s' p)$(scan)"/)
     end
 
     test "every here-string of a file, each at its own line" do
@@ -110,6 +123,7 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"a here-string from a literal", ~S/cat <<<"done"/},
           {"<<< inside double quotes", ~S/echo "<<<$(x)"/},
           {"<<< inside single quotes", ~S/grep -F '<<<"$(' f/},
+          {"a substitution inside single quotes after <<<", ~S/cat <<<'$(x)'/},
           {"an arithmetic expansion", ~S/cat <<<"$((1 + 2))"/},
           {"a full-line comment", ~S/# grep -q x <<<"$(c)"/},
           {"a trailing comment", ~S/f  # grep <<<"$(c)"/},
@@ -145,10 +159,33 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"a pipe", ~S/cat <<<"$(printf x | cmd)"/},
           {"a list", ~S/cat <<<"$(printf x; cmd)"/},
           {"a nested substitution", ~S/cat <<<"$(echo "$(cmd)")"/},
-          {"a backquote", ~S/cat <<<"`echo x`"/}
+          {"a backquote around a pipe", ~S/cat <<<"`echo x | cmd`"/}
         ] do
       test "printf or echo with #{label} is :warn" do
         assert [%{severity: :warn}] = scan([{"s.sh", script([unquote(line)])}])
+      end
+    end
+
+    # Codex and CodeRabbit on #1232: printf fails on a bad conversion or option.
+    for {label, line} <- [
+          {"a numeric conversion", ~S/cat <<<"$(printf '%d\n' "$n")"/},
+          {"an option", ~S/cat <<<"$(printf -Z)"/},
+          {"-v", ~S/cat <<<"$(printf -v x '%s' y)"/},
+          {"an unquoted format", ~S/cat <<<"$(printf $fmt x)"/},
+          {"a format from a variable", ~S/cat <<<"$(printf "$fmt" x)"/}
+        ] do
+      test "printf with #{label} can fail: :warn" do
+        assert [%{severity: :warn}] = scan([{"s.sh", script([unquote(line)])}])
+      end
+    end
+
+    test "one failing substitution on the line makes it :warn, and is the one named" do
+      for line <- [
+            ~S/cat <<<"$(echo safe)"; cat <<<"$(scan)"/,
+            ~S/cat <<<"$(printf '%s' p)$(scan)"/
+          ] do
+        assert [%{severity: :warn, detail: %{producer: "scan", producers: [_, "scan"]}}] =
+                 scan([{"s.sh", script([line])}])
       end
     end
 
@@ -193,6 +230,22 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
         """
 
         assert [] == workflow(wf), shell
+      end
+    end
+
+    test "an empty shell: is not a reason to skip, nor to crash (#1232 review)" do
+      for shell <- ["''", "' '"] do
+        wf = """
+        on: push
+        jobs:
+          t:
+            runs-on: ubuntu-latest
+            steps:
+              - shell: #{shell}
+                run: grep -q x <<<"$(cmd)"
+        """
+
+        assert [%{detail: %{line: 7}}] = workflow(wf), shell
       end
     end
 

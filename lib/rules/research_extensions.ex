@@ -2199,9 +2199,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   @re012_fix "capture, then feed: `out=$(cmd) || <handle the failure>; consumer <<<\"$out\"`"
 
-  # A producer that cannot fail here: a lone `printf` or `echo` builtin with
-  # no redirection, pipe, list or nested substitution (`$var` is allowed).
-  @re012_benign ~r/\A[[:space:]]*(?:printf|echo)(?:[[:space:]]+(?:[^|;&`$<>()]|\$(?!\())*)?[[:space:]]*\z/
+  # A producer that cannot fail here: a lone `echo`, or a `printf` whose format
+  # is a quoted literal converting only `%s` (and `%%`), with no option,
+  # redirection, pipe, list or nested substitution (`$var` is allowed).
+  @re012_benign ~r/\A[[:space:]]*(?:echo|printf[[:space:]]+(?:'(?:[^'%]|%%|%s)*'|"(?:[^"%$`\\]|\\.|%%|%s)*"))(?:[[:space:]]+(?:[^|;&`$<>()]|\$(?!\())*)?[[:space:]]*\z/
 
   # Steps whose shell is not a POSIX-family shell: `<<<` means nothing there.
   @re012_not_sh ~w(pwsh powershell python cmd)
@@ -2236,9 +2237,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   A `<<<` outside quotes and comments whose word holds a command
   substitution, `$(…)` or a backquote, anywhere in it: `<<<"$(cmd)"`,
   `<<< $(cmd)`, `<<<"prefix $(cmd)"`, `` <<<"`cmd`" ``. An arithmetic
-  expansion `$((…))` is not a command. A here-string inside a substitution
-  (`x=$(grep -c . <<<"$(cmd)")`) is read too. Each line is read on its own,
-  with full-line comments ignored.
+  expansion `$((…))` runs no command, but a substitution inside it does and
+  is read (`<<<"$(( $(count) + 1 ))"`). A here-string inside a substitution
+  or a backquote body (`x=$(grep -c . <<<"$(cmd)")`) is read too. Every
+  here-string on a line, and every substitution in its word, is read; the
+  finding lists them all. A backslash escapes nothing inside single quotes.
+  Each line is read on its own, with full-line comments ignored.
 
   Not detected: the word held in a variable; process substitution (`done <
   <(cmd)`), which loses the status in the same way; a pipe (`cmd | while
@@ -2248,9 +2252,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
   ## Severity
 
   `:warn` (medium), whatever `set -e` or `pipefail` say, since neither
-  reaches the lost status. `:info` when the substitution is a lone `printf`
-  or `echo` with no redirection, pipe, list or nested substitution: that
-  builtin does not fail on a here-string's buffer, so nothing is lost.
+  reaches the lost status. `:info` only when every substitution on the line
+  is a lone `echo`, or a `printf` whose format is a quoted literal converting
+  only `%s` (and `%%`), each with no option, redirection, pipe, list or
+  nested substitution: neither fails then, so nothing is lost. Any other
+  `printf` can fail (`printf '%d' x`, an unknown option) and is `:warn`.
 
   ## Flag-only
 
@@ -2268,9 +2274,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
         rel = Path.relative_to(path, repo_path),
         {:ok, content} <- [File.read(path)],
         lines = String.split(content, "\n"),
-        {line, _offset, text, producer} <- here_string_substitution_lines(content),
+        {line, _offset, text, producers} <- here_string_substitution_lines(content),
         not shell_line_reviewed?(lines, line, "RE012") do
-      re012_finding(rel, line, text, producer)
+      re012_finding(rel, line, text, producers)
     end
   end
 
@@ -2279,9 +2285,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
         rel = Path.relative_to(path, repo_path),
         bytes = File.read!(path),
         source = String.split(bytes, "\n"),
-        {line, text, producer} <- re012_workflow_hits(Workflow.parse(bytes, rel), bytes),
+        {line, text, producers} <- re012_workflow_hits(Workflow.parse(bytes, rel), bytes),
         not shell_line_reviewed?(source, line, "RE012") do
-      re012_finding(rel, line, text, producer)
+      re012_finding(rel, line, text, producers)
     end
   end
 
@@ -2290,33 +2296,39 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp re012_workflow_hits({:ok, %Workflow{} = workflow}, _bytes) do
     for {script, line_of, shell} <- run_scripts(workflow),
         not re012_not_sh?(shell),
-        {_line, offset, text, producer} <- here_string_substitution_lines(script) do
-      {line_of.(offset), text, producer}
+        {_line, offset, text, producers} <- here_string_substitution_lines(script) do
+      {line_of.(offset), text, producers}
     end
   end
 
   defp re012_workflow_hits({:error, _error}, bytes) do
-    for {line, _offset, text, producer} <- here_string_substitution_lines(bytes),
-        do: {line, text, producer}
+    for {line, _offset, text, producers} <- here_string_substitution_lines(bytes),
+        do: {line, text, producers}
   end
 
   defp re012_not_sh?(nil), do: false
 
+  # An empty or blank `shell:` names no executable: the script is still read.
   defp re012_not_sh?(shell) do
-    shell
-    |> String.split(~r/[[:space:]]+/, trim: true)
-    |> List.first()
-    |> Path.basename()
-    |> then(&(&1 in @re012_not_sh))
+    case String.split(shell, ~r/[[:space:]]+/, trim: true) do
+      [] -> false
+      [first | _] -> Path.basename(first) in @re012_not_sh
+    end
   end
 
-  defp re012_finding(rel, line, text, producer) do
-    benign? = is_binary(producer) and Regex.match?(@re012_benign, producer)
+  # True when a substitution's command cannot fail on its own: see @re012_benign.
+  defp re012_benign?(producer), do: is_binary(producer) and Regex.match?(@re012_benign, producer)
+
+  defp re012_finding(rel, line, text, producers) do
+    benign? = Enum.all?(producers, &re012_benign?/1)
+    # The producer the finding names: the first that can fail, else the first.
+    producer = Enum.find(producers, hd(producers), &(not re012_benign?(&1)))
 
     reason =
       if benign? do
-        "#{rel}:#{line} feeds a here-string from a lone `printf`/`echo`, which does not " <>
-          "fail here, so no status is lost; a plain expansion says the same. Fix: #{@re012_fix}"
+        "#{rel}:#{line} feeds a here-string from a lone `echo`, or a `printf` whose " <>
+          "format converts only `%s`, which does not fail here, so no status is lost; " <>
+          "a plain expansion says the same. Fix: #{@re012_fix}"
       else
         "#{rel}:#{line} feeds a here-string from a command substitution: bash keeps only " <>
           "the status of the command the here-string feeds, so the substituted command's " <>
@@ -2336,6 +2348,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         line: line,
         text: String.trim(text),
         producer: producer,
+        producers: producers,
         strategy: :review,
         fix: "Flag-only, never applied for you: #{@re012_fix}"
       }
@@ -2344,9 +2357,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   @doc """
   The lines of a shell text that feed a here-string from a command
-  substitution, as `{line number, byte offset of the line, line, producer}`.
-  `producer` is the text of the first substitution in the here-string's
-  word, or nil when it does not close on that line (or is a backquote).
+  substitution, as `{line number, byte offset of the line, line, producers}`.
+  `producers` lists, in order, the text of every command substitution in the
+  word of every such here-string on the line: a substitution inside an
+  arithmetic expansion counts, and nil stands for one that does not close on
+  the line.
   """
   def here_string_substitution_lines(text) when is_binary(text) do
     {hits, _offset} =
@@ -2357,13 +2372,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
         line = String.replace_suffix(raw, "\r", "")
         next = offset + byte_size(raw) + 1
 
-        if Regex.match?(~r/^[[:space:]]*#/, line) do
-          {hits, next}
-        else
-          case hs_walk(line, :none, true) do
-            {:hit, producer} -> {[{no, offset, line, producer} | hits], next}
-            :none -> {hits, next}
-          end
+        producers =
+          if Regex.match?(~r/^[[:space:]]*#/, line), do: [], else: hs_walk(line, :none, true)
+
+        case producers do
+          [] -> {hits, next}
+          _ -> {[{no, offset, line, producers} | hits], next}
         end
       end)
 
@@ -2372,70 +2386,88 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # Walk a line in a quote state (:none, :single, :double); `word_start?` is
   # true at the start of the line or after blank space, where `#` opens a
-  # comment. Returns {:hit, producer} at the first here-string fed by a
-  # command substitution, else :none.
-  defp hs_walk(<<>>, _state, _ws), do: :none
+  # comment. Returns the producers of every here-string fed by a command
+  # substitution, in order; [] when there is none.
+  defp hs_walk(<<>>, _state, _ws), do: []
   defp hs_walk(<<?', rest::binary>>, :single, _ws), do: hs_walk(rest, :none, false)
   defp hs_walk(<<_, rest::binary>>, :single, _ws), do: hs_walk(rest, :single, false)
   defp hs_walk(<<?\\, _, rest::binary>>, state, _ws), do: hs_walk(rest, state, false)
-  defp hs_walk(<<?\\>>, _state, _ws), do: :none
+  defp hs_walk(<<?\\>>, _state, _ws), do: []
   defp hs_walk(<<?", rest::binary>>, :double, _ws), do: hs_walk(rest, :none, false)
   defp hs_walk(<<?", rest::binary>>, :none, _ws), do: hs_walk(rest, :double, false)
   defp hs_walk(<<?', rest::binary>>, :none, _ws), do: hs_walk(rest, :single, false)
-  defp hs_walk(<<?#, _::binary>>, :none, true), do: :none
+  defp hs_walk(<<?#, _::binary>>, :none, true), do: []
 
-  defp hs_walk(<<"<<<", rest::binary>>, :none, _ws) do
-    case hs_word(String.trim_leading(rest), :none) do
-      {:hit, _} = hit -> hit
-      :none -> hs_walk(rest, :none, false)
-    end
-  end
+  # The word's own producers, then the rest of the line from just after `<<<`,
+  # so a here-string inside one of the word's substitutions is read too.
+  defp hs_walk(<<"<<<", rest::binary>>, :none, _ws),
+    do: hs_word(String.trim_leading(rest), :none) ++ hs_walk(rest, :none, false)
 
-  # A substitution in :none or :double: read inside it as a fresh line, then
-  # go on after it in the state we were in.
-  defp hs_walk(<<"$(", rest::binary>>, state, _ws) do
-    case hs_close(rest) do
-      {inner, after_} ->
-        with :none <- hs_walk(inner, :none, true), do: hs_walk(after_, state, false)
+  # A command substitution or a backquote body, in :none or :double: read its
+  # body as a fresh line, then go on after it in the state we were in.
+  defp hs_walk(<<"$(", rest::binary>>, state, _ws), do: hs_walk_body(hs_close(rest), rest, state)
 
-      :open ->
-        hs_walk(rest, :none, true)
-    end
-  end
+  defp hs_walk(<<?`, rest::binary>>, state, _ws),
+    do: hs_walk_body(hs_backquote(rest), rest, state)
 
   defp hs_walk(<<c, rest::binary>>, state, _ws),
     do: hs_walk(rest, state, c in [?\s, ?\t, ?;, ?&, ?|, ?(])
 
-  # The word after `<<<`: a hit when it holds `$(` (not `$((`) or a backquote.
-  defp hs_word(<<>>, _state), do: :none
-  defp hs_word(<<?\\, _, rest::binary>>, state), do: hs_word(rest, state)
-  defp hs_word(<<"$((", rest::binary>>, state), do: hs_word(hs_skip_arith(rest), state)
+  defp hs_walk_body({inner, after_}, _rest, state),
+    do: hs_walk(inner, :none, true) ++ hs_walk(after_, state, false)
 
-  defp hs_word(<<"$(", rest::binary>>, state) when state in [:none, :double] do
-    case hs_close(rest) do
-      {inner, _} -> {:hit, inner}
-      :open -> {:hit, nil}
+  defp hs_walk_body(:open, rest, _state), do: hs_walk(rest, :none, true)
+
+  # The producers of the word after `<<<`: each `$(…)` or backquote in it,
+  # including those inside an arithmetic expansion, whose own `$((…))` runs no
+  # command. A backslash escapes the next byte except inside single quotes.
+  defp hs_word(<<>>, _state), do: []
+  defp hs_word(<<?', rest::binary>>, :single), do: hs_word(rest, :none)
+  defp hs_word(<<_, rest::binary>>, :single), do: hs_word(rest, :single)
+  defp hs_word(<<?\\, _, rest::binary>>, state), do: hs_word(rest, state)
+
+  defp hs_word(<<"$((", rest::binary>>, state) do
+    case hs_close("(" <> rest) do
+      {inner, <<?), after_::binary>>} -> hs_subs(inner) ++ hs_word(after_, state)
+      {inner, after_} -> hs_subs(inner) ++ hs_word(after_, state)
+      :open -> hs_subs(rest)
     end
   end
 
-  defp hs_word(<<?`, _::binary>>, state) when state in [:none, :double], do: {:hit, nil}
+  defp hs_word(<<"$(", rest::binary>>, state), do: hs_word_sub(hs_close(rest), state)
+  defp hs_word(<<?`, rest::binary>>, state), do: hs_word_sub(hs_backquote(rest), state)
   defp hs_word(<<?", rest::binary>>, :none), do: hs_word(rest, :double)
   defp hs_word(<<?", rest::binary>>, :double), do: hs_word(rest, :none)
   defp hs_word(<<?', rest::binary>>, :none), do: hs_word(rest, :single)
-  defp hs_word(<<?', rest::binary>>, :single), do: hs_word(rest, :none)
 
   defp hs_word(<<c, _::binary>>, :none) when c in [?\s, ?\t, ?;, ?&, ?|, ?), ?<, ?>],
-    do: :none
+    do: []
 
   defp hs_word(<<_, rest::binary>>, state), do: hs_word(rest, state)
 
-  defp hs_skip_arith(text) do
-    case hs_close("(" <> text) do
-      {_inner, <<?), after_::binary>>} -> after_
-      {_inner, after_} -> after_
-      :open -> ""
-    end
-  end
+  defp hs_word_sub({inner, after_}, state), do: [inner | hs_word(after_, state)]
+  defp hs_word_sub(:open, _state), do: [nil]
+
+  # Every command substitution in an arithmetic body; quotes are not read.
+  defp hs_subs(<<>>), do: []
+  defp hs_subs(<<"$((", rest::binary>>), do: hs_subs(rest)
+  defp hs_subs(<<"$(", rest::binary>>), do: hs_subs_next(hs_close(rest))
+  defp hs_subs(<<?`, rest::binary>>), do: hs_subs_next(hs_backquote(rest))
+  defp hs_subs(<<_, rest::binary>>), do: hs_subs(rest)
+
+  defp hs_subs_next({inner, after_}), do: [inner | hs_subs(after_)]
+  defp hs_subs_next(:open), do: [nil]
+
+  # The text after a backquote up to the next unescaped one, as {inner, after},
+  # or :open when the line ends first.
+  defp hs_backquote(text), do: hs_backquote(text, [])
+  defp hs_backquote(<<>>, _acc), do: :open
+
+  defp hs_backquote(<<?`, rest::binary>>, acc),
+    do: {acc |> Enum.reverse() |> IO.iodata_to_binary(), rest}
+
+  defp hs_backquote(<<?\\, n, rest::binary>>, acc), do: hs_backquote(rest, [n, ?\\ | acc])
+  defp hs_backquote(<<c, rest::binary>>, acc), do: hs_backquote(rest, [c | acc])
 
   # The text after `$(` up to its matching `)`, as {inner, after}, or :open
   # when the line ends first. Quotes inside are honoured.
