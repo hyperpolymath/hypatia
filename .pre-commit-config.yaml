@@ -2,11 +2,18 @@
 # Pre-commit hooks for hyperpolymath RSR repos.
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
+#
+# Every hook repo is pinned to a commit (`# frozen: <tag>`), as the estate's
+# SHA-pinning rule asks. RSR 1.2.2 ("git-hooks") still names this file; moving
+# to native `.githooks/` waits for the RSR criteria's deed form (A7 section 10,
+# owner ruling 2026-11-24). The A2ML hook is gone (A2ML is retired), and the K9
+# hook repo, `hyperpolymath/k9-pre-commit`, could not be fetched, which broke
+# every pre-commit.ci build; K9 contracts are validated in CI instead.
 
 repos:
   # --- Standard hooks ---
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b  # frozen: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -18,35 +25,21 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1024']
 
-  # --- A2ML manifest validation ---
-  - repo: https://github.com/hyperpolymath/a2ml-pre-commit
-    rev: main
-    hooks:
-      - id: validate-a2ml
-        name: Validate A2ML manifests
-
-  # --- K9 contract validation ---
-  - repo: https://github.com/hyperpolymath/k9-pre-commit
-    rev: main
-    hooks:
-      - id: validate-k9
-        name: Validate K9 contracts
-
   # --- Shell linting ---
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0.1
+    rev: a23f6b85d0fdd5bb9d564e2579e678033debbdff  # frozen: v0.10.0.1
     hooks:
       - id: shellcheck
 
   # --- EditorConfig ---
   - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
-    rev: 3.2.1
+    rev: 3bea62898235acc3f05c1d9c33023345f6cd3c6f  # frozen: 3.2.1
     hooks:
       - id: editorconfig-checker
         exclude: '(\.git|node_modules|target|_build|deps|\.deno|external_corpora|\.lake)/'
 
   # --- Secret detection ---
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.24.3
+    rev: 107a41827bb6698dbbff756b2300537774a1d84c  # frozen: v8.24.3
     hooks:
       - id: gitleaks
