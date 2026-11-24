@@ -52,12 +52,12 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.4'
     '.github/workflows/governance.yml':
-        - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+        - 'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.4'
     '.github/workflows/hypatia-scan.yml':
-        - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+        - 'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.4'
@@ -71,7 +71,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/mirror.yml':
-        - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+        - 'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -111,9 +111,9 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/scorecard.yml':
-        - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+        - 'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
     '.github/workflows/secret-scanner.yml':
-        - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+        - 'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
     '.github/workflows/security-policy.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -308,11 +308,6 @@ dependencies:
         commit: 'sha1-02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
         owner_id: 1940490
         repo_id: 260749683
-    'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393':
-        ref: 'v3.0.0'
-        commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
-        owner_id: 26415196
-        repo_id: 297874902
     'editorconfig-checker/action-editorconfig-checker@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
@@ -378,9 +373,9 @@ dependencies:
         commit: 'sha1-e384daf6167a7a7567642d6a62060106244d2413'
         owner_id: 6759885
         repo_id: 1352485172
-    'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609':
-        ref: '7641c7fdb01420696b5420ab85d88f599f32f609'
-        commit: 'sha1-7641c7fdb01420696b5420ab85d88f599f32f609'
+    'metadatastician/standards@75d38f80b6cb41e9785cf6f0c6ecf60846db7519':
+        ref: '75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
+        commit: 'sha1-75d38f80b6cb41e9785cf6f0c6ecf60846db7519'
         owner_id: 297579217
         repo_id: 1116521501
         uses:
@@ -390,7 +385,6 @@ dependencies:
             - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
             - 'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
             - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'
-            - 'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393'
             - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
             - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
             - 'ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e'
