@@ -2200,12 +2200,18 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @re012_fix "capture, then feed: `out=$(cmd) || <handle the failure>; consumer <<<\"$out\"`"
 
   # A producer that cannot fail here: a lone `echo`, or a `printf` whose format
-  # is a quoted literal converting only `%s` (and `%%`), with no option,
-  # redirection, pipe, list or nested substitution (`$var` is allowed).
-  @re012_benign ~r/\A[[:space:]]*(?:echo|printf[[:space:]]+(?:'(?:[^'%]|%%|%s)*'|"(?:[^"%$`\\]|\\.|%%|%s)*"))(?:[[:space:]]+(?:[^|;&`$<>()]|\$(?!\())*)?[[:space:]]*\z/
+  # is a quoted literal not starting with `-` and converting only `%s` (and
+  # `%%`), with literal arguments only: no `$` (an expansion can fail before
+  # the builtin runs), redirection, pipe, list or substitution.
+  @re012_benign ~r/\A[[:space:]]*(?:echo|printf[[:space:]]+(?:'(?!-)(?:[^'%]|%%|%s)*'|"(?!-)(?:[^"%$`\\]|\\.|%%|%s)*"))(?:[[:space:]]+[^|;&`$<>()]*)?[[:space:]]*\z/
 
-  # Steps whose shell is not a POSIX-family shell: `<<<` means nothing there.
-  @re012_not_sh ~w(pwsh powershell python cmd)
+  # The shells a workflow step's script is read in: `<<<` means nothing to
+  # any other interpreter (pwsh, python3, node, ruby, cmd, ...).
+  @re012_shells ~w(bash sh dash zsh ksh)
+
+  # A simple command so far with no command name: reserved words that start
+  # a command, then assignments and redirections only (see hs_command_less?/1).
+  @re012_command_less ~r/\A[[:space:]]*(?:(?:if|then|else|elif|do|while|until|!|time|\{)[[:space:]]+)*(?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=(?:'[^']*'|"(?:[^"\\]|\\.)*"|[^[:space:]'"])*|[0-9]*(?:<<<|<<-?|>>|<>|>&|<&|>\||[<>])[[:space:]]*(?:'[^']*'|"(?:[^"\\]|\\.)*"|[^[:space:]'"<>;&|])+)(?:[[:space:]]+|\z))*\z/
 
   @doc """
   RE012: a here-string fed by a command substitution, `consumer <<<"$(cmd)"`,
@@ -2228,9 +2234,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   The same sources as RE011: every shell source (`*.sh`, `.githooks/`, a
   shell shebang), and the `run:` script of every step of every workflow,
-  read from the parsed workflow. A step whose shell is `pwsh`, `powershell`,
-  `python` or `cmd` is not read. A workflow the reader refuses is scanned as
-  plain lines.
+  read from the parsed workflow. A step is read when it has no `shell:`, a
+  blank one, or one whose interpreter is `bash`, `sh`, `dash`, `zsh` or `ksh`
+  (a path and `.exe` are ignored); any other interpreter (`pwsh`, `python3
+  {0}`, `node {0}`, `cmd`, ...) has no `<<<`. A workflow the reader refuses
+  is scanned as plain lines.
 
   ## What is detected
 
@@ -2244,6 +2252,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   finding lists them all. A backslash escapes nothing inside single quotes.
   Each line is read on its own, with full-line comments ignored.
 
+  Not reported: a here-string in a command with no command name (only
+  assignments and redirections, `x=1 <<<"$(cmd)"`, or `<<<"$(cmd)"` alone).
+  Such a command's status is that of its last command substitution, and bash
+  performs the redirections after the assignments, so the status is kept.
+  The end of a compound command (`done`, `fi`, `}`, `)`) counts as a command.
+
   Not detected: the word held in a variable; process substitution (`done <
   <(cmd)`), which loses the status in the same way; a pipe (`cmd | while
   read`), which is RE011's territory under pipefail. A heredoc body, or a
@@ -2253,10 +2267,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   `:warn` (medium), whatever `set -e` or `pipefail` say, since neither
   reaches the lost status. `:info` only when every substitution on the line
-  is a lone `echo`, or a `printf` whose format is a quoted literal converting
-  only `%s` (and `%%`), each with no option, redirection, pipe, list or
-  nested substitution: neither fails then, so nothing is lost. Any other
-  `printf` can fail (`printf '%d' x`, an unknown option) and is `:warn`.
+  is a lone `echo`, or a `printf` whose format is a quoted literal that does
+  not start with `-` and converts only `%s` (and `%%`), each with literal
+  arguments only: no option, parameter expansion, redirection, pipe, list or
+  nested substitution. Neither fails then, so nothing is lost. Anything else
+  can fail (`printf '%d' x`, `printf '-Z'`, `echo "${v:?}"`, an unset `$v`
+  under `set -u`) and is `:warn`.
 
   ## Flag-only
 
@@ -2295,7 +2311,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   defp re012_workflow_hits({:ok, %Workflow{} = workflow}, _bytes) do
     for {script, line_of, shell} <- run_scripts(workflow),
-        not re012_not_sh?(shell),
+        re012_shell?(shell),
         {_line, offset, text, producers} <- here_string_substitution_lines(script) do
       {line_of.(offset), text, producers}
     end
@@ -2306,13 +2322,21 @@ defmodule Hypatia.Rules.ResearchExtensions do
         do: {line, text, producers}
   end
 
-  defp re012_not_sh?(nil), do: false
+  # No `shell:` runs bash (or sh); an empty or blank one names no executable,
+  # and the script is still read. Otherwise the step is read only when its
+  # interpreter is one of @re012_shells (a path and `.exe` are ignored).
+  defp re012_shell?(nil), do: true
 
-  # An empty or blank `shell:` names no executable: the script is still read.
-  defp re012_not_sh?(shell) do
+  defp re012_shell?(shell) do
     case String.split(shell, ~r/[[:space:]]+/, trim: true) do
-      [] -> false
-      [first | _] -> Path.basename(first) in @re012_not_sh
+      [] ->
+        true
+
+      [first | _] ->
+        first
+        |> Path.basename()
+        |> String.replace_suffix(".exe", "")
+        |> then(&(&1 in @re012_shells))
     end
   end
 
@@ -2373,7 +2397,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         next = offset + byte_size(raw) + 1
 
         producers =
-          if Regex.match?(~r/^[[:space:]]*#/, line), do: [], else: hs_walk(line, :none, true)
+          if Regex.match?(~r/^[[:space:]]*#/, line), do: [], else: hs_walk(line, :none, true, "")
 
         case producers do
           [] -> {hits, next}
@@ -2386,37 +2410,70 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # Walk a line in a quote state (:none, :single, :double); `word_start?` is
   # true at the start of the line or after blank space, where `#` opens a
-  # comment. Returns the producers of every here-string fed by a command
-  # substitution, in order; [] when there is none.
-  defp hs_walk(<<>>, _state, _ws), do: []
-  defp hs_walk(<<?', rest::binary>>, :single, _ws), do: hs_walk(rest, :none, false)
-  defp hs_walk(<<_, rest::binary>>, :single, _ws), do: hs_walk(rest, :single, false)
-  defp hs_walk(<<?\\, _, rest::binary>>, state, _ws), do: hs_walk(rest, state, false)
-  defp hs_walk(<<?\\>>, _state, _ws), do: []
-  defp hs_walk(<<?", rest::binary>>, :double, _ws), do: hs_walk(rest, :none, false)
-  defp hs_walk(<<?", rest::binary>>, :none, _ws), do: hs_walk(rest, :double, false)
-  defp hs_walk(<<?', rest::binary>>, :none, _ws), do: hs_walk(rest, :single, false)
-  defp hs_walk(<<?#, _::binary>>, :none, true), do: []
+  # comment; `seg` is the text of the current simple command so far. Returns
+  # the producers of every here-string fed by a command substitution, in
+  # order; [] when there is none.
+  defp hs_walk(<<>>, _state, _ws, _seg), do: []
+
+  defp hs_walk(<<?', rest::binary>>, :single, _ws, seg),
+    do: hs_walk(rest, :none, false, seg <> "'")
+
+  defp hs_walk(<<c, rest::binary>>, :single, _ws, seg),
+    do: hs_walk(rest, :single, false, seg <> <<c>>)
+
+  defp hs_walk(<<?\\, c, rest::binary>>, state, _ws, seg),
+    do: hs_walk(rest, state, false, seg <> <<?\\, c>>)
+
+  defp hs_walk(<<?\\>>, _state, _ws, _seg), do: []
+
+  defp hs_walk(<<?", rest::binary>>, :double, _ws, seg),
+    do: hs_walk(rest, :none, false, seg <> "\"")
+
+  defp hs_walk(<<?", rest::binary>>, :none, _ws, seg),
+    do: hs_walk(rest, :double, false, seg <> "\"")
+
+  defp hs_walk(<<?', rest::binary>>, :none, _ws, seg),
+    do: hs_walk(rest, :single, false, seg <> "'")
+
+  defp hs_walk(<<?#, _::binary>>, :none, true, _seg), do: []
 
   # The word's own producers, then the rest of the line from just after `<<<`,
-  # so a here-string inside one of the word's substitutions is read too.
-  defp hs_walk(<<"<<<", rest::binary>>, :none, _ws),
-    do: hs_word(String.trim_leading(rest), :none) ++ hs_walk(rest, :none, false)
+  # so a here-string inside one of the word's substitutions is read too. A
+  # command with no command name (only assignments and redirections) keeps
+  # the status of its last command substitution, and bash performs its
+  # redirections last, so its here-string loses nothing and is not reported.
+  defp hs_walk(<<"<<<", rest::binary>>, :none, _ws, seg) do
+    own = if hs_command_less?(seg), do: [], else: hs_word(String.trim_leading(rest), :none)
+    own ++ hs_walk(rest, :none, false, seg <> "<<<")
+  end
 
   # A command substitution or a backquote body, in :none or :double: read its
-  # body as a fresh line, then go on after it in the state we were in.
-  defp hs_walk(<<"$(", rest::binary>>, state, _ws), do: hs_walk_body(hs_close(rest), rest, state)
+  # body as a fresh command, then go on after it in the state we were in.
+  defp hs_walk(<<"$(", rest::binary>>, state, _ws, seg),
+    do: hs_walk_body(hs_close(rest), rest, state, seg, "$(", ")")
 
-  defp hs_walk(<<?`, rest::binary>>, state, _ws),
-    do: hs_walk_body(hs_backquote(rest), rest, state)
+  defp hs_walk(<<?`, rest::binary>>, state, _ws, seg),
+    do: hs_walk_body(hs_backquote(rest), rest, state, seg, "`", "`")
 
-  defp hs_walk(<<c, rest::binary>>, state, _ws),
-    do: hs_walk(rest, state, c in [?\s, ?\t, ?;, ?&, ?|, ?(])
+  # A command separator, or the start of a subshell, begins a new command.
+  defp hs_walk(<<c, rest::binary>>, :none, _ws, _seg) when c in [?;, ?&, ?|, ?(],
+    do: hs_walk(rest, :none, true, "")
 
-  defp hs_walk_body({inner, after_}, _rest, state),
-    do: hs_walk(inner, :none, true) ++ hs_walk(after_, state, false)
+  defp hs_walk(<<c, rest::binary>>, state, _ws, seg),
+    do: hs_walk(rest, state, c in [?\s, ?\t], seg <> <<c>>)
 
-  defp hs_walk_body(:open, rest, _state), do: hs_walk(rest, :none, true)
+  defp hs_walk_body({inner, after_}, _rest, state, seg, open, close),
+    do:
+      hs_walk(inner, :none, true, "") ++
+        hs_walk(after_, state, false, seg <> open <> inner <> close)
+
+  defp hs_walk_body(:open, rest, _state, _seg, _open, _close), do: hs_walk(rest, :none, true, "")
+
+  # True when the command text so far holds no command name: only leading
+  # reserved words that start a command, assignments and redirections. The
+  # words that end a compound command (`done`, `fi`, `esac`, `}`, `)`) are
+  # a command name here: the here-string feeds that compound command.
+  defp hs_command_less?(seg), do: Regex.match?(@re012_command_less, seg)
 
   # The producers of the word after `<<<`: each `$(…)` or backquote in it,
   # including those inside an arithmetic expansion, whose own `$((…))` runs no

@@ -82,6 +82,12 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"a backquote", ~S/cat <<<"pre `cmd`"/, "cmd"},
           {"inside an assignment's substitution", ~S/n=$(grep -c . <<<"$(cmd)")/, "cmd"},
           {"after an earlier here-string", ~S/y=$(a <<<b) && grep x <<<"$(z)"/, "z"},
+          # The here-string feeds a compound command, whose status replaces it.
+          {"the end of a loop", ~S/while read -r l; do :; done <<<"$(list)"/, "list"},
+          {"the end of a subshell", ~S/(cat) <<<"$(cmd)"/, "cmd"},
+          {"the end of a group", ~S/{ cat; } <<<"$(cmd)"/, "cmd"},
+          {"a command after an assignment prefix", ~S/LC_ALL=C grep -q x <<<"$(cmd)"/, "cmd"},
+          {"a command after a reserved word", ~S/if grep -q x <<<"$(cmd)"; then :; fi/, "cmd"},
           {"a quoted ) inside", ~S/cat <<<"a$(b "c)d" e)"/, ~S/b "c)d" e/},
           {"a substitution left open at the end of the line", ~S/cat <<<"$(/, nil},
           {"a carriage return at the end", "grep -q x <<<\"$(cmd)\"\r", "cmd"},
@@ -129,7 +135,13 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"a trailing comment", ~S/f  # grep <<<"$(c)"/},
           {"a heredoc", ~S/cat <<EOF/},
           {"an escaped <", ~S/echo \<<<"$(c)"/},
-          {"a process substitution (not this rule)", ~S/done < <(cmd)/}
+          {"a process substitution (not this rule)", ~S/done < <(cmd)/},
+          # Codex on #1232: a command with no command name keeps the status of
+          # its last command substitution, and bash performs redirections last.
+          {"an assignment-only command", ~S/x=1 <<<"$(cmd)"/},
+          {"two assignments and a redirection", ~S/x=1 y="a b" 2>e <<<"$(cmd)"/},
+          {"a bare here-string", ~S/<<<"$(cmd)"/},
+          {"an assignment-only command after a separator", ~S/f; x=$(a) <<<"$(cmd)"/}
         ] do
       test label do
         assert [] == lines(unquote(line))
@@ -144,10 +156,10 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
       assert [%{severity: :warn}] = scan([{"s.sh", script([~S/grep -q x <<<"$(cmd)"/])}])
     end
 
-    test "a lone printf or echo cannot fail here: :info" do
+    test "a lone printf or echo of literal words cannot fail here: :info" do
       for line <- [
-            ~S/grep -qx -- "$j" <<<"$(printf '%s\n' "${all[@]}")"/,
-            ~S/cat <<<"$(echo "$a" $b)"/
+            ~S/grep -qx -- "$j" <<<"$(printf '%s\n' a b)"/,
+            ~S/cat <<<"$(echo hello world)"/
           ] do
         assert [%{severity: :info} = f] = scan([{"s.sh", script([line])}])
         assert f.reason =~ "does not"
@@ -172,7 +184,12 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
           {"an option", ~S/cat <<<"$(printf -Z)"/},
           {"-v", ~S/cat <<<"$(printf -v x '%s' y)"/},
           {"an unquoted format", ~S/cat <<<"$(printf $fmt x)"/},
-          {"a format from a variable", ~S/cat <<<"$(printf "$fmt" x)"/}
+          {"a format from a variable", ~S/cat <<<"$(printf "$fmt" x)"/},
+          # CodeRabbit on #1232: a quoted format can still be an option.
+          {"a quoted option as the format", ~S/cat <<<"$(printf '-Z')"/},
+          # Codex on #1232: an expansion can fail before the builtin runs.
+          {"a ${v:?} argument", ~S/cat <<<"$(echo "${value:?missing}")"/},
+          {"a $var argument (unset under set -u)", ~S/cat <<<"$(printf '%s' "$value")"/}
         ] do
       test "printf with #{label} can fail: :warn" do
         assert [%{severity: :warn}] = scan([{"s.sh", script([unquote(line)])}])
@@ -217,8 +234,18 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
       assert [%{file: ".github/workflows/w.yml", detail: %{line: 9}}] = workflow(wf)
     end
 
-    test "a pwsh or python step is not read" do
-      for shell <- ["pwsh", "powershell", "python", "cmd", "/usr/bin/python {0}"] do
+    test "a step in another interpreter is not read" do
+      for shell <- [
+            "pwsh",
+            "pwsh.exe",
+            "powershell",
+            "python",
+            "python3 {0}",
+            "/usr/bin/python {0}",
+            "node {0}",
+            "ruby {0}",
+            "cmd"
+          ] do
         wf = """
         on: push
         jobs:
@@ -230,6 +257,30 @@ defmodule Hypatia.Rules.ResearchExtensionsRE012Test do
         """
 
         assert [] == workflow(wf), shell
+      end
+    end
+
+    test "a step in a POSIX-family shell is read" do
+      for shell <- [
+            "bash",
+            "sh",
+            "bash -eo pipefail {0}",
+            "bash.exe {0}",
+            "/bin/zsh {0}",
+            "dash {0}",
+            "ksh {0}"
+          ] do
+        wf = """
+        on: push
+        jobs:
+          t:
+            runs-on: ubuntu-latest
+            steps:
+              - shell: #{shell}
+                run: grep -q x <<<"$(cmd)"
+        """
+
+        assert [_] = workflow(wf), shell
       end
     end
 
