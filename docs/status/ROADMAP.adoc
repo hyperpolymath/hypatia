@@ -61,5 +61,8 @@ Idle. Nothing in this thread is unpushed except this journal entry.
   Verify Proofs write the receipt for `AlertTableCorrespondence.agda`.
 * Check the `AGDA_LIBRARIES` hint in `scripts/provision-agda-stdlib.sh` on
   rsr-template-repo `main`, then copy the fix downstream.
-* Quote the unquoted expansions in `check-proofs.sh`.
+* Quote the unquoted expansions in `scripts/check-proofs.sh` in
+  hyperpolymath/rsr-template-repo, then carry the fix to the
+  template-derived copies (for example catachresis-colloquium/First-Post).
+  Hypatia has no copy of this script.
 * Reconcile evil-weevil's PROOF-STATUS, and add the Agda CI job to eclexia.
