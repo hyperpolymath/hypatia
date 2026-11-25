@@ -54,6 +54,8 @@ defmodule Hypatia.RecipeGenerator do
     "DynamicCodeExecution" => "fix-dynamic-code-exec.sh",
     "MissingLicense" => "fix-license-file.sh",
     "MissingSPDX" => "fix-missing-spdx.sh",
+    # gitbot-fleet enrolment (Hypatia.FleetEnrolmentIngestor)
+    "MissingFleetEnrolment" => "fix-fleet-enrolment.sh",
     # OpenSSF Scorecard categories (SC-001 through SC-020)
     "BinaryArtifacts" => "fix-scorecard-binary-artifacts.sh",
     "CITests" => "fix-scorecard-ci-tests.sh",
@@ -71,6 +73,12 @@ defmodule Hypatia.RecipeGenerator do
     "MissingCI" => "fix-add-elixir-ci.sh",
     "ElixirSSLBypass" => "fix-elixir-ssl-verify.sh"
   }
+
+  @doc """
+  The fix script mapped to a category, or nil when none is.
+  """
+  def fix_script_for(category) when is_binary(category),
+    do: Map.get(@category_fix_scripts, category)
 
   @doc """
   Scan the pattern registry for categories with no matching recipe.

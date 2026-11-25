@@ -310,7 +310,7 @@ defmodule Hypatia.OutcomeTrackerTest do
       #!/bin/sh
       case "$FAKE_PA_MODE" in
         clean) echo '{"weak_points":[]}' ;;
-        present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt"}]}' ;;
+        present) echo '{"weak_points":[{"category":"cat-x","file":"a.txt","line":3}]}' ;;
         json) printf '%s' "$FAKE_PA_JSON" ;;
         *) exit 1 ;;
       esac
@@ -411,7 +411,9 @@ defmodule Hypatia.OutcomeTrackerTest do
 
     test "a named category is still verified by a clean scan and refuted by a present one",
          %{root: root} do
-      opts = [verify: true, category: "cat-x", repo_path: root]
+      # The fix side knows the line of its finding (E0-22), so that a weak point that is still
+      # there can be told from another finding of the same category in the same file.
+      opts = [verify: true, category: "cat-x", repo_path: root, line: 3]
 
       assert {:ok, %{"verification" => "verified"}, :verified} =
                OutcomeTracker.record_and_verify(
@@ -436,24 +438,107 @@ defmodule Hypatia.OutcomeTrackerTest do
 
     # E0-26 (owner ruling 8A): a fix is judged by its category AND its file. The
     # scanner names the file of a weak point in `file` (panic-attack's WeakPoint).
-    defp rescan(root, file, weak_points) do
+    defp rescan(root, file, weak_points, line \\ nil) do
       System.put_env("FAKE_PA_MODE", "json")
       System.put_env("FAKE_PA_JSON", Jason.encode!(%{"weak_points" => weak_points}))
 
-      OutcomeTracker.record_and_verify("recipe-e0-26", "owner/repo", file, :success,
-        verify: true,
-        category: "cat-x",
-        repo_path: root
-      )
+      opts = [verify: true, category: "cat-x", repo_path: root]
+      opts = if line, do: Keyword.put(opts, :line, line), else: opts
+
+      OutcomeTracker.record_and_verify("recipe-e0-26", "owner/repo", file, :success, opts)
     end
 
     test "a clean scan verifies", %{root: root} do
       assert {:ok, %{"verification" => "verified"}, :verified} = rescan(root, "a.txt", [])
     end
 
-    test "the same category in the same file refutes the fix", %{root: root} do
+    # E0-22 (owner ruling of 2026-11-18, fail closed): the fix side may give the line of its
+    # finding. A weak point of the category at that line of that file is the finding that the
+    # fix was meant to remove, so the fix did not hold. Another weak point of the category in the
+    # same file, that the scan cannot tell from the fixed finding, gives NO verification: no
+    # credit and no blame (`scan_skipped`). Lines move when a fix edits a file, so only a match
+    # refutes; a mismatch never verifies.
+    test "the same category at the same line of the same file refutes the fix", %{root: root} do
       assert {:ok, %{"verification" => "still_present"}, :false_positive} =
-               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "a.txt", "line" => 3}])
+               rescan(
+                 root,
+                 "a.txt",
+                 [%{"category" => "cat-x", "file" => "a.txt", "line" => 3}],
+                 3
+               )
+    end
+
+    test "2 findings of 1 category in one file, one fixed, the caller gives no line: no credit, no blame",
+         %{root: root} do
+      # The scanner still sees 1 weak point of the category in the file. It may be the finding
+      # that was fixed (the fix did not hold) or the other one (the fix held). It cannot say.
+      assert {:ok, record, :not_verified} =
+               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "a.txt", "line" => 9}])
+
+      assert record["verification"] == "scan_skipped"
+      counts = OutcomeTracker.qualified_outcome_counts(stored(root))
+      assert counts.successes == 0
+      assert counts.failures == 0
+      assert counts.false_positives == 0
+    end
+
+    test "a weak point of the category at ANOTHER line of the file is not the fixed finding, and is not proof that it is gone",
+         %{root: root} do
+      assert {:ok, record, :not_verified} =
+               rescan(
+                 root,
+                 "a.txt",
+                 [%{"category" => "cat-x", "file" => "a.txt", "line" => 9}],
+                 3
+               )
+
+      assert record["verification"] == "scan_skipped"
+      assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
+    end
+
+    test "a weak point of the file with no line cannot be compared with the caller's line", %{
+      root: root
+    } do
+      assert {:ok, record, :not_verified} =
+               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "a.txt"}], 3)
+
+      assert record["verification"] == "scan_skipped"
+    end
+
+    test "the fixed finding is gone and another finding of the category is in another file: verified",
+         %{root: root} do
+      assert {:ok, %{"verification" => "verified"}, :verified} =
+               rescan(
+                 root,
+                 "a.txt",
+                 [%{"category" => "cat-x", "file" => "b.txt", "line" => 3}],
+                 3
+               )
+    end
+
+    test "when the line matches, a second weak point in the file does not hide the failure", %{
+      root: root
+    } do
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               rescan(
+                 root,
+                 "a.txt",
+                 [
+                   %{"category" => "cat-x", "file" => "a.txt", "line" => 9},
+                   %{"category" => "cat-x", "file" => "a.txt", "line" => 3}
+                 ],
+                 3
+               )
+    end
+
+    test "the line may arrive as text from a scanner, and still matches", %{root: root} do
+      assert {:ok, %{"verification" => "still_present"}, :false_positive} =
+               rescan(
+                 root,
+                 "a.txt",
+                 [%{"category" => "cat-x", "file" => "a.txt", "line" => "3"}],
+                 3
+               )
     end
 
     test "the same category in ANOTHER file does not refute a fix of this file", %{root: root} do
@@ -472,21 +557,38 @@ defmodule Hypatia.OutcomeTrackerTest do
       assert OutcomeTracker.qualified_outcome_counts(stored(root)).successes == 0
     end
 
-    test "a weak point with no file in the scan does not hide one in the same file", %{root: root} do
-      # Both are present: the one in this file refutes the fix, whatever the other says.
+    test "a weak point with no file in the scan does not hide one at the fixed line", %{
+      root: root
+    } do
+      # Both are present: the one at this line of this file refutes the fix, whatever the other says.
       assert {:ok, %{"verification" => "still_present"}, :false_positive} =
-               rescan(root, "a.txt", [
-                 %{"category" => "cat-x"},
-                 %{"category" => "cat-x", "file" => "a.txt"}
-               ])
+               rescan(
+                 root,
+                 "a.txt",
+                 [
+                   %{"category" => "cat-x"},
+                   %{"category" => "cat-x", "file" => "a.txt", "line" => 3}
+                 ],
+                 3
+               )
     end
 
     test "a leading ./ does not make a different file", %{root: root} do
       assert {:ok, %{"verification" => "still_present"}, _} =
-               rescan(root, "a.txt", [%{"category" => "cat-x", "file" => "./a.txt"}])
+               rescan(
+                 root,
+                 "a.txt",
+                 [%{"category" => "cat-x", "file" => "./a.txt", "line" => 3}],
+                 3
+               )
 
       assert {:ok, %{"verification" => "still_present"}, _} =
-               rescan(root, "./a.txt", [%{"category" => "cat-x", "file" => "a.txt"}])
+               rescan(
+                 root,
+                 "./a.txt",
+                 [%{"category" => "cat-x", "file" => "a.txt", "line" => 3}],
+                 3
+               )
     end
 
     test "a fix at repository level keeps the old rule: the category alone", %{root: root} do

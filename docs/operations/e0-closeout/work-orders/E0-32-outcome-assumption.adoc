@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-32: The retraction model names an outcome as support, with a claim field
+:wo-id: E0-32
+:wo-repo: hyperpolymath/hypatia
+:wo-size: medium
+:wo-agent: e0-supervisor
+:wo-model: opus
+:wo-effort: high
+:wo-cap-usd: 14
+:wo-max-turns: 220
+:wo-branch: feat/e0-32-outcome-assumption
+:wo-depends: none
+
+== Goal
+
+A finding can name an outcome row as support in the retraction model, in Elixir and in the Idris2 model. A finding says whether its claim is
+a `:threshold` (a function of the whole set of cited rows) or `:any` (one row is enough), and the model treats each as the design rules.
+
+== Authority
+
+Owner rulings of 2026-11-21 on `docs/design/outcome-retraction.adoc`, section 8a. Question 1, answer C (both, by a field). The design is `docs/design/outcome-retraction.adoc`, sections 3 and 3a.
+
+== Facts measured
+
+Commit `689897b4`, read on 2026-11-21. Measure them again.
+
+* `lib/hypatia/verdict/retraction.ex`: the type `assumption` has 3 kinds. `token_support/1` gives the `:rule` of a token and its `:bot`. `retract/2` is pure.
+* `src/Hypatia/ABI/Retraction.idr`, line 49: `data Assumption = RuleA String | BotA String | ProverA String`. The theorems are about `Elem` and `Thin`, over a list of any type.
+* Ran: a finding with 5 tokens that each rest on a different bot, with 1 retracted: it is kept, with 4 of 5 tokens, and `support.observations` still says 5.
+* No module of `lib/` calls `Quarantine.retract_dependents/1`. Only `test/retraction_test.exs` does.
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds. Install Idris 2 with `scripts/dev/install-toolchain.sh --with-idris2` if it is missing.
+. Write the tests first, in `test/retraction_test.exs` (each must fail today): (a) `parse("outcome:x")` is `{:outcome, "x"}` and `name/1` gives it back; a bare name is still a bot;
+  (b) an `:any` finding with a token for each of 3 rows: retract 1 row, and the finding is kept with 2 tokens, its level re-derived;
+  (c) a `:threshold` finding that cites 3 rows: retract any 1, and the finding is retracted, `retracted_by` names that row, and it is not kept with fewer tokens;
+  (d) a `:threshold` token that carries `outcome_set: %{recipe_id: id, digest: digest}` survives only while `digest` equals the current digest that the caller's predicate gives for the recipe;
+  (e) a finding with no `:claim` and no `:outcomes` behaves as today, and every existing test of the file passes unchanged.
+. Extend `Hypatia.Verdict.Retraction`: the assumption `{:outcome, id}`, `:claim` on a finding (default `:any`, so nothing changes), `:outcomes` on a token, and a `retract/3` whose third argument
+  is a map with an optional `:digest_of` function for the digest check. `retract/2` stays and calls `retract/3`.
+. Add `OutcomeA String` to `Assumption` in `Retraction.idr`. Add 1 file to `tests/accept/` and 1 to `tests/reject/`: a token that rests on a withdrawn outcome does not survive; a token that rests on another outcome does.
+  Run `bash scripts/check-verdicts.sh`, then `scripts/proof-ledger.sh check` and `render --write`, and update the trust boundary of the ledger row.
+
+== Acceptance
+
+* The new tests pass, and they failed before step 3. Give both outputs.
+* `bash scripts/check-verdicts.sh` passes, and its counts rise by the new fixtures. A grep for `believe_me`, `assert_total` and `postulate` in the changed Idris files finds nothing.
+* `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* A mutation check: make a `:threshold` finding behave as `:any`, and test (c) fails.
+
+== Stop and ask
+
+* A theorem of `Retraction.idr` does not hold with the new constructor (report the counter-example; do not weaken it).
+* A proof needs an axiom.
+* The cost reaches the cap before the acceptance checks pass.

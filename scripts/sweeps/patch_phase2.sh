@@ -40,7 +40,8 @@ END=$(awk -v s="$START" 'NR>s && /'"$NEXT_RE"'/ {print NR; exit}' "$WF" || true)
 [ -n "${END:-}" ] || END=$((TOTAL + 1))
 
 # Idempotency: bail if the existing block already carries the fix.
-if sed -n "${START},$((END - 1))p" "$WF" | grep -q '^        continue-on-error: true$'; then
+block=$(sed -n "${START},$((END - 1))p" "$WF")
+if grep -q '^        continue-on-error: true$' <<<"$block"; then
   exit 2
 fi
 

@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= E0-35: A withdrawal writes a revision receipt
+:wo-id: E0-35
+:wo-repo: hyperpolymath/hypatia
+:wo-size: small
+:wo-agent: e0-executor
+:wo-model: sonnet
+:wo-effort: medium
+:wo-cap-usd: 8
+:wo-max-turns: 140
+:wo-branch: feat/e0-35-withdrawal-receipt
+:wo-depends: E0-07
+
+== Goal
+
+A withdrawal of an outcome row appends a receipt with the verdict `withdrawn` whose parent is the receipt of that row, so that the receipt log shows the withdrawal and the history is kept.
+
+== Authority
+
+Owner rulings of 2026-11-21 on `docs/design/outcome-retraction.adoc`, section 8a. Question 4, answer A: "the revision receipt records the withdrawal." The design is `docs/design/e0-receipt.adoc`, D7 (a revision is a new receipt with its own `event_id` and a `parent_event_ids`),
+and the model of `E0-10` (`src/Hypatia/ABI/Receipt.idr`, P3: an append keeps every receipt before it).
+
+== Facts measured
+
+Read on 2026-11-21. Measure them again.
+
+* `lib/hypatia/receipt.ex`: `build/2` always sets `parent_event_ids` to `[]` and takes the verdict from the gate. No run-time code builds a revision, a fill or a withdrawal (the mirror test says so).
+* `schema/receipt.ncl`: a verdict `withdrawn` is accepted only with a parent.
+* The writer refuses a duplicate `event_id` (`E0-29`).
+
+== Steps
+
+. Measure the facts again. Stop if one no longer holds. Confirm that `E0-07` is merged.
+. Write the tests first: (a) a withdrawal appends 1 receipt with the verdict `withdrawn`, a new `event_id`, and `parent_event_ids` equal to the `event_id` of the receipt of the withdrawn row; (b) the receipt of the row is still in the log, unchanged;
+  (c) the new receipt passes the Nickel contract (`nickel` on `PATH`); (d) a row with no receipt (a legacy row) gets no revision receipt and the withdrawal still succeeds, with a log line that says why;
+  (e) the mirror test of `E0-10` is extended: the appended revision keeps every receipt before it.
+. Add `Receipt.build_withdrawal/2` and call it from the withdrawal of `E0-07`.
+
+== Acceptance
+
+* The new tests pass, and they failed before step 3. Give both outputs.
+* `bash scripts/check-verdicts.sh` still passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The ledger rows of P3 and P4 name that a revision now has a run-time counterpart, and `scripts/proof-ledger.sh check` and `render --check` pass.
+
+== Stop and ask
+
+* A withdrawal receipt needs a field that the contract does not give.
+* The cost reaches the cap before the acceptance checks pass.

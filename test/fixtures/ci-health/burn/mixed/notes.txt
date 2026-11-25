@@ -1,0 +1,2 @@
+Not a workflow: the selector lists only .yml and .yaml files.
+on: [push, pull_request]

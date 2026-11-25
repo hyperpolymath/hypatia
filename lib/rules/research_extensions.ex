@@ -15,7 +15,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   the patterns surfaced by commercial / academic research that aren't
   yet covered by the OSS auditors.
 
-  Rule IDs RE001-RE010.
+  Rule IDs RE001-RE011. RE011 is the one rule here that also reads shell
+  sources, not only workflows.
 
   ## Provenance map
 
@@ -78,6 +79,13 @@ defmodule Hypatia.Rules.ResearchExtensions do
     workflow can publish a malicious artifact that the privileged
     `workflow_run` then trusts. Mitigation: verify artifact provenance
     or `actions/download-artifact@v4`'s `run-id` constraint.
+  - **RE011** — A pipe into a quiet grep (`writer | grep -q PATTERN`) in a
+    shell source or a workflow `run:` block. Under `set -o pipefail` a
+    writer still writing when grep exits at its first match is killed by
+    SIGPIPE, the pipeline is 141, and a match reads as "no match": a
+    fail-open in a gate. Flag-only (`:review`, `advisory: true`). Reproduced
+    in metadatastician/standards on 2026-11-17; the detector is a port of
+    its `scripts/check-pipe-grep-q.sh`.
 
   ## Architecture
 
@@ -107,10 +115,6 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   alias Hypatia.Workflow
   alias Hypatia.Workflow.Step
-
-  # The rules after RE002 still read lines; they share this primitive with
-  # Hypatia.WorkflowYaml until they move to the model too (#971).
-  import Hypatia.WorkflowYaml, only: [indent_of: 1]
 
   # ─── Workflow-file discovery ────────────────────────────────────────
 
@@ -1764,6 +1768,416 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
   end
 
+  # ─── RE011: pipe into a quiet grep ───────────────────────────────────
+
+  @re011_fix "capture, then match: `out=$(writer); grep -q PATTERN <<<\"$out\"`"
+
+  # A command position, then grep, egrep or fgrep: an optional `!`, leading
+  # NAME=value assignments, an optional `command`, an optional path.
+  @re011_grep "(?:![[:space:]]*)?(?:[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*" <>
+                "(?:command[[:space:]]+)?(?:\\/[^[:space:]]*\\/)?(?:e|f)?grep(?:[[:space:]]|$)"
+  # The pipe and the grep on one line; `||` and `&|` are not pipes, `|&` is.
+  @re011_same Regex.compile!("(?:^|[^|&])\\|&?[[:space:]]*" <> @re011_grep)
+  # The grep at the start of a line whose predecessor ended in the pipe.
+  @re011_next Regex.compile!("^[[:space:]]*" <> @re011_grep)
+  # grep's long options that take their argument as the next word. `--color`
+  # and `--colour` are not among them: their value is optional and is given
+  # only as `--color=WHEN`, so the word after a bare `--color` is still a flag.
+  @re011_long_with_arg ~w(--regexp --file --max-count --after-context --before-context
+                          --context --binary-files --devices --directories --exclude
+                          --include --label)
+  # `set -o pipefail` in any of its spellings (`set -euo pipefail`,
+  # `set -e -o pipefail`, `shopt -so pipefail`); `set +o pipefail` is not one.
+  @re011_pipefail ~r/(?:^|[;&|({[:space:]])(?:set|shopt)[[:space:]]+(?:[^;&|#]*[[:space:]])?-[A-Za-z]*o[[:space:]]+pipefail(?![A-Za-z0-9_-])/
+  @re011_shebang ~r/^#!.*(?:^|[\/ ])(?:ba|da|z|k)?sh(?:[[:space:]]|$)/
+
+  @doc """
+  RE011: a pipe into a quiet grep, `writer | grep -q PATTERN`, in a shell
+  source or in a workflow `run:` block.
+
+  Under `set -o pipefail` the form is unsound. `grep -q` exits at its first
+  match; a writer that is still writing is killed by SIGPIPE, the pipeline's
+  status is 141, and a match reads as "no match". In a gate written
+  `if writer | grep -q BAD; then fail`, that is a fail-open. The fix is to
+  capture, then match, with no pipe: `out=$(writer); grep -q PATTERN <<<"$out"`.
+  Provenance: reproduced in metadatastician/standards on 2026-11-17
+  (`scripts/check-exemption-ratchet.sh` missed a wildcard 8 times out of 8 on
+  a 257 KB input); owner decision of 2026-11-17, "A Hypatia rule,
+  estate-wide".
+
+  ## What is read
+
+  * Shell sources: every `*.sh` file, every file under `.githooks/`, and
+    every other file whose first line is a shell shebang (`sh`, `bash`,
+    `dash`, `zsh`, `ksh`). Symbolic links are not followed; `.git/`,
+    `node_modules/`, `_build/`, `deps/` and `target/` are not walked.
+  * The `run:` script of every step of every job in `.github/workflows/*.yml`
+    and `*.yaml`, read from the parsed workflow (`Hypatia.Workflow`), so a
+    `name:` or an `env:` value that spells the form is not read. A workflow
+    the reader refuses is scanned as plain lines instead, and every finding
+    in it is latent, because its shell cannot be known.
+
+  ## What is detected
+
+  The detector is a port of standards' `scripts/check-pipe-grep-q.sh`, which
+  states each of these and its limits: `-q` alone or in a flag cluster
+  (`-qF`, `-Eq`, `-qxF`; a cluster stops at a letter that takes an argument,
+  so `-eq` is the pattern "q"), `--quiet` and `--silent`, `egrep` and
+  `fgrep`, a path to grep, a `command` prefix, leading assignments, a leading
+  `!`, `|&`, the flag after the pattern, and the pipe on the previous line
+  (`cmd |` then `grep -q`, with blank and comment lines between skipped).
+  Full-line comments are ignored.
+
+  The rule reads two forms the gate misses, so it reports every line the gate
+  reports and may report more: a cluster that carries a digit or an argument
+  after the `q` (`-qm1`, `-qA2`, `-2q`), and a flag after a bare `--color`
+  or `--colour`, which takes no following word.
+
+  Not detected: the command held in a variable or a function; `xargs grep
+  -q`, `git grep -q`, `rg -q`; the other readers that exit early (`head`,
+  `grep -m1`, `sed q`); a `run:` step of a composite `action.yml`. A heredoc
+  body or a message that spells the form is a false positive, as it is for
+  the standards gate: build such text from parts.
+
+  ## Exposed or latent
+
+  A finding is *exposed* where pipefail is in force:
+
+  * in a shell source, when the file sets it anywhere (`set -o pipefail`,
+    `set -euo pipefail`, `shopt -so pipefail`, ...) outside a comment or a
+    quoted string;
+  * in a `run:` block, when the script sets it, or when the step's shell
+    (its own `shell:`, else the job's `defaults.run.shell`, else the
+    workflow's) is `bash`, which GitHub runs as `bash --noprofile --norc -eo
+    pipefail {0}`, or is a custom shell that names `pipefail`. A step with no
+    `shell:` runs under `bash -e {0}`, with no pipefail.
+
+  Elsewhere the finding is *latent*: the pipeline's status is grep's own, so
+  the line is sound today, and it becomes a fail-open when pipefail is added
+  or the file is sourced by a script that sets it. Whether pipefail is set
+  is read from the file as a whole, not from the order of its lines, and a
+  `set +o pipefail` that turns it off again is not followed.
+
+  Exposed findings are `:warn` (the level RE005 uses), so a default scan
+  shows them and they reach the SARIF and the verdict grid at medium. Latent
+  findings are `:info`, below the default `--severity medium`: they are shown
+  only with `--advisory` (`HYPATIA_ADVISORY`).
+
+  ## Flag-only
+
+  Action: `:review`, and every finding is `advisory: true` (owner ruling of
+  2026-11-17, "warn + advisory class"). The rule names a fix and never
+  applies one: no recipe, no fix script, and a dispatch confidence below the
+  auto-execute tier. An advisory finding never counts toward the CLI exit
+  code (`Hypatia.CLI.report_sets/2`).
+
+  One gate does not read the class yet. Standards `scripts/apply-baseline.sh`
+  in `blocking` mode at threshold `info` (the governance "Baseline
+  validation" job) rejects every unbaselined finding it is shown, advisory
+  or not. Until a caller runs a standards revision whose `apply-baseline.sh`
+  exempts `advisory: true`, an exposed RE011 finding fails that job in a
+  repository that commits a `.hypatia-baseline.json`.
+
+  A reviewed line carries `hypatia: allow research_extensions/RE011 --
+  <reason>` (or `hypatia:ignore RE011 -- <reason>`) on the line itself or on
+  the line above. The file-level form is not honoured, so a directive near
+  the top of a file cannot cover a later line by accident.
+  """
+  def re011_pipe_into_quiet_grep(repo_path),
+    do: re011_shell_findings(repo_path) ++ re011_workflow_findings(repo_path)
+
+  defp re011_shell_findings(repo_path) do
+    for path <- re011_shell_files(repo_path),
+        rel = Path.relative_to(path, repo_path),
+        {:ok, content} <- [File.read(path)],
+        lines = String.split(content, "\n"),
+        pipefail = re011_script_pipefail(content, "the file does not set it"),
+        {line, _offset, text} <- pipe_grep_q_lines(content),
+        not re011_reviewed?(lines, line) do
+      re011_finding(rel, line, text, pipefail)
+    end
+  end
+
+  # The shell sources of a repo: by name, by directory, by shebang.
+  defp re011_shell_files(repo_path) do
+    {output, _status} =
+      System.cmd(
+        "find",
+        # Pruned, not filtered: find never descends into these directories.
+        [repo_path, "(", "-type", "d", "("] ++
+          (~w(.git node_modules _build deps target)
+           |> Enum.map(&["-name", &1])
+           |> Enum.intersperse(["-o"])
+           |> List.flatten()) ++
+          [")", ")", "-prune", "-o", "-type", "f", "-print"],
+        stderr_to_stdout: true
+      )
+
+    output
+    |> String.split("\n", trim: true)
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.filter(fn path ->
+      rel = Path.relative_to(path, repo_path)
+
+      String.ends_with?(rel, ".sh") or String.starts_with?(rel, ".githooks/") or
+        re011_shell_shebang?(path)
+    end)
+    |> Enum.sort()
+  end
+
+  defp re011_shell_shebang?(path) do
+    with {:ok, "#!" <> _ = head} <- File.open(path, [:read, :binary], &IO.binread(&1, 256)) do
+      Regex.match?(@re011_shebang, head |> String.split("\n", parts: 2) |> hd())
+    else
+      _ -> false
+    end
+  end
+
+  defp re011_workflow_findings(repo_path) do
+    for path <- Enum.sort(workflow_files(repo_path)),
+        rel = Path.relative_to(path, repo_path),
+        bytes = File.read!(path),
+        source = String.split(bytes, "\n"),
+        {line, text, pipefail} <- re011_workflow_hits(Workflow.parse(bytes, rel), bytes),
+        not re011_reviewed?(source, line) do
+      re011_finding(rel, line, text, pipefail)
+    end
+  end
+
+  # The hits of one workflow as `{source line, text, pipefail}`.
+  defp re011_workflow_hits({:ok, nil}, _bytes), do: []
+
+  defp re011_workflow_hits({:ok, %Workflow{} = workflow}, _bytes) do
+    workflow_shell = re011_default_shell(workflow.doc)
+
+    for job <- workflow.jobs,
+        # `<- [...]`, not `=`: a nil shell is a value here, not a filter.
+        job_shell <- [re011_default_shell(job.node) || workflow_shell],
+        step <- job.steps,
+        {script, line_of} <- Workflow.strings(re011_child(step.node, "run")),
+        shell <- [Workflow.text(re011_child(step.node, "shell")) || job_shell],
+        pipefail = re011_step_pipefail(script, shell),
+        {_line, offset, text} <- pipe_grep_q_lines(script) do
+      {line_of.(offset), text, pipefail}
+    end
+  end
+
+  # A workflow the reader refuses is not skipped: its lines are scanned as
+  # the standards gate scans them, and nothing is claimed about its shell.
+  defp re011_workflow_hits({:error, _error}, bytes) do
+    unknown = {:latent, "the workflow could not be read as KYAML, so its shell is unknown"}
+    for {line, _offset, text} <- pipe_grep_q_lines(bytes), do: {line, text, unknown}
+  end
+
+  # A mapping's value for `key`, read through an alias as Hypatia.Workflow
+  # reads it.
+  defp re011_child(node, key) do
+    Enum.find_value(Workflow.entries(node), fn entry ->
+      Workflow.text(entry.key) == key && entry.value
+    end)
+  end
+
+  # `defaults.run.shell` of a workflow or a job.
+  defp re011_default_shell(node) do
+    node
+    |> re011_child("defaults")
+    |> re011_child("run")
+    |> re011_child("shell")
+    |> Workflow.text()
+  end
+
+  defp re011_step_pipefail(script, shell) do
+    shell = shell && String.trim(shell)
+
+    cond do
+      re011_sets_pipefail?(script) ->
+        {:exposed, "set in the script"}
+
+      shell == "bash" ->
+        {:exposed, "`shell: bash` runs `bash --noprofile --norc -eo pipefail`"}
+
+      is_binary(shell) and shell =~ "pipefail" ->
+        {:exposed, "the step's shell is `#{shell}`"}
+
+      is_binary(shell) ->
+        {:latent, "the step's shell is `#{shell}` and the script does not set it"}
+
+      true ->
+        {:latent,
+         "with no `shell: bash` the step runs under `bash -e`, and the script does not set it"}
+    end
+  end
+
+  defp re011_script_pipefail(content, otherwise) do
+    if re011_sets_pipefail?(content),
+      do: {:exposed, "set in the script"},
+      else: {:latent, otherwise}
+  end
+
+  # True when the text sets pipefail outside a comment or a quoted string.
+  defp re011_sets_pipefail?(text) do
+    text
+    |> String.split("\n")
+    |> Enum.any?(fn line ->
+      line
+      |> String.replace(~r/(?:^|[ \t])#.*$/, "")
+      |> String.replace(~r/'[^']*'|"[^"]*"/, "Q")
+      |> then(&Regex.match?(@re011_pipefail, &1))
+    end)
+  end
+
+  # A line is reviewed when it, or the line above it, carries the directive.
+  defp re011_reviewed?(lines, line) do
+    Hypatia.ScannerSuppression.inline_allowed?(
+      Enum.at(lines, line - 1),
+      line > 1 && Enum.at(lines, line - 2),
+      "research_extensions",
+      "RE011"
+    )
+  end
+
+  defp re011_severity(exposure), do: if(exposure == :exposed, do: :warn, else: :info)
+
+  defp re011_finding(rel, line, text, {exposure, how}) do
+    why =
+      "`grep -q` exits at its first match, a writer still writing is killed by SIGPIPE, " <>
+        "the pipeline's status is 141, and a match reads as no match"
+
+    reason =
+      case exposure do
+        :exposed ->
+          "#{rel}:#{line} is a pipe into a quiet grep with pipefail in force (#{how}): " <>
+            "#{why}. Fix: #{@re011_fix}"
+
+        :latent ->
+          "#{rel}:#{line} is a pipe into a quiet grep; pipefail is not in force (#{how}), " <>
+            "so the line is sound until pipefail is set or the file is sourced by a script " <>
+            "that sets it. Then: #{why}. Fix: #{@re011_fix}"
+      end
+
+    %{
+      rule: "RE011",
+      # Never part of an exit code or a gate: see "Flag-only" in the @doc.
+      advisory: true,
+      file: rel,
+      severity: re011_severity(exposure),
+      reason: reason,
+      action: :review,
+      detail: %{
+        line: line,
+        text: String.trim(text),
+        exposure: exposure,
+        pipefail: how,
+        strategy: :review,
+        fix: "Flag-only, never applied for you: #{@re011_fix}"
+      }
+    }
+  end
+
+  @doc """
+  The lines of a shell text that pipe into a quiet grep, as
+  `{line number, byte offset of the line, line}`. A port of the `scan`
+  function of standards' `scripts/check-pipe-grep-q.sh`: every line that gate
+  finds is found here, and two forms it misses (see RE011's `@doc`).
+  """
+  def pipe_grep_q_lines(text) when is_binary(text) do
+    {hits, _offset, _prev_pipe?} =
+      text
+      |> String.split("\n")
+      |> Enum.with_index(1)
+      |> Enum.reduce({[], 0, false}, fn {raw, no}, {hits, offset, prev_pipe?} ->
+        line = String.replace_suffix(raw, "\r", "")
+        next = offset + byte_size(raw) + 1
+
+        if Regex.match?(~r/^[[:space:]]*(?:#|$)/, line) do
+          # Blank and comment lines sit between a pipe and its grep, as in bash.
+          {hits, next, prev_pipe?}
+        else
+          hit? =
+            String.contains?(line, "grep") and
+              (re011_same_line?(line) or (prev_pipe? and re011_next_line?(line)))
+
+          {if(hit?, do: [{no, offset, line} | hits], else: hits), next, re011_ends_in_pipe?(line)}
+        end
+      end)
+
+    Enum.reverse(hits)
+  end
+
+  # Each `| grep` on the line in turn, until one is quiet.
+  defp re011_same_line?(line) do
+    case Regex.run(@re011_same, line, return: :index) do
+      [{start, len} | _] ->
+        stop = start + len
+
+        re011_quiet?(binary_part(line, stop - 1, byte_size(line) - stop + 1)) or
+          re011_same_line?(binary_part(line, stop, byte_size(line) - stop))
+
+      nil ->
+        false
+    end
+  end
+
+  defp re011_next_line?(line) do
+    case Regex.run(@re011_next, line, return: :index) do
+      [{start, len} | _] ->
+        stop = start + len
+        re011_quiet?(binary_part(line, stop - 1, byte_size(line) - stop + 1))
+
+      nil ->
+        false
+    end
+  end
+
+  # `rest` is the text after the grep word: true when a quiet flag is in it,
+  # before a shell operator or the first `--`. Quoted words are opaque.
+  defp re011_quiet?(rest) do
+    rest
+    |> String.replace(~r/'[^']*'/, "Q")
+    |> String.replace(~r/"[^"]*"/, "Q")
+    |> String.replace(~r/[|;&)>].*$/, "")
+    |> String.split(~r/[[:space:]]+/, trim: true)
+    |> re011_quiet_word?()
+  end
+
+  defp re011_quiet_word?([]), do: false
+  defp re011_quiet_word?(["--" | _]), do: false
+  defp re011_quiet_word?([word | _]) when word in ["--quiet", "--silent"], do: true
+
+  defp re011_quiet_word?(["--" <> _ = word | rest]),
+    do: re011_quiet_word?(if(word in @re011_long_with_arg, do: Enum.drop(rest, 1), else: rest))
+
+  # Every `-…` word is read as a cluster, digits included: `-qm1` is quiet,
+  # and `-2q` is two lines of context and quiet.
+  defp re011_quiet_word?(["-" <> cluster | rest]) do
+    case re011_cluster(cluster) do
+      :quiet -> true
+      :takes_next -> re011_quiet_word?(Enum.drop(rest, 1))
+      :none -> re011_quiet_word?(rest)
+    end
+  end
+
+  defp re011_quiet_word?([_ | rest]), do: re011_quiet_word?(rest)
+
+  # A flag cluster, read left to right: `q` is quiet; a letter that takes an
+  # argument ends the cluster, and takes the next word when it is the last.
+  defp re011_cluster(<<?q, _::binary>>), do: :quiet
+  defp re011_cluster(<<c>>) when c in ~c"efmABCdD", do: :takes_next
+  defp re011_cluster(<<c, _::binary>>) when c in ~c"efmABCdD", do: :none
+  defp re011_cluster(<<_, rest::binary>>), do: re011_cluster(rest)
+  defp re011_cluster(<<>>), do: :none
+
+  # The line ends in a pipe (`|` or `|&`, not `||`), before a continuation
+  # backslash and trailing blanks.
+  defp re011_ends_in_pipe?(line) do
+    t =
+      line
+      |> String.replace(~r/[[:space:]]*\\$/, "")
+      |> String.replace(~r/[[:space:]]+$/, "")
+
+    Regex.match?(~r/(?:^|[^|&])\|$/, t) or String.ends_with?(t, "|&")
+  end
+
   # ─── Scan facade ────────────────────────────────────────────────────
 
   @doc """
@@ -1789,7 +2203,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
         re007_workflow_env_secret_exposure(repo_path) ++
         re008_spoofable_bot_gate(repo_path) ++
         re009_fromjson_secret(repo_path) ++
-        re010_workflow_run_artifact_no_provenance(repo_path)
+        re010_workflow_run_artifact_no_provenance(repo_path) ++
+        re011_pipe_into_quiet_grep(repo_path)
 
     %{
       findings: findings,
@@ -1799,16 +2214,108 @@ defmodule Hypatia.Rules.ResearchExtensions do
     }
   end
 
-  # ─── KYAML (flow-style) workflows ───────────────────────────────────
+  # ─── KYAML (flow-style) workflows, for the line-based rules ─────────
 
-  # ─── KYAML (flow-style) workflows ────────────────────
-
-  # Kept here for existing callers; the reader is Hypatia.WorkflowYaml.
+  # RE003 and RE005 still read workflow text line by line, and so does
+  # `WorkflowAudit.check_sha_pinned_toolchain_without_input/1`, whose findings
+  # feed a fixer that rewrites files by line. Until they read
+  # `Hypatia.Workflow` (#971), a KYAML workflow is shown to them as its block
+  # layout, one line for one line. The rules that read the model (RE001, RE002,
+  # WH013, WH014) do not use this.
   @doc false
-  defdelegate read_workflow(path), to: Hypatia.WorkflowYaml
+  def read_workflow(path), do: path |> File.read!() |> flow_to_block()
 
+  # Rewrite a KYAML document to block layout, preserving the line count:
+  # the root `{` and every closer become blank lines, `key: {`/`key: [`
+  # lose their opener, the first key of a `{` sequence item and each scalar
+  # sequence item gain `- `, trailing commas go, and plain double-quoted
+  # scalars are unquoted. Anything whose first significant line is not a
+  # bare `{` is not KYAML and passes through untouched — block YAML's own
+  # `on: [push]` and `permissions: {}` are never rewritten.
   @doc false
-  defdelegate flow_to_block(content), to: Hypatia.WorkflowYaml
+  def flow_to_block(content) when is_binary(content) do
+    lines = String.split(content, "\n")
+
+    if kyaml_root?(lines) do
+      {out, _stack, _dash} = Enum.reduce(lines, {[], [], false}, &flow_line/2)
+      out |> Enum.reverse() |> Enum.join("\n")
+    else
+      content
+    end
+  end
+
+  # True when the first line that is neither blank nor a comment is a bare `{`.
+  defp kyaml_root?(lines) do
+    lines
+    |> Enum.map(&String.trim/1)
+    |> Enum.find(&(&1 != "" and not String.starts_with?(&1, "#")))
+    |> Kernel.==("{")
+  end
+
+  # Rewrite one KYAML line. The stack holds the open collections (`:map` or
+  # `:seq`); `dash` marks that the next property opens a sequence item.
+  defp flow_line(line, {out, stack, dash}) do
+    trimmed = String.trim(line)
+
+    if trimmed == "" or String.starts_with?(trimmed, "#") do
+      {[dedent(line) | out], stack, dash}
+    else
+      {head, comment} =
+        case Regex.run(~r/^(.*?),?(\s+#[^"]*)?$/, String.trim_trailing(line)) do
+          [_, head, comment] -> {head, comment}
+          [_, head] -> {head, ""}
+        end
+
+      indent = String.duplicate(" ", indent_of(head))
+      body = String.trim(head)
+      in_seq? = match?([:seq | _], stack)
+
+      cond do
+        body in ["}", "]"] ->
+          {["" | out], Enum.drop(stack, 1), false}
+
+        body == "{" ->
+          {["" | out], [:map | stack], in_seq?}
+
+        String.ends_with?(body, ": {") or String.ends_with?(body, ": [") ->
+          kind = if String.ends_with?(body, "{"), do: :map, else: :seq
+          key = String.slice(body, 0..-3//1)
+          {[emit(indent, key, comment, dash) | out], [kind | stack], false}
+
+        in_seq? ->
+          item = Regex.replace(~r/^\{\s*(.*?)\s*\}$/, body, "\\1")
+          {[emit(indent <> "  ", unquote_scalar(item), comment, true) | out], stack, false}
+
+        true ->
+          {[emit(indent, unquote_scalar(body), comment, dash) | out], stack, false}
+      end
+    end
+  end
+
+  # Assemble one block-layout line, two columns left of the KYAML one, with a
+  # `- ` sequence marker in the two columns just above the key when `dash`.
+  defp emit(indent, body, comment, dash) do
+    prefix = if dash, do: String.slice(indent, 2..-1//1) <> "- ", else: indent
+    dedent(prefix <> body <> (comment || ""))
+  end
+
+  # Drop the two columns of indentation the KYAML root mapping adds.
+  defp dedent("  " <> rest), do: rest
+  defp dedent(line), do: line
+
+  # Unquote a `key: "value"` or bare `"value"` whose value holds no quote or
+  # escape; anything else keeps its quotes.
+  defp unquote_scalar(body) do
+    Regex.replace(~r/^((?:[^\s"':]+:\s+)?)"([^"\\]*)"$/, body, "\\1\\2")
+  end
+
+  # The width of a line's leading whitespace, in characters.
+  defp indent_of(line) do
+    case Regex.run(~r/^(\s*)/, line) do
+      [_, ws] -> String.length(ws)
+      _ -> 0
+    end
+  end
 
   # ─── Internals ──────────────────────────────────────────────────────
 
