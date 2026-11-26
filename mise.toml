@@ -3,23 +3,19 @@
 # Match the OTP 27.3.4.19 / Elixir 1.19.4 lanes in .github/workflows/ci.yml and tests.yml.
 erlang = "27.3.4.19"  # >= 27.3.4.13: :httpc drops authorization on cross-origin redirect
 elixir = "1.19.4-otp-27"
-node = "latest"
 rust = "latest"   # provides cargo, rustfmt and clippy
 zig = "0.16.0"   # pinned; .github/workflows/zig.yml asserts this equals ZIG_VERSION
-java = "latest"
 bun = "latest"
 
 # Package managers
 pnpm = "latest"
 
 # Formatting & Linting
-prettier = "latest"
 shfmt = "latest"
 stylua = "latest"
 
 # Build tools
 cmake = "latest"
-make = "latest"
 ninja = "latest"
 
 # Not listed on purpose: git, GNU sed/tar/grep (system tools), go-task, vitest
@@ -29,4 +25,3 @@ ninja = "latest"
 
 [env]
 # Common environment variables
-NODE_ENV = "development"
