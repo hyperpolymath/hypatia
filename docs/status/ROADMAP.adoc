@@ -5,6 +5,42 @@
 This file is the dated journal of working positions. Milestones and known
 gaps are in `.claude/CLAUDE.md` and `docs/DEBT-REGISTER.adoc`.
 
+== Position 2026-11-26: PR close-out and the proven swap
+
+Working position of the hypatia swap thread (tier A). Owner direction: close
+every open PR, swap CI to the umbrella `proven` workflow, then raise test
+coverage to CRG C in sweeps (1 unit/smoke/build/P2P, 2 rest of C, 3 grade B,
+4 all 18 categories).
+
+=== Done
+
+* #1225 closed as a duplicate of #1224 (byte-identical `Cargo.lock` change,
+  `url` 2.5.9 for RUSTSEC-2026-0592).
+
+=== Blocked on
+
+* Merging anything: SR-005 needs the stamped `proven` gate in the repo. The
+  umbrella is draft `proven-cicd-and-workflows#168` (required check
+  `proven / verdict`, manifest `.proven.toml`, schema `proven/manifest/v1`).
+  The pin SHA and tag `v0.1.0` follow when it merges.
+
+=== Open PRs (22) and what each needs
+
+* Red on the `url` advisory, expected green once #1224 merges: #1216, #1220,
+  #1222, #1223 (Rust Dependency Audit, Rust License and Ban Check, Security
+  Status). Not yet re-run.
+* #1237: Build AsciiDoc fails; cause not yet read.
+* Behind `main`, no failing check seen: #1174, #1175, #1179, #1185, #1189,
+  #1190, #1191, #1195, #1197, #1211, #1224, #1227, #1230, #1232, #1233.
+* Dependabot: #1229, #1235 (rebase needs the owner's approval).
+
+=== Next
+
+. Draft the swap PR (caller job id `proven`, `.proven.toml` with written N/A
+  reasons or expiring waivers) once #168 has a tag.
+. Sweep 1 tests via `proven-tests-and-benches`.
+. Re-measure the list above after each merge.
+
 == Position 2026-11-18
 
 Written on 2026-11-24 for the 2026-11-18 checkpoint. It covers one agent
