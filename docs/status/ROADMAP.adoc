@@ -15,7 +15,8 @@ coverage to CRG C in sweeps (1 unit/smoke/build/P2P, 2 rest of C, 3 grade B,
 === Done
 
 * #1225 closed as a duplicate of #1224 (byte-identical `Cargo.lock` change,
-  `url` 2.5.9 for RUSTSEC-2026-0592).
+  `url` 2.5.9 for RUSTSEC-2026-0592). `main` now carries that lockfile
+  change, so #1224 is redundant too; it stays open until the owner agrees.
 
 === Blocked on
 
@@ -26,9 +27,10 @@ coverage to CRG C in sweeps (1 unit/smoke/build/P2P, 2 rest of C, 3 grade B,
 
 === Open PRs (22) and what each needs
 
-* Red on the `url` advisory, expected green once #1224 merges: #1216, #1220,
-  #1222, #1223 (Rust Dependency Audit, Rust License and Ban Check, Security
-  Status). Not yet re-run.
+* Red on the `url` advisory: #1216, #1220, #1222, #1223 (Rust Dependency
+  Audit, Rust License and Ban Check, Security Status). `main` already pins
+  `url` 2.5.9 and `form_urlencoded` 1.2.3 in the root `Cargo.lock`, so
+  refreshing each onto `main` and re-running should clear them. Not yet done.
 * #1237: Build AsciiDoc fails; cause not yet read.
 * Behind `main`, no failing check seen: #1174, #1175, #1179, #1185, #1189,
   #1190, #1191, #1195, #1197, #1211, #1224, #1227, #1230, #1232, #1233.
