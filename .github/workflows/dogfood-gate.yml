@@ -43,7 +43,7 @@ jobs:
 
       - name: Validate A2ML manifests
         if: steps.detect.outputs.count > 0
-        uses: hyperpolymath/deed-ecosystem/validate-action@4cb8886be67cf0d67e150679d1213ea519c3806f # main, 2026-11-11 (#77)
+        uses: hyperpolymath/deed-ecosystem/validate-action@b883049e656a74a4f664f6ca119f7048ba8990d6 # main, 2026-11-11 (#77)
         with:
           path: '.'
           strict: 'false'
