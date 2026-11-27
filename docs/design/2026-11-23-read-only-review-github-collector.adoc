@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Read-only GitHub review collector: first operational admission seam
+:author: Jonathan D.A. Jewell
+:date: 2026-11-23
+:toc:
+
+== Scope
+
+This was developed in the stacked
+https://github.com/hyperpolymath/hypatia/pull/1218[PR #1218] and merged into the
+feature branch of https://github.com/hyperpolymath/hypatia/pull/1216[PR #1216],
+which remains unmerged into main. It is tracked by
+https://github.com/hyperpolymath/hypatia/issues/1217[review programme #1217].
+It implements *S-01 (bounded GitHub retrieval)* feeding *S-02 (unqualified
+admission)*. It does not implement a durable I-JSON/JCS ledger, a bot-review
+replacement, estate-wide scan, or E0 learning.
+
+Run on a machine with Elixir/Mix, gh CLI and authenticated read access:
+
+----
+mix hypatia.review_collect --repo hyperpolymath/vocarium --pr 74
+----
+
+This prints a human-readable inspection summary with no bot prose, JSON
+receipt, secret, model confidence, auto-fix or dispatch token. It invokes
+`gh api --method GET` with an argument vector (no shell) and asks for a
+single repository and PR, rather than scanning all 530 repos.
+
+== Actual boundary contract
+
+. Read the PR through authenticated GitHub REST; require the exact PR
+  number, base repository and a full 40-hex head commit.
+. Read *all* pages within the configured bounded budget from GitHub's
+  `pulls/:number/comments` and `pulls/:number/reviews`. The default limit
+  is five pages of 100 records *per endpoint*. A full final page returns
+  `page_budget_exhausted`: no partial evidence is silently passed off as
+  complete.
+. Read both paginated event inventories *twice* and compare their complete
+  decoded sequences. Missing/duplicate API event IDs or differences in the
+  repeated inventory abort collection. This detects ordinary offset-pagination
+  shifts during edits/deletions but is not an atomic snapshot or a guarantee
+  against every concurrent mutation. Report `repeated_stable_observation`,
+  never `complete_bounded_snapshot`.
+. Read PR head *again* after pagination. If it moved, abort with
+  `head_changed_during_collection`. A subsequent decision must still
+  re-check the live head before acting.
+. Admit only the two positively identified GitHub bot accounts below.
+  An identical login string with a different numeric GitHub user ID is
+  rejected. This is evidence of API-reported account identity, *not*
+  cryptographic signing of each claim.
+. For inline review comments, recognise only the specific known
+  CodeRabbit or Codex finding markers *after* bot-identity matching.
+  Do not interpret any other comment text as an instruction, classifier
+  rule, fix command, signature or successful test. Replies and arbitrary
+  Markdown are ignored.
+. For GitHub review submissions, require an unambiguous native
+  `pull_request_review_id` association with bot-authored, scoped inline
+  findings. Otherwise the submission has unknown scope and is not admitted.
+  Preserve any admitted submission as `has_findings=nil` with provider
+  execution status unknown. A `COMMENTED` submission may be quota exhaustion,
+  an `APPROVED` state grants no Hypatia merge authority, and `DISMISSED`
+  observations are withdrawn/cancelled. Empty reviews are **not** clean scans.
+. Bind inline findings to `original_commit_id` rather than the mutable
+  `commit_id` attachment; missing or malformed original provenance must
+  fail the entire collection, not silently disappear into ignored counts.
+. Feed those restricted maps to `Hypatia.ReviewObservation.admit/2`,
+  retaining its `external_assertion`, `unverified`, `unqualified`,
+  `learning_eligible=false` and `merge_approval=false` fields.
+
+[cols="2,2,2",options="header"]
+|===
+|Provider |GitHub login |API user ID verified 2026-11-23
+
+|Codex
+|`chatgpt-codex-connector[bot]`
+|`199175422`
+
+|CodeRabbit
+|`coderabbitai[bot]`
+|`136622811`
+|===
+
+Those IDs were observed from GitHub connector data for the live pilot.
+They are not ordinary secrets. Any future identity change requires an
+explicit source re-verification before updating the allowlist.
+
+== What is deliberately not yet covered
+
+* Codex issue-comment summary state: it contains `reviewed_sha` inside a
+  bot-authored HTML comment, *not* as a native GitHub API field. Parsing it
+  can be useful later, but requires a versioned producer-specific schema,
+  historical-edit discipline and an explicit assertion-vs-verification
+  boundary. In v0, no "no findings" result is inferred from its absence.
+* CodeRabbit rate-limit and Codex credit-exhaustion comments:
+  intake is **UNKNOWN/UNAVAILABLE** until a separately verified adapter
+  links the status to an exact review attempt. The existing CI failure
+  triage already recognises such events and must not be replaced.
+* pre-commit.ci is a GitHub check/status surface, not assumed to be
+  equivalent to a PR review comment. Add it through a check-run adapter
+  with precise app/check identity, head SHA and conclusion.
+* External-app authorization is bounded to account identity exposed by
+  GitHub's API; the GitHub CLI must be authenticated, but this does
+  not verify a provider's internal execution or provenance claims.
+* There is no JCS/JSONL persistence. The collector uses Jason only for
+  decoding the API's transient JSON. A future receipt emitter must use
+  the authoritative `hyperpolymath/ijson-jcs` canonical profile through
+  pinned kyq, with strict duplicate-key rejection and correct final-LF
+  policy, before hashing or signing a record.
+* There is no long-running watcher, cost-bearing @codex trigger, job
+  scheduler or mutation of any target repository.
+* This code does not override the gitbot-fleet dispatcher quarantine.
+
+== Failure policy
+
+[cols="2,3",options="header"]
+|===
+|Failure |Result and operator interpretation
+
+|Unreachable API / absent `gh` / token permissions
+|Error, not zero-findings
+
+|Unexpected JSON or nested PR shape
+|Structured error, not a crash or an empty list
+
+|Missing/duplicate event IDs or malformed identified bot findings
+|Error, not a successful collection with silently dropped findings
+
+|Comment inventory changes between repeated reads
+|Error, not a complete snapshot (REST lacks atomic read isolation)
+
+|Stalled GitHub CLI request
+|Bounded task timeout, error rather than infinite wait
+
+|Last page full at budget
+|Error, incomplete pagination
+
+|PR changes during retrieval
+|Error, stale observation interval
+
+|Unknown human or unknown bot account
+|Ignored *as external-review evidence*, count retained
+
+|Bot review with no independently attributable scope
+|Ignored as unknown scope, not a pass or invented code/security coverage
+
+|Linked review submitted as `COMMENTED` or `APPROVED`
+|`unavailable` provider-run status, not a verified completion or approval
+
+|Linked review dismissed
+|`cancelled`; linked findings treated as withdrawn
+
+|Existing external review at an older commit
+|`stale_head`, kept for historical comparison only
+|===
+
+== Regression and acceptance
+
+`test/review_github_collector_test.exs` mocks the API. It tests bot ID
+spoofing, marker scope, stale and remapped original SHAs, cancelled reviews,
+no-findings ambiguity, malicious content redaction, malformed nested API
+shapes, duplicate identities, repeated pagination consistency, moving heads
+and budget failures.
+The tests are included explicitly in the CI Elixir regression job; they do not
+require an external GitHub token.
+
+Acceptance requires the targeted ExUnit suite to pass, formatting and
+README-count validation to pass, and a separate authenticated *live pilot*
+on an approved repository. The latter should capture only source-event IDs,
+head SHA and counts, not full review prose. Validate source-ID parity against
+GitHub API before promoting this collector beyond advisory use.
+
+The collector is now part of the feature branch for #1216. Check the full
+branch head, its tests and its inherited Rust security blockers before
+merge. Earlier commits or reviews do not qualify the latest revision.
