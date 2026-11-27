@@ -6,9 +6,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Args;
 use colored::Colorize;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -83,7 +83,7 @@ pub struct WithdrawResult {
     /// Registry URL
     pub registry_url: String,
     /// Timestamp of withdrawal
-    pub withdrawn_at: DateTime<Utc>,
+    pub withdrawn_at: Timestamp,
     /// Ruleset metadata
     pub metadata: RulesetMetadata,
     /// Full ruleset content (if include_content is true)
@@ -153,7 +153,7 @@ pub async fn execute(args: WithdrawArgs, config: &Config, format: OutputFormat) 
         version: version.clone(),
         saved_to: Some(output_path.clone()),
         registry_url,
-        withdrawn_at: Utc::now(),
+        withdrawn_at: Timestamp::now(),
         metadata: ruleset.metadata.clone(),
         content: if args.include_content {
             Some(ruleset.clone())

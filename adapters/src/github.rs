@@ -12,8 +12,8 @@ use crate::forge::{
     WorkflowState,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
+use jiff::Timestamp;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -1245,8 +1245,8 @@ struct GitHubWorkflowRunDetail {
     head_branch: String,
     head_sha: String,
     html_url: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1266,9 +1266,9 @@ struct GitHubPullRequestFull {
     base: GitHubRef,
     html_url: String,
     mergeable: Option<bool>,
-    merged_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    merged_at: Option<Timestamp>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1293,8 +1293,8 @@ struct GitHubIssue {
     labels: Vec<GitHubLabel>,
     html_url: String,
     pull_request: Option<serde_json::Value>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1307,8 +1307,8 @@ struct GitHubComment {
     id: u64,
     body: String,
     user: GitHubUser,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    created_at: Timestamp,
+    updated_at: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1324,8 +1324,8 @@ struct GitHubCheckRun {
     conclusion: Option<String>,
     head_sha: String,
     html_url: Option<String>,
-    started_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
+    started_at: Option<Timestamp>,
+    completed_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]

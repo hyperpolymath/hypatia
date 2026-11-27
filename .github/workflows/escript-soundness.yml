@@ -163,6 +163,14 @@ jobs:
           fi
           echo "Consumer-shaped invocation produced $(jq 'length' consumer.json) findings."
 
+      # The wrapper the consumers call must stay as transparent as the `exec`
+      # it replaced (stdout, stdin, exit codes, forwarded SIGTERM, death by
+      # the child's signal), and must name an Erlang VM crash on stderr instead
+      # of leaving callers a bare "exit 139". Fake escripts, no build needed.
+      - name: hypatia-cli.sh passes exits through and names a VM crash
+        working-directory: source
+        run: bash tests/hypatia-cli-signal-test.sh
+
       # HYP-01: every finding in CI output names its support. The schema's
       # self-test runs first, so a schema that accepts everything cannot
       # pass: it must refuse a pattern finding that claims "sound" (and six

@@ -20,7 +20,7 @@
 //! Many operations require a local node and may be eventually consistent.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use reqwest::{header::HeaderMap, Client};
 use serde::{Deserialize, Serialize};
 
@@ -334,13 +334,13 @@ impl From<RadPatch> for PullRequest {
         let created_at = patch
             .revisions
             .first()
-            .map(|r| DateTime::from_timestamp(r.timestamp, 0).unwrap_or_default())
-            .unwrap_or_else(Utc::now);
+            .map(|r| Timestamp::from_second(r.timestamp).unwrap_or_default())
+            .unwrap_or_else(Timestamp::now);
 
         let updated_at = patch
             .revisions
             .last()
-            .map(|r| DateTime::from_timestamp(r.timestamp, 0).unwrap_or_default())
+            .map(|r| Timestamp::from_second(r.timestamp).unwrap_or_default())
             .unwrap_or(created_at);
 
         PullRequest {
@@ -375,15 +375,15 @@ impl From<RadIssue> for Issue {
             .discussion
             .first()
             .map(|c| {
-                let created = DateTime::from_timestamp(c.timestamp, 0).unwrap_or_default();
+                let created = Timestamp::from_second(c.timestamp).unwrap_or_default();
                 let updated = issue
                     .discussion
                     .last()
-                    .map(|l| DateTime::from_timestamp(l.timestamp, 0).unwrap_or_default())
+                    .map(|l| Timestamp::from_second(l.timestamp).unwrap_or_default())
                     .unwrap_or(created);
                 (created, updated)
             })
-            .unwrap_or_else(|| (Utc::now(), Utc::now()));
+            .unwrap_or_else(|| (Timestamp::now(), Timestamp::now()));
 
         Issue {
             id: issue.id,
@@ -402,7 +402,7 @@ impl From<RadIssue> for Issue {
 
 impl From<RadComment> for Comment {
     fn from(comment: RadComment) -> Self {
-        let created_at = DateTime::from_timestamp(comment.timestamp, 0).unwrap_or_default();
+        let created_at = Timestamp::from_second(comment.timestamp).unwrap_or_default();
         Comment {
             id: comment.id,
             body: comment.body,

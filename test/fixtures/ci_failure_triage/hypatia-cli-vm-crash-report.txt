@@ -1,0 +1,3 @@
+[hypatia] The Erlang VM running the scanner (beam.smp) was killed by SIGSEGV (exit 139) on OTP 28.3.3 (erts 16.2.2).
+[hypatia] This is a runtime crash: no scan result was produced, and it is not a finding about the scanned repository.
+[hypatia] Re-running on the same input and runtime crashes again. Report the OTP version above; see ci_failure_triage 'toolchain_segfault'.
