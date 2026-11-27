@@ -57,11 +57,13 @@ defmodule Hypatia.FixOwnershipCapTest do
         r = recipe(id)
         assert TriangleRouter.ownership_cap(r) == nil, id
 
-        assert TriangleRouter.recipe_strategy(r) ==
+        # An exact match, so that only the ownership cap and the confidence decide (the cap
+        # for a merged match, E0-19, is tested in triangle_router_test.exs).
+        assert TriangleRouter.recipe_strategy(r, "exact") ==
                  TriangleRouter.dispatch_strategy(r["confidence"]),
                id
 
-        assert TriangleRouter.recipe_strategy(r) == :auto_execute, id
+        assert TriangleRouter.recipe_strategy(r, "exact") == :auto_execute, id
       end
     end
   end
@@ -71,7 +73,8 @@ defmodule Hypatia.FixOwnershipCapTest do
       DispatchManifest.compile([
         {:eliminate, recipe("recipe-fix-spdx-license"), @pattern},
         {:substitute, recipe("recipe-scorecard-sast"), @pattern},
-        {:eliminate, recipe("recipe-budget-resume-sweep"), @pattern}
+        {:eliminate, recipe("recipe-budget-resume-sweep"),
+         Map.put(@pattern, "match_kind", "exact")}
       ])
 
     assert {elim["strategy"], elim["auto_fixable"], elim["ownership_cap"]} ==

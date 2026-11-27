@@ -138,7 +138,7 @@ defmodule Hypatia.DispatchManifest do
   defp action_to_manifest_entry({:eliminate, recipe, pattern}) do
     confidence = Map.get(recipe, "confidence", 0.0)
     # Capped recipes (owner ruling R1) are report_only whatever their confidence.
-    strategy = TriangleRouter.recipe_strategy(recipe)
+    strategy = TriangleRouter.recipe_strategy(recipe, Map.get(pattern, "match_kind"))
     cap = TriangleRouter.ownership_cap(recipe)
     repo = get_repo(pattern)
 
