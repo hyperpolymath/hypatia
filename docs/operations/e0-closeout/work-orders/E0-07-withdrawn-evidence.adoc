@@ -10,108 +10,62 @@
 :wo-cap-usd: 16
 :wo-max-turns: 240
 :wo-branch: fix/e0-07-withdrawn-evidence
-:wo-depends: E0-09
+:wo-depends: E0-34, E0-32
 
 == Goal
 
-When a person withdraws an outcome row, the confidence and the dispatch tier
-of its recipe are computed again without that row. The withdrawn row stays in
-the log.
+When a person withdraws an outcome row, the confidence and the dispatch tier of its recipe are computed again without that row, and a finding that
+cited the row stops resting on it. The withdrawn row stays in the log.
 
 == Authority
 
-https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 9 ("If
-evidence is withdrawn, recompute or revise dependent verdicts") and acceptance
-A7. Related: https://github.com/hyperpolymath/hypatia/issues/919[issue 919].
+https://github.com/hyperpolymath/hypatia/issues/984[Issue 984], step 9 ("If evidence is withdrawn, recompute or revise dependent verdicts") and acceptance A7. Related: https://github.com/hyperpolymath/hypatia/issues/919[issue 919].
+Owner rulings of 2026-11-21 on `docs/design/outcome-retraction.adoc`, section 8a. The design is the owner's answers in `docs/design/outcome-retraction.adoc` and the design note of the stop of 2026-11-15, now ruled:
+
+* A withdrawal calls `Quarantine.retract_dependents/1`, which now retracts the assumptions of the withdrawn outcomes as well (question B of the stop, then the extension of `E0-32`).
+* The local id that `E0-09` gives a row is enough, and a row with none has the derived id of `E0-34`.
+* Withdrawing a failure row may raise a tier (ruling 4A): a person withdrew it, and the log keeps both rows.
 
 == Facts measured
 
-Commit `4d7f059`, read on 2026-11-14.
+Commit `4d7f059`, read on 2026-11-14, and again at the stop of 2026-11-15. Measure them again.
 
-* `lib/outcome_tracker.ex`, `qualified_outcome_counts/1` (line 486) has no
-  notion of a withdrawn row.
-* Same file: `update_confidence_file/5` (line 420) computes confidence from the
-  outcome rows with `bayesian_update/3` (line 530).
-  `annealed_strategy_from_store/3` (line 1006) and `reconcile_annealing_state/2`
-  (line 1075) compute the stage from the qualified counts. So a new count
-  can give a new confidence and a new stage.
-* 4 other modules call the gate for each row: `lib/cross_repo_learning.ex`
-  (lines 137 and 262), `lib/neural/training_pipeline.ex` (line 97),
-  `lib/neural/graph_of_trust.ex` (line 77) and `lib/neural/rebalancer.ex`
-  (line 260). A withdrawal that changes only the stored confidence leaves
-  these readers with the withdrawn row.
-* `lib/confidence_annealing.ex` (lines 86 to 91): a recipe is `:nascent` from
-  0 qualified outcomes, `:adolescent` from 5, `:mature` from 15 and `:veteran`
-  from 50. The dispatch tier of `:nascent` is `:report_only`, and the tier of
-  `:adolescent` is `:review` (lines 241 and 242). So 1 outcome changes no stage.
-* `lib/safety/quarantine.ex`, `retract_dependents/1` (line 110) retracts
-  findings that rest on a quarantined rule, bot or prover. Only
-  `test/retraction_test.exs` calls it.
-* `test/retraction_test.exs` has no case that withdraws an outcome row.
-* A fleet row has the identity `fleet_import_id` (`lib/outcome_tracker.ex`, line 55).
-  A local row has only a provisional identity (file and line).
+* `lib/outcome_tracker.ex`: `qualified_outcome_counts/1` has no notion of a withdrawn row. `update_confidence_file/5` computes confidence from the rows with `bayesian_update/3`.
+  `annealed_strategy_from_store/3` and `reconcile_annealing_state/2` compute the stage from the qualified counts, so a new count can give a new confidence and a new stage.
+* 5 readers call the gate for each row: `lib/cross_repo_learning.ex`, `lib/neural/training_pipeline.ex`, `lib/neural/graph_of_trust.ex`, `lib/neural/rebalancer.ex`, and the counts in `lib/outcome_tracker.ex`.
+* `lib/confidence_annealing.ex`: a recipe is `:nascent` from 0 qualified outcomes, `:adolescent` from 5, `:mature` from 15, `:veteran` from 50. The tier of `:nascent` is `:report_only`, and the tier of `:adolescent` is `:review`.
+* `lib/safety/quarantine.ex`: `retracted_assumptions/0` reads the quarantine table, and `retract_dependents/1` applies it. No module of `lib/` calls `retract_dependents/1`.
 
 == Theory inputs
 
-Read on 2026-11-14 at echo-types `dedda75` and residual-evidence-types
-`6f94640`. Each file has `--safe --without-K --cubical-compatible`. No prover
-was run for this work order. Use these results as design rules. A use in
-Hypatia is a transcription, and its match to the Agda is assumed, not proved.
-
-* Apply a withdrawal to the log, then compute again. Do not correct the
-  stored confidence. An aggregation that merges 2 inputs has no canonical
-  inverse (echo-types `EchoAggregation.agda`, line 210), and a filter
-  commutes with a summary only when the summary keeps what the filter reads
-  (`EchoSelectiveProjection.agda`, line 106). The count does not keep the row.
-* Check each row against the log that remains, in 1 place. Survival is proved
-  against the retracted context, never against the full one
-  (residual-evidence-types `Revision.agda`, lines 180 to 191).
-* A stable id for a local row is a need, not a choice: exact recovery forces
-  distinct residues for distinct inputs (`EchoFiniteResidue.agda`, line 36).
-* Not proved anywhere: that retraction is idempotent or free of order, and
-  any statement on confidence. A withdrawal of a failure row raises confidence.
+Apply a withdrawal to the log, then compute again. Do not correct the stored confidence (echo-types `EchoAggregation.agda`, line 210; `EchoSelectiveProjection.agda`, line 106). Check each row against the log that remains, in 1 place
+(residual-evidence-types `Revision.agda`, lines 180 to 191). Not proved anywhere: that retraction is idempotent or free of order, and any statement on confidence.
 
 == Steps
 
-. Measure the facts again. Stop if one no longer holds.
-. Write a design note of 1 page in the pull request body. It answers:
-.. How a withdrawal is recorded. The log is append-only, so the note must keep
-   the withdrawn row and add a record of the withdrawal.
-.. How the withdrawal names its row, for a fleet row and for a local row.
-.. Who can write a withdrawal, and by which command.
-.. Which stored values are computed again, and when.
-.. Where the withdrawal takes effect, so that each reader of the gate stops
-   counting the row. The gate reads 1 row, and a withdrawal is a second
-   record, so a check of 1 row alone cannot see it.
-+
-Name the option that is most correct in the long term. Say so if you choose another.
-. Stop for the owner if the note needs a stable id for local rows. No work
-  order in this folder gives a local row a stable id: `E0-11` covers fleet
-  rows only. The owner then adds a work order for it, and this one waits.
-. Write the tests first. They must cross a stage threshold:
-.. 5 verified successes take a new recipe from `:nascent` to `:adolescent`,
-   and its dispatch tier from `:report_only` to `:review`;
-.. a withdrawal of 1 of the 5 rows returns the confidence, the stage and the
-   tier to the values that the recipe had after 4 rows;
-.. the log still has the 5 rows and the record of the withdrawal;
-.. cross-repo learning, the training pipeline, the graph of trust and the
-   rebalancer no longer count the withdrawn row (1 test for each).
-. Implement the smallest change that passes the tests.
+. Measure the facts again. Stop if one no longer holds. Confirm that `E0-34` and `E0-32` are merged.
+. Write the tests first (they must cross a stage threshold):
+.. 5 verified successes take a new recipe from `:nascent` to `:adolescent`, and its tier from `:report_only` to `:review`;
+.. a withdrawal of 1 of the 5 returns the confidence, the stage and the tier to the values after 4 rows;
+.. the log still has the 5 rows, and the withdrawal store has the record;
+.. a withdrawn failure row raises the confidence of its recipe, and the stage and tier follow the counts;
+.. the 4 other readers of the gate (cross-repo learning, the training pipeline, the graph of trust, the rebalancer) do not count a withdrawn row (1 test for each);
+.. `Quarantine.retract_dependents/1` retracts a finding whose token cites the withdrawn row, and keeps one that cites another;
+.. a withdrawal of a row that does not exist, or of an id that 2 identical legacy rows share, returns an error and writes nothing.
+. Add the withdrawal store (`withdrawals/YYYY-MM.jsonl` under the data root, one canonical JSON object for each line: the id, the reason from a closed set, `by`, a time), a single loader in `OutcomeTracker` that
+  reads the outcome rows and removes the withdrawn ones, and use it in the 5 readers. Compute the confidence and the annealing state again from that loader, and make `Quarantine.retracted_assumptions/0` include
+  `{:outcome, id}` for each withdrawn row.
+. Add `mix hypatia.withdraw_outcome --id ID --reason REASON --by NAME`, named in its usage text. No dispatch or scheduler path calls it.
 
 == Acceptance
 
-* New tests pass in `test/outcome_tracker_test.exs`. They show the first 3 points of step 4.
-* 1 test for each of the 4 other readers shows that it does not count a
-  withdrawn row.
-* A withdrawal of a row that does not exist returns an error and writes nothing.
-* `mix test test/outcome_tracker_test.exs test/retraction_test.exs test/cross_repo_learning_test.exs`
-  passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
-* The pull request body has the design note and the rejected options.
+* The new tests pass in `test/outcome_tracker_test.exs` and `test/retraction_test.exs`, and they failed before step 4. Give both outputs.
+* `mix test test/outcome_tracker_test.exs test/retraction_test.exs test/cross_repo_learning_test.exs` passes. `mix test` has 0 failures. No file that was formatted before the change is unformatted after it.
+* The pull request body has the design note of 1 page and the rejected options, and names where the withdrawal takes effect.
+* The pull request body says that a revision receipt of the withdrawal is `E0-35`, and is not in this pull request.
 
 == Stop and ask
 
-* The design needs a stable id for a local row, or another change to the row
-  identity (see step 3). No work order covers a stable id for local rows yet.
-* A withdrawal must also retract findings through `Quarantine.retract_dependents/1`.
-  That wires a safety module into a live path, which this folder excludes.
+* A reader of the gate is not one of the 5 listed here.
+* The recompute changes a stage by a rule that the tests of `confidence_annealing` do not expect.
 * The cost reaches the cap before the acceptance checks pass.

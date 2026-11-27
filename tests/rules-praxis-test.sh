@@ -85,19 +85,24 @@ expect_broken "an un-retired tombstone is refused" "$work/tomb.deed" "tombstone 
 # Facts the code states, read back from the registry (review of #1070): a
 # provenance table is not a severity table, `severity: :advisory` is advisory,
 # and a rule that fires at several severities keeps the highest.
-row() { awk -v t="\"$1\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
-if row hypatia/branch_protection/BP001 | grep -q ':severity high' && row hypatia/supply_chain/SC001 | grep -q ':status active'; then ok "opt-in scanner rules are registered"; else bad "BP001/SC001 missing or wrong"; fi
-if row hypatia/git_state/GS007 | grep -q ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
-if row hypatia/code_scanning_alerts/CSA006 | grep -q ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi
+row() { local id=$1; awk -v t="\"$id\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
+# Whether a rule-def carries a fact. Captured, then matched: `row | grep -q`
+# loses a match to SIGPIPE under pipefail when awk is still writing (RE011).
+# A failed read of the deed is a failure, not a missing fact (RE012): the
+# here-string is fed from the captured row, whose status is checked.
+row_has() { local id=$1 fact=$2 def; def=$(row "$id") || return 2; grep -q -- "$fact" <<<"$def"; }
+if row_has hypatia/branch_protection/BP001 ':severity high' && row_has hypatia/supply_chain/SC001 ':status active'; then ok "opt-in scanner rules are registered"; else bad "BP001/SC001 missing or wrong"; fi
+if row_has hypatia/git_state/GS007 ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
+if row_has hypatia/code_scanning_alerts/CSA006 ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi
 
-if row hypatia/pin_integrity/PI005 | grep -q ':class advisory' && row hypatia/disambiguation_rules/DR001 | grep -q ':class advisory'; then ok "rules the code calls advisory in words are class advisory"; else bad "PI005 or DR001 is not class advisory"; fi
+if row_has hypatia/pin_integrity/PI005 ':class advisory' && row_has hypatia/disambiguation_rules/DR001 ':class advisory'; then ok "rules the code calls advisory in words are class advisory"; else bad "PI005 or DR001 is not class advisory"; fi
 
-if row hypatia/workflow_audit/duplicate_workflow | grep -q ':severity minor' && row hypatia/cicd_rules/waste_duplicate_workflow | grep -q ':severity medium'; then ok "named atom rules carry the severity the code states"; else bad "duplicate_workflow rows lack their severity"; fi
+if row_has hypatia/workflow_audit/duplicate_workflow ':severity minor' && row_has hypatia/cicd_rules/waste_duplicate_workflow ':severity medium'; then ok "named atom rules carry the severity the code states"; else bad "duplicate_workflow rows lack their severity"; fi
 
 # Severities the code computes (an if expression, a helper): the highest branch.
 # A severity read from run-time alert data (CSA001) has none to record.
-if row hypatia/supply_chain/SC012 | grep -q ':severity high' && row hypatia/structural_drift/SD008 | grep -q ':severity critical' \
-  && row hypatia/research_extensions/RE001 | grep -q ':severity high' && ! row hypatia/code_scanning_alerts/CSA001 | grep -q ':severity'; then
+if row_has hypatia/supply_chain/SC012 ':severity high' && row_has hypatia/structural_drift/SD008 ':severity critical' \
+  && row_has hypatia/research_extensions/RE001 ':severity high' && ! row_has hypatia/code_scanning_alerts/CSA001 ':severity'; then
   ok "computed severities are read; run-time severities stay empty"; else bad "computed severity rows are wrong"; fi
 
 # The names findings actually carry resolve (A5 R09). Ground truth: every
@@ -140,7 +145,7 @@ done < <(awk '
 ' lib/hypatia/cli.ex lib/rules/*.ex | sort -u)
 if [ -z "$missing_pairs" ]; then ok "every literal rule_module/type pair in the code is in the registry"; else bad "pairs in the code but not the registry:$missing_pairs"; fi
 if ! grep -qF '"hypatia/workflow_audit/always_after_cancel"' "$deed" && grep -qF '"hypatia/ci_failure_triage/always_after_cancel"' "$deed"; then ok "a name moved by a rule_id override is registered under its real module only"; else bad "always_after_cancel is registered under workflow_audit, or missing under ci_failure_triage"; fi
-if row hypatia/structured_format/SF001 | grep -q ':class advisory' && row hypatia/cicd_rules/banned_language_file | grep -q ':severity critical' && row hypatia/implementation_inside_canon/HYP-S009 | grep -q ':status active' && row hypatia/workflow_hardening/invalid_actions_lock | grep -q ':status active'; then ok "fixed names carry the code's severity and advisory flag; HYP-S009 and invalid_actions_lock are registered"; else bad "a fixed-name row is wrong"; fi
+if row_has hypatia/structured_format/SF001 ':class advisory' && row_has hypatia/cicd_rules/banned_language_file ':severity critical' && row_has hypatia/implementation_inside_canon/HYP-S009 ':status active' && row_has hypatia/workflow_hardening/invalid_actions_lock ':status active'; then ok "fixed names carry the code's severity and advisory flag; HYP-S009 and invalid_actions_lock are registered"; else bad "a fixed-name row is wrong"; fi
 
 # Portability: gawk and mawk differ (a `\[` in a -v value is valid in one and a
 # fatal regex error in the other, and the awk then dies without a word inside a

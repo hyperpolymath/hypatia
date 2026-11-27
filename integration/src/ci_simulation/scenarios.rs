@@ -32,7 +32,7 @@ use super::{
     MatrixConfig, MockCircleCI, MockGitHubActions, MockGitLabCI, SecurityFinding,
     SimulatedArtifact, SimulatedBuild, SimulatedCI, SimulatedJob, SimulatedStep,
 };
-use chrono::Utc;
+use jiff::Timestamp;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -655,7 +655,7 @@ pub async fn parallel_jobs_with_count(job_count: usize) -> ScenarioResult {
 
     // Manually add parallel jobs
     {
-        let mut builds = ci.builds.write().await;
+        let mut builds = ci.store.builds.write().await;
         let build = builds.get_mut(&build_id).unwrap();
 
         build.jobs.clear();
@@ -681,11 +681,11 @@ pub async fn parallel_jobs_with_count(job_count: usize) -> ScenarioResult {
 
     // Simulate all jobs starting
     {
-        let mut builds = ci.builds.write().await;
+        let mut builds = ci.store.builds.write().await;
         let build = builds.get_mut(&build_id).unwrap();
         for job in &mut build.jobs {
             job.status = BuildStatus::InProgress;
-            job.started_at = Some(Utc::now());
+            job.started_at = Some(Timestamp::now());
         }
     }
 
@@ -790,7 +790,7 @@ pub async fn matrix_builds_with_config(matrix: MatrixConfig) -> ScenarioResult {
     let combination_count = matrix_combinations.len();
 
     {
-        let mut builds = ci.builds.write().await;
+        let mut builds = ci.store.builds.write().await;
         let build = builds.get_mut(&build_id).unwrap();
 
         build.jobs.clear();

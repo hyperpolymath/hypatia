@@ -41,6 +41,9 @@ defmodule Hypatia.Rules.CiFailureTriageTest do
     # missing a ref (this-ssg), canon lockstep (EpistemicTypes.jl, dictask),
     # stale REPOSITORY-MAP (dictask), superseded deed (rsr-template-repo#337).
     {"hypatia-cli-segfault.txt", "toolchain_segfault", :owner},
+    # hypatia-cli.sh's own VM-crash report, without the caller shell's
+    # "Segmentation fault" line (tests/hypatia-cli-signal-test.sh).
+    {"hypatia-cli-vm-crash-report.txt", "toolchain_segfault", :owner},
     {"hypatia-critical-findings.txt", "security_findings_reported", :owner},
     {"lock-missing-ref.txt", "actions_lock_missing_ref", :fix},
     {"lock-missing-pin.txt", "actions_lock_missing_ref", :fix},
