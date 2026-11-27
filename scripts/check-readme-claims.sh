@@ -63,10 +63,17 @@ fi
 # The ids an AsciiDoc file defines: explicit [[id]], [[id,label]], [#id],
 # anchor:id[], and the default section ids (_title_in_lower_case).
 anchors() {
-  local file=$1
-  # grep exits 1 when a file has no explicit ID: no match, not an error.
-  { { grep -oE '\[\[[A-Za-z0-9_:.-]+|\[#[A-Za-z0-9_:-]+|anchor:[A-Za-z0-9_:.-]+\[' "$file" || [[ $? -eq 1 ]]; } | sed -E 's/^(\[\[|\[#|anchor:)//; s/\[$//'
-    sed -nE 's/^=+ +(.*)$/\1/p' "$file" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/_/g; s/_+$//; s/^/_/'
+  local file=$1 explicit titles
+  # Each read is captured and checked on its own. The caller runs this in an
+  # `||` list, where errexit is off, so a failure inside a pipeline would
+  # otherwise be lost (CodeRabbit on #1208). grep exits 1 when a file has no
+  # explicit ID: no match, not an error; 2 is an error.
+  explicit=$(grep -oE '\[\[[A-Za-z0-9_:.-]+|\[#[A-Za-z0-9_:-]+|anchor:[A-Za-z0-9_:.-]+\[' "$file") ||
+    [[ $? -eq 1 ]] || return 2
+  titles=$(sed -nE 's/^=+ +(.*)$/\1/p' "$file") || return 2
+  {
+    [[ -z "$explicit" ]] || sed -E 's/^(\[\[|\[#|anchor:)//; s/\[$//' <<<"$explicit"
+    [[ -z "$titles" ]] || tr '[:upper:]' '[:lower:]' <<<"$titles" | sed -E 's/[^a-z0-9]+/_/g; s/_+$//; s/^/_/'
   } | sort -u
 }
 
