@@ -36,7 +36,7 @@
       ("docker-compose.yml" "Use compose.yml with nerdctl/podman")
       ("package.json for runtime" "Use deno.json imports")
       ("node_modules/" "Use Deno caching")
-      (".ts files" "Convert to ReScript")
+      (".ts files" "Convert to AffineScript")
       (".go files" "Convert to Rust")))
 
   (workflow-requirements
