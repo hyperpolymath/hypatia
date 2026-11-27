@@ -152,7 +152,7 @@ jobs:
       # oracle and the canon as if they were the caller's own files. Scoring
       # `repo/` puts them outside it.
       - name: Checkout repository under test
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository }}
           # `github.sha` is the commit under test (the merge commit for a pull
@@ -216,7 +216,7 @@ jobs:
           fi
 
       - name: Checkout standards (SSOT source)
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.standards_source.outputs.repository }}
           ref: ${{ inputs.standards-ref }}
@@ -237,7 +237,7 @@ jobs:
 
       - name: Checkout hypatia (the pinned oracle)
         if: ${{ steps.validate_oracle_pin.outputs.ok == 'true' }}
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -245,7 +245,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Elixir/OTP
-        uses: erlef/setup-beam@v1.24.1
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           elixir-version: ${{ inputs.elixir-version }}
           otp-version: ${{ inputs.otp-version }}

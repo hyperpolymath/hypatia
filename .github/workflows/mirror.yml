@@ -41,7 +41,7 @@ permissions:
 
 jobs:
   mirror:
-    uses: metadatastician/standards/.github/workflows/mirror-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609
+    uses: metadatastician/standards/.github/workflows/mirror-reusable.yml@75d38f80b6cb41e9785cf6f0c6ecf60846db7519
     # Only the seven forge keys the callee declares (standards#1108 §6b).
     secrets:
       GITLAB_SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}

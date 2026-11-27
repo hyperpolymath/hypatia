@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   hypatia:
-    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609
+    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@75d38f80b6cb41e9785cf6f0c6ecf60846db7519
     # Scanner pin: hypatia's own main branch, never the PR head. See governance.yml.
     with:
       hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}

@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.4
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # The checkout, and gh against the GitHub API (scripts/ci-health/).
@@ -54,7 +54,7 @@ jobs:
             github.com:443
             api.github.com:443
 
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run CI-health sweep
         env:
           # PAT needs classic `repo` + `workflow` scope (repo admin for the

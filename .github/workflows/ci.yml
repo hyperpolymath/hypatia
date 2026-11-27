@@ -36,16 +36,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -67,10 +67,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
           components: rustfmt
@@ -85,15 +85,15 @@ jobs:
     needs: [rust-check]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -111,21 +111,21 @@ jobs:
     needs: [rust-test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.90.3
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-llvm-cov
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.3
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -150,7 +150,7 @@ jobs:
       present: ${{ steps.check.outputs.present }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check for registry/hypatia.cabal
         id: check
         run: |
@@ -175,10 +175,10 @@ jobs:
         working-directory: registry
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@v2.12.1
+        uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d # v2.12.1
         id: setup
         with:
           ghc-version: '9.6'
@@ -191,7 +191,7 @@ jobs:
           cabal build all --dry-run
 
       - name: Restore cached dependencies
-        uses: actions/cache/restore@v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache
         env:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
@@ -205,7 +205,7 @@ jobs:
         run: cabal build all --only-dependencies
 
       - name: Save cached dependencies
-        uses: actions/cache/save@v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
@@ -228,15 +228,15 @@ jobs:
     if: needs.detect-haskell.outputs.present == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup HLint
-        uses: haskell-actions/hlint-setup@v2.4.10
+        uses: haskell-actions/hlint-setup@fe9cd1cd1af94a23900c06738e73f6ddb092966a # v2.4.10
         with:
           version: '3.8'
 
       - name: Run HLint
-        uses: haskell-actions/hlint-run@v2.4.10
+        uses: haskell-actions/hlint-run@eaca4cfbf4a69f4eb875df38b6bc3e1657020378 # v2.4.10
         with:
           path: registry/
           fail-on: warning
@@ -256,7 +256,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Parse k9iser.toml + verify declared paths exist
         run: |
@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload k9 artefacts
         if: hashFiles('generated/k9iser/**') != ''
-        uses: actions/upload-artifact@v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: k9iser-artefacts
           path: generated/k9iser/
@@ -318,7 +318,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -327,13 +327,13 @@ jobs:
       # "RSR oracle — dogfood this repo"). Bump both together or the gate
       # stops testing what consumers run.
       - name: Setup Elixir/OTP (identical to the dogfood gate)
-        uses: erlef/setup-beam@v1.24.1
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           elixir-version: '1.19.4'
           otp-version: '27.3.4.19'
 
       - name: Restore Mix cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             deps
@@ -383,7 +383,7 @@ jobs:
         run: bash scripts/proof-ledger.sh derive exunit "$PROOF_RECEIPTS"
 
       - name: Checkout the governance-pinned baseline helper
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: metadatastician/standards
           ref: 7641c7fdb01420696b5420ab85d88f599f32f609
@@ -483,12 +483,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Elixir/OTP (identical to elixir-compile)
-        uses: erlef/setup-beam@v1.24.1
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           elixir-version: '1.19.4'
           otp-version: '27.3.4.19'
@@ -520,12 +520,12 @@ jobs:
       YAML_TEST_SUITE_REF: 6ad3d2c62885d82fc349026c136ef560838fdf3d
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Checkout kyq at the pinned commit
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: metadatastician/kyq
           ref: ${{ env.KYQ_REF }}
@@ -533,7 +533,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout the YAML test suite at the pinned commit
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: yaml/yaml-test-suite
           ref: ${{ env.YAML_TEST_SUITE_REF }}
@@ -541,13 +541,13 @@ jobs:
           persist-credentials: false
 
       - name: Setup Elixir/OTP (identical to the dogfood gate)
-        uses: erlef/setup-beam@v1.24.1
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           elixir-version: '1.19.4'
           otp-version: '27.3.4.19'
 
       - name: Restore Mix cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             deps
