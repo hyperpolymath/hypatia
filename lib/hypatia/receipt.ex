@@ -42,6 +42,7 @@ defmodule Hypatia.Receipt do
   @fleet_log "shared-context/learning/fix-outcomes.jsonl"
   @rescans ~w(verified still_present scan_failed scan_skipped)
   @qualifications ~w(verified failed incomplete still_present)
+  @terminal_refusals [:duplicate_event_id, :verified_without_evidence]
 
   # ── Building ───────────────────────────────────────────────────────────
 
@@ -372,7 +373,7 @@ defmodule Hypatia.Receipt do
   # receipt (the row is stored and the log says why); any other failure is pending and
   # is written when the recipe is next recomputed.
   def report_failure(event_id, reason)
-      when reason in [:duplicate_event_id, :verified_without_evidence] do
+      when reason in @terminal_refusals do
     Logger.warning(
       "receipt_refused event_id=#{event_id} reason=#{inspect(reason)}: the row is stored; " <>
         "no receipt is written for it"
@@ -497,30 +498,52 @@ defmodule Hypatia.Receipt do
   @doc """
   Write the receipt of every row of a recipe that has an `event_id` and no receipt.
   Rows with no `event_id` (written before E0-09) get none: nothing is back-filled.
-  Returns `{written, failed}`. A receipt whose `event_id` has no row in the log is
-  not touched; `orphans/1` reports it.
+  Returns `{written, failed}`; `failed` includes both retryable failures and final
+  refusals. Call `repair_with_status/2` when deciding whether to retry. A receipt
+  whose `event_id` has no row in the log is not touched; `orphans/1` reports it.
   """
   @spec repair(String.t(), String.t()) :: {non_neg_integer(), non_neg_integer()}
   def repair(data_root, recipe_id) do
+    result = repair_with_status(data_root, recipe_id)
+    {result.written, result.pending + result.refused}
+  end
+
+  @doc """
+  Repair missing receipts, distinguishing retryable failures (`pending`) from
+  the final refusals logged by `report_failure/2` (`refused`). A refused row is
+  still stored and reported; it never receives a fabricated receipt or, by
+  itself, schedules another retry. Existing receipts and rows without an event
+  id are skipped, as in `repair/2`.
+  """
+  @spec repair_with_status(String.t(), String.t()) :: %{
+          written: non_neg_integer(),
+          pending: non_neg_integer(),
+          refused: non_neg_integer()
+        }
+  def repair_with_status(data_root, recipe_id) do
     rows_of_recipe(data_root, recipe_id)
-    |> Enum.reduce({0, 0}, fn row, {written, failed} ->
+    |> Enum.reduce(%{written: 0, pending: 0, refused: 0}, fn row, result ->
       id = Map.get(row, "event_id")
 
       cond do
         not is_binary(id) ->
-          {written, failed}
+          result
 
         exists?(data_root, id) ->
-          {written, failed}
+          result
 
         true ->
           case write(data_root, row) do
             :ok ->
-              {written + 1, failed}
+              %{result | written: result.written + 1}
+
+            {:error, reason} when reason in @terminal_refusals ->
+              report_failure(id, reason)
+              %{result | refused: result.refused + 1}
 
             {:error, reason} ->
               report_failure(id, reason)
-              {written, failed + 1}
+              %{result | pending: result.pending + 1}
           end
       end
     end)

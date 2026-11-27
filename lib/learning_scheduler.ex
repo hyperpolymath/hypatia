@@ -683,19 +683,19 @@ defmodule Hypatia.LearningScheduler do
       else
         case Jason.decode(line) do
           {:ok, record} when is_map(record) ->
-            # Imported fleet entries are already handled by the fleet
-            # poll. Do not re-count them on the local poll.
-            if Map.get(record, "origin") == "gitbot-fleet" do
-              {count, recipes, quarantined}
-            else
-              recipe_ids =
-                record
-                |> Map.get("recipe_id")
-                |> List.wrap()
-                |> Enum.reject(&is_nil/1)
+            recipe_ids =
+              record
+              |> Map.get("recipe_id")
+              |> List.wrap()
+              |> Enum.reject(&is_nil/1)
 
-              {count + 1, MapSet.union(recipes, MapSet.new(recipe_ids)), quarantined}
-            end
+            # Fleet import already counted the event, but may have committed
+            # its row before a receipt or derived write failed. Keep its recipe
+            # eligible for reconciliation, including after a scheduler restart.
+            local_count =
+              if Map.get(record, "origin") == "gitbot-fleet", do: count, else: count + 1
+
+            {local_count, MapSet.union(recipes, MapSet.new(recipe_ids)), quarantined}
 
           {:ok, _not_a_map} ->
             Logger.warning(

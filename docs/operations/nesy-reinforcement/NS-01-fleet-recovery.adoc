@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= NS-01: Fleet receipt and derived-state recovery
+:toc:
+
+Date: 2026-11-23. Baseline: `d158aed87f76b93e4f291e995bef9f26559c7fb2`.
+Scope: recovery of already committed fleet outcome rows by the existing
+LearningScheduler. This is a bounded reinforcement of the E0 consumer path,
+not an E0 closeout or a new Kautz classification.
+
+== Demonstrated failure
+
+Fleet import appends the destination outcome before writing its receipt and
+derived annealing/recipe state. Those later writes can fail without undoing the
+committed outcome. The fleet signature cache and persisted import IDs then
+correctly suppress re-import, but the local scheduler reader also discarded the
+fleet row's recipe ID. A fleet-only workload therefore had no path selecting
+that recipe for repair, including after a scheduler restart.
+
+Selecting the recipe exposed a second failure: successful scalar recomputation
+hid a failed receipt repair, so the scheduler dropped pending work after its
+destination cursor advanced. The regression demonstrated both failures before
+the corresponding fixes.
+
+== Change
+
+* The local reader retains fleet recipe IDs for reconciliation without counting
+  their events again. Imported-event counts and reconciliation targets remain
+  separate.
+* `OutcomeTracker.update_recipe_confidence/1` captures one store for receipt
+  repair and derived recomputation. A retryable receipt error remains an error
+  even when scalar persistence succeeds; recomputation still runs.
+* `Receipt.repair_with_status/2` distinguishes written, pending and refused
+  receipts. The existing `repair/2` tuple remains compatible: its failed count
+  includes both pending failures and final refusals.
+* The existing final reasons, `duplicate_event_id` and
+  `verified_without_evidence`, are shared with `report_failure/2`. They remain
+  visible refusals and do not alone keep a recipe pending. Other failures retain
+  the existing pending classification. No evidence or receipt is invented.
+
+No event ID, qualification rule, fleet quarantine or neural learning guard is
+relaxed. Existing fixed-prior confidence and annealing reconciliation perform
+the recovery; repeated computation is allowed, repeated evidence credit is not.
+
+== Executed evidence
+
+All runs used `MIX_ENV=test`, Elixir 1.19.4, Erlang/OTP 27.3.4.19 and seed 0.
+The scheduler fixture uses actual GenServer cycles, temporary outcome/recipe/
+receipt/fleet stores, disabled service and peer polling, and a fresh temporary
+action-SHA cache. Application-owned scheduler/anomaly timers are suspended and
+the neural coordinator is unavailable during each fixture, then restored.
+
+[cols="2,3,1",options="header"]
+|===
+|Stage |Observation |Result
+|Baseline production code, initial three-test regression
+|Receipt retry lost; cold restart unrepaired; audit receipts absent
+|3 tests, 3 failures
+|Fleet recipe selection only
+|Cold recovery passes; receipt-only and audit retries still lost
+|3 tests, 2 failures
+|Recipe selection plus receipt retry status
+|The original three scheduler scenarios pass
+|3 tests, 0 failures
+|Independent review: terminal refusal plus transient failure for one recipe
+|After the I/O obstacle clears, provisional code retains the final refusal in pending work
+|1 test, 1 failure
+|Final focused set, including receipt model mirrors and compatibility control
+|Recovery, refusal distinction, source boundaries and existing qualification controls pass
+|195 tests, 0 failures, 3 skipped
+|===
+
+The original three-test before/after command was:
+
+[source,shell]
+----
+mix test test/fleet_recovery_scheduler_test.exs --seed 0
+----
+
+The coordinator subsequently combined the reviewed NS-01 and NS-03 source
+patches in a separate checkout of the same base. With the CI-pinned Nickel
+1.11.0 binary (SHA-256
+`d40cd32b8374636fda8939a8e479616c7a1db57acb5ef5a9621e242ed8f5a361`),
+`mix test --seed 0` reported `3742 tests, 0 failures (246 excluded)` and no
+skips. All three receipt-contract checks therefore ran in that combined run.
+Compilation with warnings as errors, repository-wide formatting, README
+claims, the no-active-Logtalk check and diff whitespace checks also passed.
+The 246 exclusions remain those declared in `test/test_helper.exs`; this is
+local evidence for the combined source, not a hosted-CI or deployment result.
+
+The terminal-refusal failing-before command was
+`mix test test/fleet_recovery_scheduler_test.exs:243 --seed 0`, after adding that
+fourth test and before distinguishing final refusals. The final command was:
+
+[source,shell]
+----
+mix test test/fleet_recovery_scheduler_test.exs \
+  test/learning_scheduler_test.exs test/receipt_test.exs \
+  test/receipt_model_mirror_test.exs test/outcome_tracker_runtime_store_test.exs \
+  test/learning_runtime_store_test.exs test/outcome_tracker_test.exs \
+  test/confidence_annealing_test.exs --seed 0
+----
+
+The actual scheduler controls cover:
+
+* Unchanged fleet bytes, an advanced destination cursor, and a receipt path
+  still blocked when scalar recomputation succeeds. Removing the obstacle
+  repairs the receipt from pending work.
+* Receipt and annealing write failures followed by a fresh scheduler whose
+  cursor, signature and pending set are empty. The fleet-only committed row and
+  persisted producer ID suffice to recover without manual recipe selection.
+* Repeated polls preserve outcome, receipt, recipe and annealing bytes, with one
+  qualified observation, no duplicate append and no additional reheat.
+* Unverified/no-op audit rows gain receipts without positive or negative credit;
+  start rows are skipped. Audit-only recipes acquire no annealing evidence.
+* A final refusal and a retryable I/O failure on the same recipe remain distinct.
+  The valid receipt recovers, the refused row and warning remain, and a later
+  idle poll neither repeats the refusal nor recomputes the recipe.
+
+== Claim boundary
+
+These are controlled write-failure and fresh-process tests. They establish
+recovery and idempotent evidence credit for the tested consumer paths. They do
+not prove filesystem power-loss durability, an atomic multi-file transaction,
+concurrent-writer safety, exactly-once neural parameter updates, or fleet
+producer conformance. Scheduler diagnostic counters remain process-local.
+
+Final refusals can be reported again on restart or when new outcomes select the
+recipe. Rows without event IDs keep the existing no-backfill behaviour. Other
+invalid evidence or an unregistered recipe may require intervention; not every
+pending entry is guaranteed to clear. The focused run's three skips are
+recorded above; the subsequent combined run executed those Nickel checks.
+Neither run establishes production rollout or the excluded external-data
+and integration capabilities.
