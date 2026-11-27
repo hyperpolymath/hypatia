@@ -714,7 +714,7 @@ defmodule Hypatia.CLI do
         results
       end
 
-    # Research Extensions (RE001-RE011) - Snyk/StepSecurity/Endor/academic
+    # Research Extensions (RE001-RE012) - Snyk/StepSecurity/Endor/academic
     results =
       if :research_extensions in rules do
         case Hypatia.Rules.ResearchExtensions.scan(repo_path) do
@@ -733,7 +733,7 @@ defmodule Hypatia.CLI do
                   reason: f.reason,
                   action: to_string(f.action)
                 }
-                # RE011 is `advisory: true` (flag-only): the class has to cross
+                # RE011 and RE012 are `advisory: true` (flag-only): the class has to cross
                 # this seam, or `report_sets/2` counts it toward exit 1.
                 |> Map.merge(Map.take(f, [:advisory]))
               end)
