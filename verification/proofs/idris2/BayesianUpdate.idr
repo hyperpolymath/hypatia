@@ -163,15 +163,46 @@ minimumLTERight Z n = LTEZero
 minimumLTERight (S m) Z = LTEZero
 minimumLTERight (S m) (S n) = LTESucc (minimumLTERight m n)
 
-||| H7, property 8: the clamped result is at least the floor.
+||| A lower bound of both arguments is a lower bound of their minimum.
 export
-clampGeFloor : (raw : Nat) -> LTE 1 (maximum 1 raw)
-clampGeFloor raw = maximumLeftUpperBound 1 raw
+minimumGLB : (a, m, n : Nat) -> LTE a m -> LTE a n -> LTE a (minimum m n)
+minimumGLB Z m n _ _ = LTEZero
+minimumGLB (S a) (S m) (S n) (LTESucc p) (LTESucc q) = LTESucc (minimumGLB a m n p q)
 
-||| H7, property 9: the clamped result is at most the cap.
+||| The clamp, in whole percent (lib/outcome_tracker.ex clamps the posterior
+||| to [0.10, 0.99]): raise to the floor, then lower to the cap.
+||| Both bounds apply to the one function, as in the runtime.
+public export
+clamp : (raw : Nat) -> Nat
+clamp raw = minimum 99 (maximum 10 raw)
+
+||| H7, property 8: the clamped result is at least the 10% floor, for every
+||| raw value, including one below the floor.
 export
-clampLeCap : (raw : Nat) -> LTE (minimum raw 99) 99
-clampLeCap raw = minimumLTERight raw 99
+clampGeFloor : (raw : Nat) -> LTE 10 (clamp raw)
+clampGeFloor raw =
+  minimumGLB 10 99 (maximum 10 raw)
+    (lteAddRight 10) (maximumLeftUpperBound 10 raw)
+
+||| H7, property 9: the clamped result is at most the 99% cap.
+export
+clampLeCap : (raw : Nat) -> LTE (clamp raw) 99
+clampLeCap raw = minimumLTERight' 99 (maximum 10 raw)
+  where
+    minimumLTERight' : (m, n : Nat) -> LTE (minimum m n) m
+    minimumLTERight' Z n = LTEZero
+    minimumLTERight' (S m) Z = LTEZero
+    minimumLTERight' (S m) (S n) = LTESucc (minimumLTERight' m n)
+
+||| A raw value below the floor is raised to it: clamp 5 = 10.
+export
+clampRaisesBelowFloor : clamp 5 = 10
+clampRaisesBelowFloor = Refl
+
+||| A raw value above the cap is lowered to it: clamp 100 = 99.
+export
+clampLowersAboveCap : clamp 100 = 99
+clampLowersAboveCap = Refl
 
 ------------------------------------------------------------------------
 -- Section 7: composite validity

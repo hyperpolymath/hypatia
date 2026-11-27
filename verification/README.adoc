@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = verification/ — Formal Proofs
 
-Idris2, Lean 4, TLA+ and Agda proof sources for Hypatia's type-level guarantees.
+Idris2, TLA+ and Agda proof sources for Hypatia's type-level guarantees.
 
 == Contents
 
 * `proofs/idris2/` — Idris2 proof files (`.idr`) asserting invariants over the
   normative ABI in `src/Hypatia/ABI/`
-* `proofs/lean4/`, `proofs/tlaplus/` — Lean 4 and TLA+ proofs
+* `proofs/tlaplus/` — TLA+ specifications (bounded TLC model checks). Lean runs
+  in CI only as the HYP-01 hole-detector control (`scripts/recheck-lean-hole.sh`)
 * `proofs/agda/` — Agda correspondence model for the Logtalk → Elixir
   rule migration (`LogtalkMigration.agda`; `PWG-3` receipt in
   `PROOF-STATUS.adoc`), and the models of the E0 qualification gate
