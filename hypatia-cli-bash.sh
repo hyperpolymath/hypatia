@@ -567,7 +567,7 @@ scan_code_patterns() {
 # Repository structure / layout checks
 # ─────────────────────────────────────────────────────────────────────
 scan_repo_structure() {
-    local dir="$1"
+    local dir="$1" first
 
     # .machine_readable/ directory
     if [[ ! -d "$dir/.machine_readable" ]]; then
@@ -618,7 +618,9 @@ scan_repo_structure() {
     if [[ -d "$dir/.github/workflows" ]]; then
         for wf in "$dir/.github/workflows"/*.yml "$dir/.github/workflows"/*.yaml; do
             [[ -f "$wf" ]] || continue
-            if ! grep -q '^# SPDX-License-Identifier:' <<<"$(head -1 "$wf")"; then
+            # An unreadable workflow is reported as missing the header (RE012).
+            first=$(head -n 1 "$wf") || first=""
+            if ! grep -q '^# SPDX-License-Identifier:' <<<"$first"; then
                 emit_finding "medium" "repo_structure" "missing_spdx_header" \
                     "$wf" 1 "Workflow missing SPDX header" "CWE-1059" \
                     "Add '# SPDX-License-Identifier: MPL-2.0' as first line" "true"
