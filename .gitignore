@@ -163,3 +163,6 @@ dist/
 /.yts
 # Local checkout of the governance-pinned baseline implementation.
 /.standards/
+
+# BatchRollback cross-process lock files (transient)
+data/verisim/dispatch/locks/
