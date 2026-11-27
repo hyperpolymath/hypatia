@@ -361,6 +361,8 @@ jobs:
             test/workflow_test.exs \
             test/review_observation_test.exs \
             test/review_github_collector_test.exs \
+            test/review_evidence_test.exs \
+            test/review_check_run_collector_test.exs \
             test/egress_decision_mirror_test.exs \
             test/deed_test.exs \
             test/kyaml_test.exs \
@@ -583,6 +585,64 @@ jobs:
         run: YAML_TEST_SUITE=.yts mix test --only yaml_test_suite
 
   # ============================================================================
+  # S-03 review evidence: separately pinned I-JSON/JCS differential
+  # ============================================================================
+  # A restricted ASCII/no-number E0 encoder is only canonical for that subset.
+  # This gate requires the authoritative parser's strict positive/negative
+  # tests, library-vs-estate LF distinction and JSONL framing; no silent skip.
+  review-evidence-jcs:
+    name: Review evidence JCS differential (pinned)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Hypatia
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout source-pinned I-JSON/JCS
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/ijson-jcs
+          ref: 1735d68768920f6f59667c9ba2c84769d8d45336
+          path: .ijson-jcs
+          persist-credentials: false
+
+      - name: Setup source-compatible Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: '1.99.1'
+
+      - name: Setup Elixir/OTP
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '27.3.4.19'
+
+      - name: Fetch Elixir dependencies
+        run: mix deps.get
+
+      - name: Compile review admission and evidence encoder
+        run: mix compile --warnings-as-errors
+
+      # Cargo treats a nested Rust package as part of Hypatia's workspace.
+      # Copy the already checked-out, pinned Git tree to a temporary sibling:
+      # no edits to either Cargo.toml, Cargo.lock, or the source checkout.
+      - name: Isolate pinned canonicaliser from Hypatia Cargo workspace
+        run: cp -a .ijson-jcs "$RUNNER_TEMP/ijson-jcs-review-source"
+
+      - name: Compile JCS binary from exactly pinned source and lockfile
+        run: cargo build --release --locked --manifest-path "$RUNNER_TEMP/ijson-jcs-review-source/Cargo.toml" --bin ijson-jcs
+
+      - name: Differential and failure-mode checks
+        env:
+          HYPATIA_IJSON_JCS_SOURCE: ${{ runner.temp }}/ijson-jcs-review-source
+          HYPATIA_IJSON_JCS_BIN: ${{ runner.temp }}/ijson-jcs-review-source/target/release/ijson-jcs
+        run: bash scripts/check-review-evidence-ijson-jcs.sh
+
+  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -602,6 +662,7 @@ jobs:
       - elixir-compile
       - elixir-format
       - kyaml-conformance
+      - review-evidence-jcs
     if: always()
     steps:
       - name: Check all jobs status
@@ -610,7 +671,7 @@ jobs:
         run: |
           set -euo pipefail
           mandatory=(rust-check rust-fmt rust-test rust-test-coverage detect-haskell
-                     k9iser-validate elixir-compile elixir-format kyaml-conformance)
+                     k9iser-validate elixir-compile elixir-format kyaml-conformance review-evidence-jcs)
           for job in "${mandatory[@]}"; do
             result=$(jq -r --arg job "$job" '.[$job].result // "missing"' <<< "$NEEDS_JSON")
             if [[ "$result" != success ]]; then

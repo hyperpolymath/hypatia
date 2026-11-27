@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= S-03: restricted review-evidence envelope
+:author: Jonathan D.A. Jewell
+:date: 2026-11-23
+:toc:
+
+== Purpose
+
+This is a *separate stage* after external-source admission in
+https://github.com/hyperpolymath/hypatia/pull/1216[PR #1216]. It adds an
+in-memory, deterministic **evidence envelope**, not an E0 learning receipt
+and not a replacement for external code/security review. Programme
+https://github.com/hyperpolymath/hypatia/issues/1217[#1217] tracks the
+corresponding S-03 work.
+
+The upstream collector has the following limited promise:
+
+----
+GitHub REST -> repeated observation -> unqualified admission -> envelope
+----
+
+Two reads of a paginated REST inventory cannot provide database snapshot
+isolation. A stable read is an observation of repeated agreement, not a
+cryptographic or transactional guarantee.
+
+== Profile and byte contract
+
+Hypatia.ReviewEvidence.build/2 only accepts a complete, versioned
+collector map with source github_rest_via_gh, provenance
+github_api_observed, coverage bot_comment_and_review_submissions_only,
+and collection mode repeated_stable_observation. The caller must provide
+a **full lowercase 40-hex collector source revision**. This is a label,
+not proof of deployment or attestation of source integrity.
+
+Every admitted observation is reconstructed and revalidated through
+Hypatia.ReviewObservation.admit/2. An extra authority-bearing field,
+unrecognised source event, changed subject, forged verdict, duplicate
+source-event ID, missing content or contradictory assessment fails the
+whole envelope. Only an allowlisted set of evidence fields survives.
+No free-text bot content, patches, model instructions or credentials
+are copied into the envelope.
+
+Hypatia.ReviewEvidence.canonical/2 delegates byte generation to the
+*existing* E0 Hypatia.Receipt.encode/1, but in its restricted
+**ASCII/no-JSON-numbers** profile. It returns separately:
+
+* library_bytes: deterministic encoded JSON with **no final LF**;
+* file_record_bytes: those bytes followed by **exactly one LF**;
+* library_sha256: SHA-256 of the **library bytes only**.
+
+Counters and PR numbers are decimal strings in this profile.
+The result is explicitly qualified as
+requires_ijson_jcs_differential: output has NOT yet been checked
+against the authoritative pinned Rust hyperpolymath/ijson-jcs
+implementation. A digest cannot establish producer identity, successful
+reviewer execution, a genuine finding or eligibility for learning.
+
+This stage has **no disk writer, append-only ledger or signature**.
+No JSONL file is created and no E0 Receipt.write/3 learning operation is
+called. The E0 receipt chain remains separate.
+
+== Fail-closed semantics
+
+[cols="2,3",options="header"]
+|===
+|Case |Outcome
+
+|Root map contains unexpected keys, or unsupported collection source
+|Error; no envelope
+
+|Malformed revision, PR number, head SHA, or count
+|Error; no envelope
+
+|Wrong subject/ref, manipulated review approval or qualification
+|Error; no envelope
+
+|Unrecognised observation fields or fake provider completion
+|Error; no envelope
+
+|Two events claim the same source ID
+|Error; no envelope
+
+|Non-ASCII field in envelope
+|Restricted encoder error; no canonical bytes
+
+|A valid envelope has zero admitted observations
+|Allowed, but coverage_verdict=not_established: **never clean**
+
+|A known inline finding, provider-run status unknown
+|Preserve the assertion with provider_run_status=unknown
+
+|A historical review against a non-current head
+|Retain stale_head; no fresh clean inference
+|===
+
+== Canonical profile dependencies and remaining qualification
+
+Canonical routing is defined by
+https://github.com/metadatastician/standards/blob/main/3-practice/DATA-FORMAT-ROUTING.adoc[estate format routing].
+The authoritative ijson-jcs repository implements I-JSON (RFC 7493)
+plus JCS (RFC 8785). Its canon command emits library bytes without LF;
+check --profile estate-file checks exactly one final LF on disk; and
+check-jsonl checks records separately.
+
+Before persistent bytes or hashes are relied upon across machines, a
+separate **pinned differential gate** must compare this restricted
+encoder's bytes with ijson-jcs canon for positive, negative and
+boundary fixtures. If the binary is missing, its revision unpinned,
+or the bytes disagree, fail closed. Do not use plain Jason.encode!
+or jq -cS as a general JCS validator outside this restricted profile.
+There is no approved kyq executable gate inferred from passing JavaScript
+conformance tests.
+
+The later persistence stage must make both file/record transaction order
+and concurrency/deduplication rules explicit; do not simply append a
+second JSONL receipt on retry. JSON-LD dataset canonicalisation is
+distinct and out of scope. DEED, K9 and coordination documents retain
+their separate ANBF/grammar authorities.
+
+== Verification
+
+test/review_evidence_test.exs covers stable ordering and byte hashes,
+empty-but-not-clean collections, stale historical commits, duplicate
+event IDs, forged approval/learning fields, unexpected inputs,
+mismatched subjects, malformed provenance and non-ASCII values.
+It is added to the existing Elixir CI regression set.
+
+This branch is stacked on #1216 and must remain draft. The base PR's
+unrelated Rust dependency-security blocker is
+https://github.com/hyperpolymath/hypatia/issues/1219[#1219].
+Do not weaken or bypass it, and do not merge either branch on the
+strength of a passing restricted-envelope test alone.
