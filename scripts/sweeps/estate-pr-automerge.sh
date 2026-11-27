@@ -267,7 +267,10 @@ decide_pr() {
     --jq '.[] | {filename:.filename, patch:(.patch // "")}' 2>/dev/null || echo '')
 
   # file-level analysis
-  files_total=$(jq -c . <<<"$patches" | wc -l)
+  # One compact object per changed file. Captured once (RE012): the file loop
+  # and the workflow check below read this, not a fresh substitution each.
+  fobjs=$(jq -c . <<<"$patches")
+  files_total=$(grep -c . <<<"$fobjs" || true)
   poison_hits=0; nonpin_change=0; lock_only=1; meta_only=1; licence_touch=0; pin_files=0
 
   while IFS= read -r fobj; do
@@ -316,7 +319,7 @@ decide_pr() {
       newv=$(resolve_version "$base" "$aref")
       deltas+=("${base}|${oldv:-?}|${newv:-?}")
     done <<<"$removed"
-  done <<<"$(jq -c . <<<"$patches")"
+  done <<<"$fobjs"
 
   delta_json=$(printf '%s\n' "${deltas[@]:-}" | jq -Rsc 'split("\n") | map(select(. != "")) | map(split("|") | {action: .[0], from: .[1], to: .[2]})')
 
@@ -457,7 +460,10 @@ decide_pr() {
     meta_exemption="MGX-001"
   else
     meta_exemption=""
-    if grep -q '\.github/workflows/' <<<"$(jq -r '.[].filename' <<<"$patches" 2>/dev/null)"; then
+    # `$patches` is one object per file, not an array: the old `.[].filename`
+    # failed on every PR, and the here-string hid the failure, so a workflow
+    # change was never classed meta. A failed read is classed meta (RE012).
+    if ! filenames=$(jq -r '.filename' <<<"$fobjs") || grep -q '\.github/workflows/' <<<"$filenames"; then
       change_level="meta"
       [ "$safety" = "arm_auto" ] && { safety="flag"; disposition="flag"; blocked_by="meta_no_pin_exemption"; }
     fi
