@@ -57,13 +57,34 @@ defmodule Hypatia.Data.ArangoDB do
     "contributor_fixes"
   ]
 
+  @graph_name "hypatia_graph"
+
+  @graph_edge_definitions [
+    %{
+      "collection" => "trusts",
+      "from" => ["repos", "bots", "recipes", "contributors"],
+      "to" => ["repos", "bots", "recipes", "contributors"]
+    },
+    %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
+    %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
+    %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
+    %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
+    %{"collection" => "finding_matches_pattern", "from" => ["findings"], "to" => ["patterns"]},
+    %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
+    %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
+    %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
+  ]
+
   defstruct [
     :base_url,
     :database,
     :auth_header,
     connected: false,
     last_sync: nil,
-    sync_timer: nil
+    sync_timer: nil,
+    setup_timer: nil,
+    setup_task: nil,
+    setup_attempts: 0
   ]
 
   # --- GenServer API ---
@@ -86,21 +107,63 @@ defmodule Hypatia.Data.ArangoDB do
       auth_header: "Basic #{auth}"
     }
 
-    # Try to connect, but don't crash if ArangoDB isn't available
-    state = try_connect(state)
+    # Never crashes when ArangoDB is unavailable: setup/1 degrades and retries.
+    {:ok, setup(state)}
+  end
 
-    if state.connected do
-      ensure_schema(state)
-      timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
-      Logger.info("ArangoDB connected: #{url}/#{db}")
-      {:ok, %{state | sync_timer: timer}}
+  # Connects and ensures the schema. The client counts as connected only once
+  # both succeed; until then it stays in degraded mode and retries with an
+  # exponential backoff (`:arango_setup_retry_base_ms` doubling up to
+  # `:arango_setup_retry_max_ms`), so a transient failure such as a 503
+  # during setup does not leave it disconnected for good. A retry repeats
+  # every step; a collection or index created by an earlier attempt answers
+  # 1207 and is accepted, and an existing graph (1925) is accepted once
+  # check_existing_graph/1 has verified it. The sync timer starts only after
+  # setup succeeds. The first attempt runs in init/1; a retry runs its
+  # network work in a task (see handle_info(:retry_setup, _)).
+  defp setup(state), do: apply_setup(state, run_setup(state))
+
+  # The network part of setup: no state change, so it can run in a task.
+  defp run_setup(state) do
+    if reachable?(state) do
+      with {:error, reason} <- ensure_schema(state),
+           do: {:error, "ArangoDB schema initialisation failed: #{inspect(reason)}"}
     else
-      Logger.warning(
-        "ArangoDB not available at #{url} -- running in degraded mode (flat files only)"
-      )
-
-      {:ok, state}
+      {:error, "ArangoDB not available at #{state.base_url}"}
     end
+  end
+
+  defp apply_setup(state, result) do
+    case result do
+      :ok ->
+        timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
+        Logger.info("ArangoDB connected: #{state.base_url}/#{state.database}")
+        %{state | connected: true, sync_timer: timer, setup_timer: nil, setup_attempts: 0}
+
+      {:error, message} ->
+        delay = setup_retry_delay(state.setup_attempts)
+        level = if state.setup_attempts == 0, do: :warning, else: :debug
+
+        Logger.log(
+          level,
+          "#{message} -- running in degraded mode (flat files only); retrying setup in #{delay} ms"
+        )
+
+        timer = Process.send_after(self(), :retry_setup, delay)
+
+        %{
+          state
+          | connected: false,
+            setup_timer: timer,
+            setup_attempts: state.setup_attempts + 1
+        }
+    end
+  end
+
+  defp setup_retry_delay(attempts) do
+    base = Application.get_env(:hypatia, :arango_setup_retry_base_ms, 5_000)
+    cap = Application.get_env(:hypatia, :arango_setup_retry_max_ms, 5 * 60 * 1_000)
+    min(base * Integer.pow(2, min(attempts, 20)), cap)
   end
 
   # --- Public API ---
@@ -314,18 +377,43 @@ defmodule Hypatia.Data.ArangoDB do
 
   def handle_cast(:sync_from_verisimdb, state) do
     if state.connected do
-      do_sync(state)
-      {:noreply, %{state | last_sync: DateTime.utc_now()}}
+      {:noreply, sync_and_record(state)}
     else
       {:noreply, state}
     end
   end
 
+  # `last_sync` moves only on a run in which every upsert succeeded; after a
+  # failed run it keeps the last successful timestamp.
+  defp sync_and_record(state) do
+    case do_sync(state) do
+      :ok -> %{state | last_sync: DateTime.utc_now()}
+      {:error, _failures} -> state
+    end
+  end
+
+  # A retry's requests (up to one per collection, index and graph, each with
+  # a 10 s timeout) run in a task, so the server keeps answering calls in
+  # degraded mode while ArangoDB is slow; the result is applied when it
+  # arrives. Task.async links the task, so a crash in it still crashes the
+  # server, as it did when setup ran inline.
+  def handle_info(:retry_setup, state) do
+    task = Task.async(fn -> run_setup(state) end)
+    {:noreply, %{state | setup_timer: nil, setup_task: task.ref}}
+  end
+
+  def handle_info({ref, result}, %{setup_task: ref} = state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, apply_setup(%{state | setup_task: nil}, result)}
+  end
+
+  # The next sync is scheduled after this one returns, so a sync that takes
+  # longer than the interval is never followed by another at once.
   def handle_info(:sync_from_verisimdb, state) do
     if state.connected do
-      do_sync(state)
+      state = sync_and_record(state)
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
-      {:noreply, %{state | last_sync: DateTime.utc_now(), sync_timer: timer}}
+      {:noreply, %{state | sync_timer: timer}}
     else
       timer = Process.send_after(self(), :sync_from_verisimdb, @sync_interval_ms)
       {:noreply, %{state | sync_timer: timer}}
@@ -334,77 +422,238 @@ defmodule Hypatia.Data.ArangoDB do
 
   # --- HTTP Client ---
 
-  defp try_connect(state) do
-    url = "#{state.base_url}/_api/version"
+  # Probes the target database first, so a user who administers only that
+  # database (and cannot read `_system`) still connects. A 404 database-not-
+  # found there means the database is not created yet: fall back to the
+  # `_system` version probe, so that setup can try to create it.
+  defp reachable?(state) do
+    target = http_get("#{db_url(state)}/_api/version", state.auth_header)
 
-    case http_get(url, state.auth_header) do
-      {:ok, %{"server" => "arango"}} -> %{state | connected: true}
-      _ -> %{state | connected: false}
+    cond do
+      arango_version?(target) ->
+        true
+
+      database_not_found?(target) ->
+        arango_version?(http_get("#{state.base_url}/_api/version", state.auth_header))
+
+      true ->
+        false
     end
   end
 
-  defp ensure_schema(state) do
-    db_url = "#{state.base_url}/_db/#{state.database}"
+  defp arango_version?({:ok, %{"server" => "arango"}}), do: true
+  defp arango_version?(_), do: false
 
-    # Create database if it doesn't exist
-    http_post("#{state.base_url}/_api/database", state.auth_header, %{"name" => state.database})
-
-    # Create document collections
-    Enum.each(@document_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 2})
-    end)
-
-    # Create edge collections
-    Enum.each(@edge_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 3})
-    end)
-
-    # Create indices for common queries
-    create_index(state, "confidence_history", ["recipe_id", "timestamp"])
-    create_index(state, "outcomes", ["timestamp"])
-    create_index(state, "outcomes", ["recipe_id"])
-    create_index(state, "findings", ["repo", "severity"])
-    create_index(state, "findings", ["pattern_id"])
-    create_index(state, "anomalies", ["resolved", "timestamp"])
-    create_index(state, "repos", ["trust_score"])
-    create_index(state, "bots", ["quarantined"])
-
-    # Create named graph
-    http_post("#{db_url}/_api/gharial", state.auth_header, %{
-      "name" => "hypatia_graph",
-      "edgeDefinitions" => [
-        %{
-          "collection" => "trusts",
-          "from" => ["repos", "bots", "recipes", "contributors"],
-          "to" => ["repos", "bots", "recipes", "contributors"]
-        },
-        %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
-        %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
-        %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
-        %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
-        %{
-          "collection" => "finding_matches_pattern",
-          "from" => ["findings"],
-          "to" => ["patterns"]
-        },
-        %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
-        %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
-        %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
-      ]
-    })
-
-    Logger.info(
-      "ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections"
-    )
+  # ArangoDB answers a request for a database that does not exist with a 404
+  # and errorNum 1228 (ERROR_ARANGO_DATABASE_NOT_FOUND).
+  defp database_not_found?({:error, {404, body}}) do
+    match?({:ok, %{"errorNum" => 1228}}, Jason.decode(body))
   end
 
-  defp create_index(state, collection, fields) do
-    db_url = "#{state.base_url}/_db/#{state.database}"
+  defp database_not_found?(_), do: false
 
-    http_post("#{db_url}/_api/index?collection=#{collection}", state.auth_header, %{
-      "type" => "persistent",
-      "fields" => fields
-    })
+  defp db_url(state), do: "#{state.base_url}/_db/#{state.database}"
+
+  defp ensure_schema(state) do
+    # Every later step depends on the database, so stop here if it fails.
+    database = ensure_database(state)
+
+    if schema_result_ok?(database),
+      do: ensure_collections_and_graph(state),
+      else: {:error, database}
+  end
+
+  # Creates the database only when the probe says it does not exist (404,
+  # errorNum 1228). Creating one needs Administrate on `_system`; a
+  # least-privilege user that administers only a pre-provisioned target
+  # database gets a 403 there. Any other probe failure (a timeout, a 3xx, a
+  # 5xx) is no evidence of absence and is returned as it is.
+  defp ensure_database(state) do
+    probe = http_get("#{db_url(state)}/_api/database/current", state.auth_header)
+
+    case probe do
+      {:ok, %{} = current} ->
+        {:ok, 200, current}
+
+      _ ->
+        if database_not_found?(probe) do
+          http_post_status("#{state.base_url}/_api/database", state.auth_header, %{
+            "name" => state.database
+          })
+        else
+          probe
+        end
+    end
+  end
+
+  defp ensure_collections_and_graph(state) do
+    db_url = db_url(state)
+
+    # Each resource is read before it is created. Creating a collection, an
+    # index or a graph needs Administrate on the database, which a data-only
+    # user of a pre-provisioned schema lacks (a 403); reading needs only
+    # Access. Only an answer that is the resource itself counts (a collection
+    # of that name and type, a persistent index on those fields, a graph);
+    # anything else is no evidence either way, and the create decides as before.
+    documents = Enum.map(@document_collections, &ensure_collection(state, &1, 2))
+    edges = Enum.map(@edge_collections, &ensure_collection(state, &1, 3))
+
+    # Create indices for common queries
+    indices = [
+      create_index(state, "confidence_history", ["recipe_id", "timestamp"]),
+      create_index(state, "outcomes", ["timestamp"]),
+      create_index(state, "outcomes", ["recipe_id"]),
+      create_index(state, "findings", ["repo", "severity"]),
+      create_index(state, "findings", ["pattern_id"]),
+      create_index(state, "anomalies", ["resolved", "timestamp"]),
+      create_index(state, "repos", ["trust_score"]),
+      create_index(state, "bots", ["quarantined"])
+    ]
+
+    # The named graph: an existing one is checked, never replaced.
+    graph =
+      case http_get("#{db_url}/_api/gharial/#{@graph_name}", state.auth_header) do
+        {:ok, %{"graph" => %{}}} ->
+          check_existing_graph(state)
+
+        _absent_or_unknown ->
+          case http_post_status("#{db_url}/_api/gharial", state.auth_header, %{
+                 "name" => @graph_name,
+                 "edgeDefinitions" => @graph_edge_definitions
+               }) do
+            {:ok, status, %{"errorNum" => 1925}} when status in 400..499 ->
+              check_existing_graph(state)
+
+            created ->
+              created
+          end
+      end
+
+    results = documents ++ edges ++ indices ++ [graph]
+
+    case Enum.find(results, &(not schema_result_ok?(&1))) do
+      nil ->
+        Logger.info(
+          "ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections"
+        )
+
+        :ok
+
+      failure ->
+        {:error, failure}
+    end
+  end
+
+  # A duplicate-graph answer (1925) says only that a graph of that name
+  # exists, not that it is ours. It is accepted when, for every required
+  # edge definition, the existing graph has an edge definition on the same
+  # collection whose `from` and `to` vertex collections are exactly the
+  # required ones (as sets: order and duplicates do not matter). Extra edge
+  # definitions and orphan collections in the existing graph are allowed.
+  # A mismatch is a schema failure; the graph is never replaced.
+  defp check_existing_graph(state) do
+    case http_get("#{db_url(state)}/_api/gharial/#{@graph_name}", state.auth_header) do
+      {:ok, %{"graph" => %{"edgeDefinitions" => existing}} = body} when is_list(existing) ->
+        case graph_mismatches(existing) do
+          [] -> {:ok, 200, body}
+          mismatches -> {:error, {:graph_mismatch, mismatches}}
+        end
+
+      other ->
+        {:error, {:graph_unreadable, other}}
+    end
+  end
+
+  defp graph_mismatches(existing) do
+    by_collection = Map.new(existing, &{&1["collection"], &1})
+
+    @graph_edge_definitions
+    |> Enum.reject(&same_vertices?(&1, Map.get(by_collection, &1["collection"])))
+    |> Enum.map(& &1["collection"])
+  end
+
+  defp same_vertices?(required, %{} = actual) do
+    Enum.all?(["from", "to"], fn side ->
+      is_list(actual[side]) and MapSet.new(actual[side]) == MapSet.new(required[side])
+    end)
+  end
+
+  defp same_vertices?(_required, nil), do: false
+
+  # A schema step succeeds on a 2xx, or on a 4xx that says the resource
+  # already exists (1207 duplicate name), which happens on every
+  # initialisation after the first. A duplicate graph (1925) is checked by
+  # check_existing_graph/1 instead. Any other status fails, even with a JSON
+  # body: a gateway's `{"message": "forbidden"}` is not a success.
+  defp schema_result_ok?({:ok, status, _}) when status in 200..299, do: true
+
+  defp schema_result_ok?({:ok, status, %{"errorNum" => 1207}}) when status in 400..499,
+    do: true
+
+  defp schema_result_ok?(_), do: false
+
+  # A collection of this name and type is accepted. One of this name but
+  # another type (2 document, 3 edge) is a schema failure, never replaced:
+  # upserts into it would fail. A duplicate-name answer (1207) to the create
+  # is accepted only once a re-read shows the same name and type, as a
+  # duplicate graph is checked by check_existing_graph/1.
+  defp ensure_collection(state, name, type) do
+    case read_collection(state, name) do
+      {:ok, %{"name" => ^name, "type" => ^type} = existing} ->
+        {:ok, 200, existing}
+
+      {:ok, %{"name" => ^name, "type" => other}} ->
+        {:error, {:collection_type_mismatch, name, other}}
+
+      _absent_or_unknown ->
+        case http_post_status("#{db_url(state)}/_api/collection", state.auth_header, %{
+               "name" => name,
+               "type" => type
+             }) do
+          {:ok, status, %{"errorNum" => 1207}} when status in 400..499 ->
+            check_existing_collection(state, name, type)
+
+          created ->
+            created
+        end
+    end
+  end
+
+  defp read_collection(state, name),
+    do: http_get("#{db_url(state)}/_api/collection/#{name}", state.auth_header)
+
+  defp check_existing_collection(state, name, type) do
+    case read_collection(state, name) do
+      {:ok, %{"name" => ^name, "type" => ^type} = existing} ->
+        {:ok, 200, existing}
+
+      {:ok, %{"name" => ^name, "type" => other}} ->
+        {:error, {:collection_type_mismatch, name, other}}
+
+      other ->
+        {:error, {:collection_unreadable, name, other}}
+    end
+  end
+
+  # The index the client needs: persistent, on exactly these fields in this
+  # order, neither unique nor sparse. One already there is accepted; a
+  # unique or sparse one on the same fields is not that index (it rejects
+  # duplicates or leaves documents out), so the default one is created.
+  defp create_index(state, collection, fields) do
+    url = "#{db_url(state)}/_api/index?collection=#{collection}"
+
+    with {:ok, %{"indexes" => indexes}} when is_list(indexes) <- http_get(url, state.auth_header),
+         %{} = index <- Enum.find(indexes, &default_index?(&1, fields)) do
+      {:ok, 200, index}
+    else
+      _ ->
+        http_post_status(url, state.auth_header, %{"type" => "persistent", "fields" => fields})
+    end
+  end
+
+  defp default_index?(index, fields) do
+    index["type"] == "persistent" and index["fields"] == fields and
+      index["unique"] in [false, nil] and index["sparse"] in [false, nil]
   end
 
   defp do_upsert(state, collection, key, document) do
@@ -442,16 +691,45 @@ defmodule Hypatia.Data.ArangoDB do
 
   # --- verisim-data Sync ---
 
+  # Returns :ok when every upsert succeeded, otherwise {:error, failures},
+  # each failure `{collection, key, reason}` (or the exception that stopped
+  # the run). A failed run is logged, never reported as complete.
   defp do_sync(state) do
     verisimdb_path = Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
-    sync_scans(state, verisimdb_path)
-    sync_outcomes(state, verisimdb_path)
-    sync_recipes(state, verisimdb_path)
+    failures =
+      sync_scans(state, verisimdb_path) ++
+        sync_outcomes(state, verisimdb_path) ++
+        sync_recipes(state, verisimdb_path)
 
-    Logger.info("ArangoDB sync from verisim-data complete")
+    case failures do
+      [] ->
+        Logger.info("ArangoDB sync from verisim-data complete")
+        :ok
+
+      [first | _] ->
+        Logger.error(
+          "ArangoDB sync from verisim-data failed (#{length(failures)} failed upserts, " <>
+            "first: #{inspect(first)})"
+        )
+
+        {:error, failures}
+    end
   rescue
-    e -> Logger.error("ArangoDB sync failed: #{inspect(e)}")
+    e ->
+      Logger.error("ArangoDB sync failed: #{inspect(e)}")
+      {:error, [e]}
+  end
+
+  # Upserts and returns the failure, if any, as a list for flat_map. A
+  # cursor answer without a result list (an error body with no message) is a
+  # failure too.
+  defp sync_upsert(state, collection, key, document) do
+    case do_upsert(state, collection, key, document) do
+      {:ok, result} when is_list(result) -> []
+      {:error, reason} -> [{collection, key, reason}]
+      other -> [{collection, key, other}]
+    end
   end
 
   defp sync_scans(state, base_path) do
@@ -459,48 +737,40 @@ defmodule Hypatia.Data.ArangoDB do
 
     case File.ls(scans_dir) do
       {:ok, repos} ->
-        Enum.each(repos, fn repo_dir ->
+        Enum.flat_map(repos, fn repo_dir ->
           scan_path = Path.join([scans_dir, repo_dir, "latest.json"])
 
-          case File.read(scan_path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, scan} ->
-                  findings = Map.get(scan, "findings", [])
+          with {:ok, content} <- File.read(scan_path),
+               {:ok, scan} <- Jason.decode(content) do
+            findings = Map.get(scan, "findings", [])
 
-                  do_upsert(state, "repos", repo_dir, %{
-                    "name" => repo_dir,
-                    "finding_count" => length(findings),
-                    "last_scanned" => Map.get(scan, "timestamp", ""),
-                    "status" => "active"
-                  })
+            repo =
+              sync_upsert(state, "repos", repo_dir, %{
+                "name" => repo_dir,
+                "finding_count" => length(findings),
+                "last_scanned" => Map.get(scan, "timestamp", ""),
+                "status" => "active"
+              })
 
-                  # Sync individual findings
-                  Enum.each(findings, fn finding ->
-                    f_key = "#{repo_dir}_#{:erlang.phash2(finding)}"
+            # Sync individual findings
+            repo ++
+              Enum.flat_map(findings, fn finding ->
+                f_key = "#{repo_dir}_#{:erlang.phash2(finding)}"
 
-                    do_upsert(
-                      state,
-                      "findings",
-                      f_key,
-                      Map.merge(finding, %{
-                        "repo" => repo_dir,
-                        "status" => "open"
-                      })
-                    )
-                  end)
-
-                _ ->
-                  :skip
-              end
-
-            _ ->
-              :skip
+                sync_upsert(
+                  state,
+                  "findings",
+                  f_key,
+                  Map.merge(finding, %{"repo" => repo_dir, "status" => "open"})
+                )
+              end)
+          else
+            _ -> []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
@@ -511,31 +781,28 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
-        |> Enum.each(fn file ->
-          path = Path.join(outcomes_dir, file)
-
-          case File.read(path) do
+        |> Enum.flat_map(fn file ->
+          case File.read(Path.join(outcomes_dir, file)) do
             {:ok, content} ->
               content
               |> String.split("\n", trim: true)
-              |> Enum.each(fn line ->
+              |> Enum.flat_map(fn line ->
                 case Jason.decode(line) do
                   {:ok, outcome} ->
-                    key = "outcome_#{:erlang.phash2(outcome)}"
-                    do_upsert(state, "outcomes", key, outcome)
+                    sync_upsert(state, "outcomes", "outcome_#{:erlang.phash2(outcome)}", outcome)
 
                   _ ->
-                    :skip
+                    []
                 end
               end)
 
             _ ->
-              :skip
+              []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
@@ -546,27 +813,18 @@ defmodule Hypatia.Data.ArangoDB do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.each(fn file ->
-          path = Path.join(recipes_dir, file)
-
-          case File.read(path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, recipe} ->
-                  key = Map.get(recipe, "id", Path.rootname(file))
-                  do_upsert(state, "recipes", key, recipe)
-
-                _ ->
-                  :skip
-              end
-
-            _ ->
-              :skip
+        |> Enum.flat_map(fn file ->
+          with {:ok, content} <- File.read(Path.join(recipes_dir, file)),
+               {:ok, recipe} <- Jason.decode(content) do
+            key = Map.get(recipe, "id", Path.rootname(file))
+            sync_upsert(state, "recipes", key, recipe)
+          else
+            _ -> []
           end
         end)
 
       _ ->
-        :ok
+        []
     end
   end
 
@@ -581,14 +839,30 @@ defmodule Hypatia.Data.ArangoDB do
       {~c"Accept", ~c"application/json"}
     ]
 
-    case :httpc.request(:get, {String.to_charlist(url), headers}, [{:timeout, 10_000}], []) do
+    case :httpc.request(
+           :get,
+           {String.to_charlist(url), headers},
+           [{:timeout, 10_000}, {:autoredirect, false}],
+           []
+         ) do
       {:ok, {{_, 200, _}, _, body}} -> Jason.decode(to_string(body))
       {:ok, {{_, status, _}, _, body}} -> {:error, {status, to_string(body)}}
       {:error, reason} -> {:error, reason}
     end
   end
 
+  # Decoded body on a 2xx or 4xx (ArangoDB reports its errors as JSON 4xx);
+  # `{:error, {status, body}}` on any other status, a 3xx included.
   defp http_post(url, auth_header, body) do
+    case http_post_status(url, auth_header, body) do
+      {:ok, _status, decoded} -> {:ok, decoded}
+      error -> error
+    end
+  end
+
+  # As http_post/3, but keeps the status, so a caller can tell a 2xx from a
+  # 4xx whose body does not use ArangoDB's error shape.
+  defp http_post_status(url, auth_header, body) do
     :inets.start()
     :ssl.start()
 
@@ -602,14 +876,13 @@ defmodule Hypatia.Data.ArangoDB do
     case :httpc.request(
            :post,
            {String.to_charlist(url), headers, ~c"application/json", json_body},
-           [{:timeout, 10_000}],
+           [{:timeout, 10_000}, {:autoredirect, false}],
            []
          ) do
-      {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->
-        Jason.decode(to_string(resp_body))
-
-      {:ok, {{_, code, _}, _, resp_body}} when code in 300..499 ->
-        Jason.decode(to_string(resp_body))
+      {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 or code in 400..499 ->
+        with {:ok, decoded} <- Jason.decode(to_string(resp_body)) do
+          {:ok, code, decoded}
+        end
 
       {:ok, {{_, status, _}, _, resp_body}} ->
         {:error, {status, to_string(resp_body)}}
