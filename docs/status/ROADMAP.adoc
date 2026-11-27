@@ -30,10 +30,16 @@ coverage to CRG C in sweeps (1 unit/smoke/build/P2P, 2 rest of C, 3 grade B,
 * Red on the `url` advisory: #1216, #1220, #1222, #1223 (Rust Dependency
   Audit, Rust License and Ban Check, Security Status). `main` already pins
   `url` 2.5.9 and `form_urlencoded` 1.2.3 in the root `Cargo.lock`, so
-  refreshing each onto `main` and re-running should clear them. Not yet done.
-* #1237: Build AsciiDoc fails; cause not yet read.
-* Behind `main`, no failing check seen: #1174, #1175, #1179, #1185, #1189,
-  #1190, #1191, #1195, #1197, #1211, #1224, #1227, #1230, #1232, #1233.
+  refreshing each onto `main` and re-running should clear them. #1216, #1222
+  and #1223 were refreshed onto `main` on 2026-11-27 (#1220 is stacked on
+  #1216 and follows); results pending.
+* #1237: Build AsciiDoc failed on the stale root `Cargo.lock` (fixed on
+  `main` by #1239); refreshed onto `main` on 2026-11-27, result pending.
+* #1185: not merely behind. It has a failing `governance / Validate Hypatia
+  Baseline` check and three unresolved CodeRabbit requests; those need
+  fixing, not just a refresh.
+* Behind `main`, no failing check seen: #1174, #1175, #1179, #1189, #1190,
+  #1191, #1195, #1197, #1211, #1224, #1227, #1230, #1232, #1233.
 * Dependabot: #1229, #1235 (rebase needs the owner's approval).
 
 === Next
