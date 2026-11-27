@@ -153,9 +153,9 @@ hits, contractile trident complete, full mirror fan-out configured.
 | 0
 | Grep `{believe_me,assert_total,Admitted,sorry,unsafeCoerce,Obj.magic}` across `src/` → 1 match, which is the literal string "Zero believe_me" in `RuleEngine.idr:18` (a claim-of-absence comment, not a use).
 
-| Logtalk legacy files
+| Legacy rule-engine files (ADR-001)
 | *0 in `lib/`* — grep finds zero hits
-| `engine/logtalk/*.lgt` removed 2026-04-11 (STATE.a2ml session log: "Deleted engine/logtalk/error_instances.lgt + loader.lgt"). The 2026-04-14 session log records the full purge: CI/CD jobs removed, Elixir promoted to primary, SWI-Prolog dropped from `stapeln.toml` and Containerfiles.
+| The old `engine/` rule sources were removed 2026-04-11 (STATE.a2ml session log). The 2026-04-14 session log records the full purge: CI/CD jobs removed, Elixir promoted to primary, SWI-Prolog dropped from `stapeln.toml` and Containerfiles.
 
 | Lingering `.scm` files
 | 5 total (2 in `docs/`, 2 in `.audittraining/`, 1 at root as `guix.scm`)
@@ -176,7 +176,7 @@ different things:
 *CI is not green today.* The 2026-04-05 session explicitly records 124 failing
 tests (corrupted recipe data) that *were not fixed in that session and have
 not been recorded as fixed since*. Later sessions (2026-04-11, 2026-04-14)
-add PO001–PO006, ECHIDNA↔Hypatia coupling, and the Logtalk purge, but no
+add PO001–PO006, ECHIDNA↔Hypatia coupling, and the ADR-001 rule-engine purge, but no
 session-history entry closes out the 124 failures. Under v2.0 C this is a
 red-flag direct failure of the "CI green" requirement.
 
@@ -363,7 +363,7 @@ items.
 
 | D
 | *✓ strong pass*
-| 33 RSR workflows; clean Containerfile / Deno / Justfile / contractile-trident / well-known / LICENSE layout; 0 `Dockerfile`, 0 `package.json`, 0 `Makefile`; 1,128 LOC Idris2 ABI with `%default total` on every module; 0 `believe_me` / `assert_total` / `sorry` / `unsafeCoerce` / `Obj.magic` uses; Logtalk purge complete 2026-04-14 (0 `.lgt` files, 0 `logtalk` refs in `lib/`); full 5-mirror fan-out
+| 33 RSR workflows; clean Containerfile / Deno / Justfile / contractile-trident / well-known / LICENSE layout; 0 `Dockerfile`, 0 `package.json`, 0 `Makefile`; 1,128 LOC Idris2 ABI with `%default total` on every module; 0 `believe_me` / `assert_total` / `sorry` / `unsafeCoerce` / `Obj.magic` uses; ADR-001 rule-engine purge complete 2026-04-14 (0 legacy rule files, 0 legacy refs in `lib/`); full 5-mirror fan-out
 | Four stale `.scm` files (`docs/CRYPTO-STANDARD.scm`, `docs/STANDARDIZATION-CHECKLIST.scm`, `.audittraining/ERROR-CATALOG.scm`, `.audittraining/SHA-PINS.scm`) owe A2ML migration — adjacent to the 2026-04-12 migration closure. STATE.a2ml omits `crg-grade` entirely — machine-readable governance defect.
 
 | C
@@ -408,7 +408,7 @@ next-target = "C"
 notes = """
 CRG v2.0 STRICT audit 2026-04-18: 33 RSR workflows, 697 tests, 1,128 LOC
 Idris2 ABI with 0 believe_me uses, clean container+deno+justfile posture,
-Logtalk purge complete. Blocker to C: 124 pre-existing test failures
+ADR-001 rule-engine purge complete. Blocker to C: 124 pre-existing test failures
 recorded 2026-04-05 not yet closed (CI not green clause). Per-subtree
 README coverage 1/22. External-target trail absent; language diversity
 within estate is not v2.0 B evidence.
@@ -427,8 +427,8 @@ The D grade is earned on four positive signals:
    the estate. Idris2 ABI has `%default total` on every module; grep confirms
    zero uses of `believe_me`, `assert_total`, `sorry`, `unsafeCoerce`,
    `Obj.magic`.
-3. Logtalk purge complete 2026-04-14 — `engine/` directory gone, 0 `.lgt`
-   files, 0 `logtalk` refs in `lib/`, SWI-Prolog dropped from `stapeln.toml`.
+3. ADR-001 rule-engine purge complete 2026-04-14 — `engine/` directory gone,
+   0 legacy rule files, 0 legacy refs in `lib/`, SWI-Prolog dropped from `stapeln.toml`.
    Elixir rules are now the single source of truth, as intended.
 4. Broad internal dogfood: `hypatia-scan.yml` is a consumed CI dependency
    on ~30+ estate repos. 19 rule modules with 6,791 LOC of Elixir is a real
@@ -479,8 +479,8 @@ What blocks promotion to B (even after C is met):
 - The ECHIDNA↔Hypatia coupling (2026-04-11 session: `proof_obligation.ex`
   PO001–PO006, FleetDispatcher extension, LearningScheduler N5) is taken
   as done; not re-audited.
-- The Logtalk purge (2026-04-14) is taken as done; grep confirms 0 `.lgt`
-  files and 0 `logtalk` refs in `lib/`. The 2026-04-12 MEMORY.md note
+- The ADR-001 rule-engine purge (2026-04-14) is taken as done; grep confirms
+  0 legacy rule files and 0 legacy refs in `lib/`. The 2026-04-12 MEMORY.md note
   ("Hypatia now consumes JSON AssailReport via Elixir rules") matches
   what the code shows.
 - The BJ2-style credential isolation and axiomatic-`believe_me` policies are

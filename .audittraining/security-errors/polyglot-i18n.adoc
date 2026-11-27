@@ -151,31 +151,6 @@ bestpractices.coreinfrastructure.org
 
 '''''
 
-=== Prevention Rules (historical Logtalk — superseded)
-
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP007–AP008; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
-
-[source,logtalk]
-----
-% Block remote property injection
-security_rule(property_injection, preventive,
-    "Reject dynamic property access without validation",
-    [
-        pattern("\\[\\s*\\w+Input\\s*\\]"),
-        pattern("\\[\\s*req\\.(body|query|params)"),
-        not(nearby_pattern("allowedProps|whitelist|ALLOWED"))
-    ],
-    block_commit).
-
-% Enforce unused variable cleanup
-code_quality_rule(unused_vars, curative,
-    "Flag files with unused variables for cleanup",
-    [pattern("is declared but its value is never read")],
-    warn_and_log).
-----
-
-'''''
-
 === Training Classification
 
 * *Error Types:* CODE_SECURITY, CODE_QUALITY, WORKFLOW_SECURITY

@@ -131,4 +131,4 @@ Foreign callers reach Hypatia through:
 - **ArangoDB → verisim-data**. The graph DB was ditched per the #273 architecture audit; storage is now the git-backed flat-file store.
 - **5 networks → 8 networks**. GNN, VAE, and Sequence model joined the blackboard.
 - **Hub-and-spoke → blackboard**. Fixed weights replaced with trace-derived confidence.
-- **Logtalk → Elixir rules**. The Logtalk rule engine was retired.
+- **Elixir rules**. The rule engine is pure Elixir (`lib/rules/`, ADR-001).

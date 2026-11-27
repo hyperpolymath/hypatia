@@ -104,33 +104,6 @@ runs:
 
 '''''
 
-=== Prevention Rules (historical Logtalk — superseded)
-
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP012–AP013; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
-
-[source,logtalk]
-----
-% Meta rule: RSR tooling must be RSR-compliant
-meta_rule(rsr_self_compliance, preventive,
-    "RSR tooling repos must pass all RSR checks",
-    [
-        repo_name(supernorma),
-        has_rsr_violation
-    ],
-    block_merge_with_escalation).
-
-% Template repos need extra scrutiny
-template_rule(exemplary_standards, diagnostic,
-    "Template/tooling repos should exceed normal standards",
-    [
-        repo_purpose(tooling),
-        scorecard_score < 8
-    ],
-    alert_maintainer).
-----
-
-'''''
-
 === Recommended Improvements
 
 ==== 1. Self-Testing

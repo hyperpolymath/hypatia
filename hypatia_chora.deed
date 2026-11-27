@@ -75,7 +75,7 @@
   (meta
     :last-updated "2026-08-07"
     :scoping-first #t
-    (adr :id "ADR-001" :title "Replace Logtalk rule engine with pure Elixir rules" :status accepted :date "2026-04-14")
+    (adr :id "ADR-001" :title "Rules are pure Elixir (lib/rules)" :status accepted :date "2026-04-14")
     (adr :id "ADR-002" :title "Rename VQL→VCL and verisimdb→verisim throughout" :status accepted :date "2026-04-05")
     (adr :id "ADR-003" :title "Route ProofObligations through FleetDispatcher to echidnabot" :status accepted :date "2026-04-11")
     (adr :id "ADR-004" :title "Synthetic rebalancer (Strategy A) as default; B+C deferred to M9" :status accepted :date "2026-04-22")

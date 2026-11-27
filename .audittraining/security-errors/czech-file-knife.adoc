@@ -153,32 +153,29 @@ WORKDIR /src/czech-file-knife
 RUN cargo +nightly fuzz build
 ----
 
-'''''
-
 === Prevention Rules (historical Logtalk — superseded)
 
-NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP003–AP004; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
+NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP005–AP006; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
 
 [source,logtalk]
 ----
-% Require cargo audit in Rust CI
-rust_rule(missing_audit, preventive,
-    "Rust repos must run cargo audit in CI",
+% Require CI tests for all repos
+project_rule(missing_ci_tests, preventive,
+    "Repos must have automated test workflow",
     [
-        file_exists("Cargo.toml"),
-        not(workflow_contains("cargo audit"))
+        not(file_exists(".github/workflows/*test*.yml")),
+        has_source_code
     ],
     block_release).
 
-% Workspace-aware dependency check
-rust_rule(workspace_vuln, curative,
-    "Check all workspace members for vulnerabilities",
+% Require SAST for multi-language repos
+project_rule(missing_sast, preventive,
+    "Multi-language repos must have SAST configured",
     [
-        file_exists("Cargo.toml"),
-        contains("[workspace]"),
-        any_member_has_vuln
+        language_count > 1,
+        not(file_exists(".github/workflows/codeql.yml"))
     ],
-    alert_maintainer).
+    warn_maintainer).
 ----
 
 '''''

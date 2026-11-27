@@ -107,7 +107,7 @@
              :version "0.1.0" :last-updated "2026-04-11"
              (hypatia :scan-enabled  #t
                       :scan-depth    standard
-                      :report-format "logtalk"))
+                      :report-format "json"))
 
   (playbook
             :version "0.1.0" :last-updated "2026-04-11"

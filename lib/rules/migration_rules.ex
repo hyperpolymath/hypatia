@@ -2,7 +2,7 @@
 
 defmodule Hypatia.Rules.MigrationRules do
   @moduledoc """
-  Primary Elixir ReScript migration rules (migrated from legacy Logtalk engine).
+  Primary Elixir ReScript migration rules.
 
   Tracks deprecated API usage, migration readiness, and merge conflict resolution.
   """

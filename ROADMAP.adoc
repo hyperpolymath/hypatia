@@ -6,8 +6,7 @@
 
 == Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 8 neural networks, VCL query layer, Bayesian confidence updating, and Elixir rules for pattern detection (absorbed from the Logtalk engine,
-retired 2026-03-06).
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 8 neural networks, VCL query layer, Bayesian confidence updating, and Elixir rules for pattern detection.
 
 == Current State (2026-03-29)
 
@@ -51,8 +50,7 @@ retired 2026-03-06).
 | adapters, cli, data, fixer, integration crates
 
 | Elixir rules (`lib/rules/`)
-| Error catalog, pattern detection, RSR compliance rules (absorbed from the
-Logtalk engine, retired 2026-03-06)
+| Error catalog, pattern detection, RSR compliance rules
 
 | Data layer
 | verisim-data (git-backed flat-file store), neural state persistence, JSONL outcomes
@@ -91,7 +89,7 @@ Elixir pipeline:
 * [x] Outcome tracking with Bayesian confidence updating
 * [x] Re-scan verification via panic-attacker
 * [x] Dispatch manifest (JSONL bridge to bash execution)
-* [x] Logtalk rule engine (error catalog, pattern detection) — retired 2026-03-06, absorbed into the Elixir ruleset
+* [x] Rule engine (error catalog, pattern detection) in the Elixir ruleset
 
 === v2.0 — Neural Intelligence (COMPLETE)
 
@@ -222,7 +220,7 @@ Soundness gates plus closed-loop verification metric.
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal via flat files only
 3. **One-sided training data:** ~~99%+ "success"~~ Strategy A (synthetic regressions + rule-based RBF targets) on by default since 2026-04-22 (`lib/neural/rebalancer.ex`). Strategies B (adversarial perturbation) and C (real failure corpus from panic-attack history) remain unstarted.
 4. **Fix script coverage:** ~~310/600 auto-execute entries with null fix_script~~ Resolved 2026-05-24 (PR #309 commit `d2bbf75`) — root cause was a matcher language-gate bug, not missing scripts. All 22 scorecard recipe fix scripts already existed on disk; they were unreachable because of an unrecognised `"any"` language sentinel and unreachable `"yaml"` recipes.
-5. **Containerfiles:** Haskell still uses non-Chainguard base images (Logtalk removed)
+5. **Containerfiles:** Haskell still uses non-Chainguard base images
 6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
 7. **Neural state persistence:** ~~Coordinator has not persisted to disk yet~~ All eight networks now warm-restart-capable. RBF + MoE + trust_graph hydrated since commits `f5257ef` + `2d5cb2e`; GNN + VAE + Sequence since commit `cc50422` (M17). LSM + ESN remain summary-only by reservoir-state design — no plain serialisation pathway for those.
 8. **`/api/*` loopback-only:** ~~Bearer-token auth tracked as Phase 4 deferred~~ Done 2026-05-24 commit `5fab9d4` (M15a): HYPATIA_API_BEARER_TOKEN env enables remote callers; loopback-only otherwise.

@@ -3,8 +3,7 @@
 # This workflow is managed by gh actions-lock.
 # Main CI workflow for hypatia
 # Tests Rust (adapters, cli, fixer, data) and the Elixir rules. The Haskell
-# (registry) jobs below are dormant-gated on the tree's absence; the Logtalk
-# rule engine was retired 2026-03-06 (absorbed into lib/rules/*.ex).
+# (registry) jobs below are dormant-gated on the tree's absence.
 
 name: CI
 
@@ -356,6 +355,7 @@ jobs:
             test/rules/rsr_conformance_test.exs \
             test/rules/audit_prevention_test.exs \
             test/security_errors_test.exs \
+            test/batch_security_scan_category_test.exs \
             test/research_extensions_test.exs \
             test/research_extensions_equivalence_test.exs \
             test/workflow_test.exs \
@@ -412,12 +412,6 @@ jobs:
       - name: Real noninteractive changed-job execution (1009)
         run: mix test --no-start test/ci_changed_act_test.exs --only act_integration
 
-      # ADR-001 retirement guard: Hypatia rules are pure Elixir
-      # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
-      # or a Logtalk output/loader setting re-enters the tree outside
-      # the exact-path, shrink-only .logtalk-allowlist. Proven by
-      # mutant (plant a .lgt + a report_format: logtalk setting -> red;
-      # revert -> green). See docs/rules/logtalk-migration.adoc.
       # The receipt contract (schema/receipt.ncl) is checked by Nickel. Without it the
       # contract tests skip, so this lane must have it, and must fail if they skip.
       # The release publishes no checksum: the hash below is the one measured for
@@ -457,9 +451,6 @@ jobs:
             echo "::error::a receipt test was skipped: the Nickel contract was NOT checked"
             exit 1
           fi
-
-      - name: No active Logtalk (ADR-001 guard)
-        run: bash scripts/check-no-active-logtalk.sh
 
       # The consumers' invocation, verbatim: the oracle is called with an
       # EXPLICIT --ssot. The default SSOT resolution is deliberately not

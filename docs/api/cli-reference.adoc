@@ -582,7 +582,7 @@ hyper deposit [OPTIONS] <RULESET_FILE>
 |Argument |Description
 
 |`RULESET_FILE`
-|Path to the ruleset file (.lgt or .hs)
+|Path to the ruleset file (.json or .hs)
 |===
 
 ==== Options
@@ -617,13 +617,13 @@ hyper deposit [OPTIONS] <RULESET_FILE>
 [source,bash]
 ----
 # Deposit a ruleset
-hyper deposit my-rules.lgt
+hyper deposit my-rules.json
 
 # Validate only
-hyper deposit --validate-only my-rules.lgt
+hyper deposit --validate-only my-rules.json
 
 # Deposit with tags
-hyper deposit --tag security,workflow my-rules.lgt
+hyper deposit --tag security,workflow my-rules.json
 ----
 
 === withdraw
@@ -667,6 +667,11 @@ hyper withdraw [OPTIONS] <RULESET_ID>
 |`-o`
 |Output file path
 |stdout
+
+|`--file-format <FORMAT>`
+|
+|Format written to the output file: `json`, `yaml` or `toml`
+|`yaml`
 |===
 
 ==== Examples
@@ -680,7 +685,7 @@ hyper withdraw security-rules
 hyper withdraw --version 1.2.0 security-rules
 
 # Save to file
-hyper withdraw -o rules.lgt security-rules
+hyper withdraw --file-format json -o rules.json security-rules
 ----
 
 === search

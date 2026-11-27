@@ -40,7 +40,7 @@ hypatia consists of several interconnected components:
 ----
 
 *Registry*:: Haskell service for ruleset storage, verification, and distribution
-*Engine*:: Elixir rules service for rule execution and inference (absorbed from the retired Logtalk/SWI-Prolog engine)
+*Engine*:: Elixir rules service for rule execution and inference
 *Adapter*:: Rust service for forge API integration (GitHub, GitLab, etc.)
 *ArangoDB*:: Graph database for relationship modeling
 *Dragonfly*:: High-performance cache for compiled rules
@@ -114,7 +114,7 @@ GRAFANA_PASSWORD=admin-password-here
 
 | Engine
 | 8081
-| Rule engine (Elixir; Logtalk predecessor retired 2026-03-06)
+| Rule engine (Elixir)
 
 | Adapter
 | 8082
@@ -321,7 +321,7 @@ source ~/.cargo/env
 curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
 # Install Erlang/Elixir (the rule engine). Use the versions pinned in
-# mise.toml / CI. SWI-Prolog/Logtalk are NOT dependencies.
+# mise.toml / CI.
 # See https://elixir-lang.org/install.html
 ----
 
@@ -1000,14 +1000,6 @@ curl -u root:password http://localhost:8529/_api/query/slow
 [source,bash]
 ----
 kubectl top pods -n hypatia
-----
-
-. Review heap usage:
-+
-[source,bash]
-----
-kubectl exec -it deployment/hypatia-engine -- \
-  swipl -g "statistics(heap, H), format('Heap: ~w~n', [H]), halt"
 ----
 
 == Reference

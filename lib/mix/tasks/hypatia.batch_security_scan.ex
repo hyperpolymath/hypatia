@@ -16,9 +16,8 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     * `~/repos/echidna/rules/learned_security_rules.json` (if that dir
       exists) or `.audittraining/echidna-rules.json` — learned security
       rules for echidnabot in the JSON format defined by
-      `schemas/learned-security-rules.schema.json`. This replaces the
-      retired Logtalk `security_rule/4` export; see
-      `docs/rules/logtalk-migration.adoc` for the exact field mapping.
+      `schemas/learned-security-rules.schema.json`; see
+      `docs/rules/security-rule-provenance.adoc` for the field mapping.
   """
 
   use Mix.Task
@@ -32,8 +31,8 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
   # Display grouping for the generated markdown (kebab-case headings).
   # The canonical alert-type semantics live in
   # `Hypatia.Rules.SecurityErrors.alert_categories/0` (exact match,
-  # snake-case atoms, transcribed from ECHIDNA's retired
-  # `security_learning.lgt`); this local table is kept only because its
+  # snake-case atoms, transcribed from the ECHIDNA security-learning
+  # rule table); this local table is kept only because its
   # substring matching also buckets alert ids the canonical table has
   # never seen (for example `unused-import`). The JSON learned-rules
   # export below reads the canonical table via `validate_alert/1`.
@@ -253,12 +252,9 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     Mix.shell().info("Generated: #{filepath}")
   end
 
-  # Learned-rules export. This replaces two retired, mutually
-  # incompatible Logtalk `security_rule/4` shapes — Hypatia's generated
-  # `security_rule(Type, Category, AutoFix, Count)` and ECHIDNA's
-  # exported `security_rule(Type, Category, Severity, AutoFix)` — with
-  # one named-field JSON object carrying the union of their data plus
-  # the fix/prevention lookups:
+  # Learned-rules export: one named-field JSON object per alert type,
+  # carrying the observation count plus the canonical category,
+  # severity, auto-fixability and fix/prevention lookups:
   #
   #   {"alert_type", "category", "severity", "auto_fixable",
   #    "observations", "fix", "prevention_workflow"}
@@ -311,13 +307,18 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     Mix.shell().info("Generated learned security rules: #{filepath}")
   end
 
-  defp category_string(category, _rule_id) when is_atom(category) do
-    Atom.to_string(category)
-  end
-
-  defp category_string(nil, rule_id) do
+  # The category written for one alert type. `nil` (an id outside the 18
+  # canonical types) falls back to this task's substring grouping. The nil
+  # clause must come first: nil is an atom, so the general clause would
+  # otherwise export the string "nil".
+  @doc false
+  def category_string(nil, rule_id) do
     rule_id
     |> categorize_alert()
     |> String.replace("-", "_")
+  end
+
+  def category_string(category, _rule_id) when is_atom(category) do
+    Atom.to_string(category)
   end
 end

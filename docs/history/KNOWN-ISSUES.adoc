@@ -50,12 +50,6 @@ PA016, PA019 remain uncovered.
 == Open Issues
 
 [start=5]
-. **Logtalk: `deteriorating/1` predicate is a stub.** +
-The `deteriorating/1` predicate in the Logtalk knowledge base unconditionally
-calls `fail`. Pattern deterioration (declining confidence over time, increasing
-false positives) is therefore not detected. This predicate needs a real
-implementation that queries confidence history from the temporal data layer.
-
 . **Containerfiles: Non-Chainguard base images.** +
 The Engine Containerfile (SWI-Prolog) and Registry Containerfile (Haskell)
 use non-Chainguard base images. These are documented exceptions because

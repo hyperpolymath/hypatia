@@ -7,12 +7,6 @@ by a central *Neural.Coordinator* GenServer in a *hub-and-spoke*
 topology. The coordinator aggregates predictions from all 8 networks and
 provides a unified intelligence layer for the safety triangle pipeline.
 
-*Logtalk is NOT part of the neural architecture.* The Logtalk rule files
-(`+.lgt+`) were standalone symbolic reasoning rules (the engine was retired
-2026-03-06 and absorbed into `+lib/rules/*.ex+`) that were not
-loaded or executed by the Elixir application. They are a separate,
-disconnected layer.
-
 '''''
 
 === Hub-and-Spoke Topology
@@ -223,9 +217,7 @@ every 5 minutes and feeds outcomes to the coordinator via
 Training is seeded from gitbot-fleet’s `+fix-outcomes.jsonl+` (6,000+
 records) and hypatia’s `+auto-fix-formulaic.sh+` scan results.
 
-*Note:* The Logtalk symbolic layer (`+.lgt+` files) was absorbed into
-Elixir modules in `+lib/rules/+` on 2026-03-06. The Logtalk files have
-been removed from the repository.
+*Note:* The symbolic rules are Elixir modules in `+lib/rules/+`.
 
 '''''
 
@@ -340,7 +332,7 @@ control
 |`+self_diagnostics.ex+` |Health monitoring, circuit breaker
 |===
 
-==== Rules Engine (lib/rules/) — absorbed from Logtalk 2026-03-06
+==== Rules Engine (lib/rules/)
 
 [width="100%",cols="48%,52%",options="header",]
 |===

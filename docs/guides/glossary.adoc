@@ -214,13 +214,9 @@ A purely functional programming language used for the registry, ruleset DSL, and
 Liquid Haskell::
 A refinement type system for Haskell that enables formal verification of code properties. Used to verify ruleset correctness.
 
-[[logtalk]]
-Logtalk::
-An object-oriented logic programming language extending Prolog. *Historical:* Hypatia's original rule language, retired 2026-04-14 (ADR-001); its surviving semantics were transcribed to Elixir (`+docs/rules/logtalk-migration.adoc+`). Not used anywhere in the current system.
-
 [[prolog]]
 Prolog::
-A logic programming language that forms the foundation of Logtalk. Enables declarative rule definition and inference.
+A logic programming language. Enables declarative rule definition and inference.
 
 [[quickcheck]]
 QuickCheck::

@@ -3,14 +3,15 @@
 
 defmodule Hypatia.Rules.AuditPrevention do
   @moduledoc """
-  Audit-training prevention rules AP001–AP015, transcribed from Logtalk.
+  Audit-training prevention rules AP001–AP015.
 
-  These fifteen rules were the last rule-bearing Logtalk text in this
-  repository: the `Prevention Rules (Logtalk)` blocks embedded in
-  `.audittraining/security-errors/*.adoc` (2025-12-29). They are recorded
-  here verbatim as data (`rules/0` — functor, name, effect, description,
-  conditions, action, origin file) so the transcription can be diffed
-  against the originals preserved in `docs/rules/logtalk-migration.adoc`.
+  These fifteen rules were first written as prevention-rule records in
+  the `.audittraining/security-errors/*.adoc` incident reports
+  (2025-12-29); each record's `origin` names its report. This module is
+  now their only home: `rules/0` keeps each record verbatim as data
+  (source functor and name, effect, description, conditions, action,
+  origin file), and `docs/rules/security-rule-provenance.adoc` records
+  how each one was operationalised.
 
   Every rule names its canonical Elixir equivalent. Where the estate
   already had a live checker (workflow permissions, unpinned actions,
@@ -23,7 +24,7 @@ defmodule Hypatia.Rules.AuditPrevention do
 
   Two operationalisations are recorded here rather than hidden:
 
-  * The Logtalk records carry an effect and an action but no severity.
+  * The source records carry an effect and an action but no severity.
     Findings therefore derive severity from the action
     (`block_merge_with_escalation` is `:critical`; other `block_*`
     actions are `:high`; `warn_*`/`alert_*` are `:medium`;
@@ -38,8 +39,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP001",
       rule: "parser_input_limits",
-      logtalk_functor: "parser_rule",
-      logtalk_name: "input_limits",
+      source_functor: "parser_rule",
+      source_name: "input_limits",
       effect: :preventive,
       description: "Config parsers must have input size limits",
       conditions: [
@@ -53,8 +54,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP002",
       rule: "wasm_memory_limits",
-      logtalk_functor: "wasm_rule",
-      logtalk_name: "memory_limits",
+      source_functor: "wasm_rule",
+      source_name: "memory_limits",
       effect: :preventive,
       description: "WASM crates must limit memory allocation",
       conditions: [
@@ -68,8 +69,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP003",
       rule: "rust_missing_audit",
-      logtalk_functor: "rust_rule",
-      logtalk_name: "missing_audit",
+      source_functor: "rust_rule",
+      source_name: "missing_audit",
       effect: :preventive,
       description: "Rust repos must run cargo audit in CI",
       conditions: [
@@ -83,8 +84,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP004",
       rule: "rust_workspace_vuln",
-      logtalk_functor: "rust_rule",
-      logtalk_name: "workspace_vuln",
+      source_functor: "rust_rule",
+      source_name: "workspace_vuln",
       effect: :curative,
       description: "Check all workspace members for vulnerabilities",
       conditions: [
@@ -99,8 +100,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP005",
       rule: "project_missing_ci_tests",
-      logtalk_functor: "project_rule",
-      logtalk_name: "missing_ci_tests",
+      source_functor: "project_rule",
+      source_name: "missing_ci_tests",
       effect: :preventive,
       description: "Repos must have automated test workflow",
       conditions: [
@@ -114,8 +115,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP006",
       rule: "project_missing_sast",
-      logtalk_functor: "project_rule",
-      logtalk_name: "missing_sast",
+      source_functor: "project_rule",
+      source_name: "missing_sast",
       effect: :preventive,
       description: "Multi-language repos must have SAST configured",
       conditions: [
@@ -129,8 +130,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP007",
       rule: "security_property_injection",
-      logtalk_functor: "security_rule",
-      logtalk_name: "property_injection",
+      source_functor: "security_rule",
+      source_name: "property_injection",
       effect: :preventive,
       description: "Reject dynamic property access without validation",
       conditions: [
@@ -145,8 +146,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP008",
       rule: "code_quality_unused_vars",
-      logtalk_functor: "code_quality_rule",
-      logtalk_name: "unused_vars",
+      source_functor: "code_quality_rule",
+      source_name: "unused_vars",
       effect: :curative,
       description: "Flag files with unused variables for cleanup",
       conditions: [
@@ -160,8 +161,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP009",
       rule: "crypto_enhanced_review",
-      logtalk_functor: "crypto_rule",
-      logtalk_name: "enhanced_review",
+      source_functor: "crypto_rule",
+      source_name: "enhanced_review",
       effect: :preventive,
       description: "Crypto repos require 2+ reviewers",
       conditions: [
@@ -175,8 +176,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP010",
       rule: "crypto_require_fuzzing",
-      logtalk_functor: "crypto_rule",
-      logtalk_name: "require_fuzzing",
+      source_functor: "crypto_rule",
+      source_name: "require_fuzzing",
       effect: :preventive,
       description: "Crypto repos must have fuzz targets",
       conditions: [
@@ -190,8 +191,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP011",
       rule: "crypto_no_panic",
-      logtalk_functor: "crypto_rule",
-      logtalk_name: "no_panic",
+      source_functor: "crypto_rule",
+      source_name: "no_panic",
       effect: :preventive,
       description: "Crypto code must not panic",
       conditions: [
@@ -206,8 +207,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP012",
       rule: "meta_rsr_self_compliance",
-      logtalk_functor: "meta_rule",
-      logtalk_name: "rsr_self_compliance",
+      source_functor: "meta_rule",
+      source_name: "rsr_self_compliance",
       effect: :preventive,
       description: "RSR tooling repos must pass all RSR checks",
       conditions: [
@@ -222,8 +223,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP013",
       rule: "template_exemplary_standards",
-      logtalk_functor: "template_rule",
-      logtalk_name: "exemplary_standards",
+      source_functor: "template_rule",
+      source_name: "exemplary_standards",
       effect: :diagnostic,
       description: "Template/tooling repos should exceed normal standards",
       conditions: [
@@ -237,8 +238,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP014",
       rule: "workflow_missing_permissions",
-      logtalk_functor: "workflow_rule",
-      logtalk_name: "missing_permissions",
+      source_functor: "workflow_rule",
+      source_name: "missing_permissions",
       effect: :preventive,
       description: "Reject workflows without permissions declaration",
       conditions: [
@@ -253,8 +254,8 @@ defmodule Hypatia.Rules.AuditPrevention do
     %{
       id: "AP015",
       rule: "workflow_unpinned_action",
-      logtalk_functor: "workflow_rule",
-      logtalk_name: "unpinned_action",
+      source_functor: "workflow_rule",
+      source_name: "unpinned_action",
       effect: :preventive,
       description: "Reject workflows with unpinned actions",
       conditions: [
@@ -264,7 +265,7 @@ defmodule Hypatia.Rules.AuditPrevention do
       action: "block_merge",
       origin: ".audittraining/security-errors/ubicity.adoc",
       canonical:
-        "Hypatia.Rules.WorkflowHardening.wh004_unpinned_uses/1 and Hypatia.Rules.WorkflowAudit.check_unpinned_actions/1 (the Logtalk second condition is superseded: a trailing \"# vN\" comment beside a tag ref is not a pin; the Elixir checks require the 40-hex SHA form)"
+        "Hypatia.Rules.WorkflowHardening.wh004_unpinned_uses/1 and Hypatia.Rules.WorkflowAudit.check_unpinned_actions/1 (the source rule's second condition is superseded: a trailing \"# vN\" comment beside a tag ref is not a pin; the Elixir checks require the 40-hex SHA form)"
     }
   ]
 
@@ -300,7 +301,7 @@ defmodule Hypatia.Rules.AuditPrevention do
 
   `crate_type(parser)` is operationalised as a `Cargo.toml` that
   describes the crate with parse/parser/parsing; the negative condition
-  keeps the Logtalk pattern verbatim (`MAX.*SIZE|size.*limit`,
+  keeps the source pattern verbatim (`MAX.*SIZE|size.*limit`,
   case-insensitive) over every supplied file content.
   """
   def check_parser_input_limits(contents) when is_map(contents) do
@@ -325,7 +326,7 @@ defmodule Hypatia.Rules.AuditPrevention do
   `feature("wasm")` is operationalised as a `wasm` entry in the
   `[features]` table, a `wasm-bindgen` dependency, or a `wasm32`
   target mention in `Cargo.toml`; the negative condition keeps the
-  Logtalk pattern verbatim (`memory.*limit|max.*alloc`).
+  source pattern verbatim (`memory.*limit|max.*alloc`).
   """
   def check_wasm_memory_limits(contents) when is_map(contents) do
     cargo = Map.get(contents, "Cargo.toml", "")
@@ -390,9 +391,9 @@ defmodule Hypatia.Rules.AuditPrevention do
   end
 
   @doc """
-  AP005 — source code with no test workflow. The Logtalk glob
+  AP005 — source code with no test workflow. The source glob
   (`.github/workflows/*test*.yml`) is transcribed semantically: the
-  `.yaml` spelling counts too. The ledger records the literal glob.
+  `.yaml` spelling counts too. `rules/0` keeps the literal glob.
   """
   def check_missing_ci_tests(files) when is_list(files) do
     test_workflow? =
@@ -410,7 +411,7 @@ defmodule Hypatia.Rules.AuditPrevention do
   end
 
   @doc """
-  AP006 — a multi-language repo with no CodeQL workflow. The Logtalk
+  AP006 — a multi-language repo with no CodeQL workflow. The source
   file test is transcribed semantically: `codeql.yaml` counts too.
   """
   def check_missing_sast(files, language_count) when is_list(files) do
@@ -428,7 +429,7 @@ defmodule Hypatia.Rules.AuditPrevention do
 
   @doc """
   AP007 — dynamic property access from request input with no allowlist
-  nearby (same file). Both Logtalk access patterns must match and the
+  nearby (same file). Both source access patterns must match and the
   allowlist pattern (`allowedProps|whitelist|ALLOWED`) must not.
   """
   def check_property_injection(content) when is_binary(content) do
