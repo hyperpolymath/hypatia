@@ -413,9 +413,14 @@ defmodule Hypatia.OutcomeTracker do
   pattern still appears in the results. The scan is judged by the category AND
   the file of the fix (owner ruling 8A, E0-26):
 
-    * a weak point of `category` in `file` means the fix did not hold:
-      `:still_present`. The scan's own `file` field is compared, after a leading
-      `./` is removed; `location` is not parsed.
+    * a weak point of `category` in `file` AT `line` means the fix did not hold:
+      `:still_present`. The scan's own `file` and `line` fields are compared, after a
+      leading `./` is removed; `location` is not parsed.
+    * a weak point of `category` in `file` that is not at `line` (or when no `line` is
+      given, or the weak point has none) cannot be told from the finding that was
+      fixed: `:ambiguous`, no verification, no credit and no blame (owner ruling of
+      2026-11-18, fail closed; E0-22). Lines move when a fix edits a file, so only a
+      match refutes and a mismatch never verifies.
     * a weak point of `category` only in another file does not refute a fix of
       this file: `:verified`.
     * a weak point of `category` that names no file cannot be placed, so the scan
@@ -424,10 +429,10 @@ defmodule Hypatia.OutcomeTracker do
       old rule: the category alone.
 
   `verify_fix/3` means "no file". Returns `:verified`, `:still_present`,
-  `:cannot_locate`, or `:scan_failed`.
+  `:ambiguous`, `:cannot_locate`, or `:scan_failed`.
   """
-  def verify_fix(repo_path, pattern_id, category, file \\ nil) do
-    result = do_verify_fix(repo_path, pattern_id, category, file)
+  def verify_fix(repo_path, pattern_id, category, file \\ nil, line \\ nil) do
+    result = do_verify_fix(repo_path, pattern_id, category, file, line)
 
     Hypatia.Telemetry.verification_result(
       recipe_id: pattern_id,
@@ -438,7 +443,7 @@ defmodule Hypatia.OutcomeTracker do
     result
   end
 
-  defp do_verify_fix(repo_path, pattern_id, category, file) do
+  defp do_verify_fix(repo_path, pattern_id, category, file, line) do
     # An absent scanner is an absent verifier: no verification, and no crash.
     result =
       try do
@@ -460,7 +465,7 @@ defmodule Hypatia.OutcomeTracker do
           {:ok, scan} ->
             weak_points = Map.get(scan, "weak_points", [])
 
-            case judge(weak_points, category, file) do
+            case judge(weak_points, category, file, line) do
               :still_present ->
                 Logger.warning(
                   "Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present"
@@ -482,6 +487,14 @@ defmodule Hypatia.OutcomeTracker do
                 )
 
                 :cannot_locate
+
+              :ambiguous ->
+                Logger.warning(
+                  "Verification SKIPPED for #{pattern_id} in #{repo_path} -- the file still has a " <>
+                    "weak point of the category that the scan cannot tell from the fixed finding"
+                )
+
+                :ambiguous
             end
 
           {:error, _} ->
@@ -502,8 +515,9 @@ defmodule Hypatia.OutcomeTracker do
   # weak point of the category in this file already refutes the fix, the scan gives
   # no verification. A fix at repository level (no file, "." or empty) keeps the
   # old rule: the category alone.
-  defp judge(weak_points, category, file) do
+  defp judge(weak_points, category, file, line) do
     in_category = Enum.filter(weak_points, &(Map.get(&1, "category", "") == category))
+    in_file = Enum.filter(in_category, &same_file?(Map.get(&1, "file"), file))
 
     cond do
       in_category == [] ->
@@ -512,8 +526,14 @@ defmodule Hypatia.OutcomeTracker do
       repo_level?(file) ->
         :still_present
 
-      Enum.any?(in_category, &same_file?(Map.get(&1, "file"), file)) ->
+      # The finding that the fix was meant to remove is still there: same file, same line.
+      line != nil and Enum.any?(in_file, &same_line?(Map.get(&1, "line"), line)) ->
         :still_present
+
+      # Another weak point of the category in this file that the scan cannot tell from the
+      # fixed finding: no credit, no blame.
+      in_file != [] ->
+        :ambiguous
 
       Enum.any?(in_category, &(not is_binary(Map.get(&1, "file")))) ->
         :cannot_locate
@@ -522,6 +542,21 @@ defmodule Hypatia.OutcomeTracker do
         :verified
     end
   end
+
+  # The line of a weak point: a number, or text that is one. Anything else is no line.
+  defp same_line?(scanned, line) when is_integer(line), do: parse_line(scanned) == line
+  defp same_line?(_scanned, _line), do: false
+
+  defp parse_line(n) when is_integer(n), do: n
+
+  defp parse_line(text) when is_binary(text) do
+    case Integer.parse(String.trim(text)) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_line(_other), do: nil
 
   defp repo_level?(nil), do: true
   defp repo_level?(file), do: normalise_file(file) in ["", "."]
@@ -647,10 +682,11 @@ defmodule Hypatia.OutcomeTracker do
       repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
       pattern_id = Keyword.get(opts, :pattern_id, "")
 
-      case verify_fix(repo_path, pattern_id, category, file) do
-        :cannot_locate ->
-          # The scan cannot say which file: no verification, and the gap is
-          # recorded, as for a blank category.
+      case verify_fix(repo_path, pattern_id, category, file, Keyword.get(opts, :line)) do
+        result when result in [:cannot_locate, :ambiguous] ->
+          # The scan cannot say which file, or cannot tell the finding that was fixed from
+          # another one of the same category in the file: no verification, no credit and
+          # no blame, and the gap is recorded, as for a blank category.
           {:ok, record} =
             record_outcome(
               recipe_id,

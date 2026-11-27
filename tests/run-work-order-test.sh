@@ -156,7 +156,7 @@ ok "a checkout without the e0-work-order skill is refused"
 
 # The skill names these commands with no variable part, so each needs its exact rule.
 rules=$(jq -r ".permissions.allow[]" "$here/.claude/profiles/e0-headless.json")
-for cmd in "git fetch origin" "git merge --no-edit origin/main" "mix --version"; do
+for cmd in "git fetch origin" "git merge --no-edit origin/main" "mix --version" "git status --short" "git rev-parse HEAD"; do
   grep -qxF "Bash($cmd)" <<<"$rules" || fail "the profile has no exact rule for: $cmd"
 done
 if grep -q "^Bash(git push" <<<"$rules"; then fail "the profile has a push rule"; fi

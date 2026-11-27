@@ -457,6 +457,39 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert Enum.any?(findings, &(&1.stale_dir == "gone" and &1.file == "tools/x/README.md"))
     end
 
+    test "a plan or roadmap names paths still to be created, not rename drift", %{repo: repo} do
+      # Measured 2026-11-15 on bactrian#37: docs/status/BACTRIAN-ULTRAPLAN.adoc
+      # lists `src/driver/`, `src/ppx/` and `src/frontend/` as files a work
+      # package will create. They exist nowhere yet, so SD022 fired three times.
+      File.mkdir_p!(Path.join([repo, "src", "core"]))
+      File.mkdir_p!(Path.join([repo, "docs", "status"]))
+      File.mkdir_p!(Path.join([repo, "docs", "plans"]))
+      planned = "*Files:* `src/driver/main.ml`; `src/ppx/`, `src/frontend/`."
+      File.write!(Path.join([repo, "docs", "status", "BACTRIAN-ULTRAPLAN.adoc"]), planned)
+      File.write!(Path.join([repo, "docs", "status", "ROADMAP.adoc"]), planned)
+      File.write!(Path.join([repo, "docs", "plans", "w2.md"]), planned)
+      File.write!(Path.join([repo, "IMPLEMENTATION-PLAN.md"]), planned)
+      # A current-state doc with the same text is still checked.
+      File.write!(Path.join(repo, "EXPLAINME.adoc"), "See src/driver/main.ml.")
+      File.write!(Path.join([repo, "src", "core", "a.ml"]), "")
+      System.cmd("git", ["init", "-q"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+
+      System.cmd("git", ["commit", "-q", "-m", "init", "--no-gpg-sign"],
+        cd: repo,
+        env: [
+          {"GIT_AUTHOR_NAME", "T"},
+          {"GIT_AUTHOR_EMAIL", "t@t"},
+          {"GIT_COMMITTER_NAME", "T"},
+          {"GIT_COMMITTER_EMAIL", "t@t"}
+        ]
+      )
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert Enum.map(findings, & &1.file) |> Enum.uniq() == ["EXPLAINME.adoc"]
+      assert Enum.map(findings, & &1.stale_dir) == ["driver"]
+    end
+
     test "returns empty when src/ has no subdirs", %{repo: repo} do
       File.write!(Path.join(repo, "README.md"), "test")
       findings = StructuralDrift.sd022_stale_path_after_rename(repo)

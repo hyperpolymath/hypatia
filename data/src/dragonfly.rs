@@ -219,7 +219,7 @@ impl DragonflyClient {
         let json = serde_json::json!({
             "alert_key": alert_key,
             "rule_key": rule_key,
-            "timestamp": chrono::Utc::now().timestamp()
+            "timestamp": jiff::Timestamp::now().as_second()
         })
         .to_string();
         conn.publish::<_, _, ()>("alerts:fixed", json).await?;
@@ -232,7 +232,7 @@ impl DragonflyClient {
         let json = serde_json::json!({
             "rule_key": rule_key,
             "repo_key": repo_key,
-            "timestamp": chrono::Utc::now().timestamp()
+            "timestamp": jiff::Timestamp::now().as_second()
         })
         .to_string();
         conn.publish::<_, _, ()>("rules:triggered", json).await?;
@@ -245,7 +245,7 @@ impl DragonflyClient {
         let json = serde_json::json!({
             "repo_key": repo_key,
             "alert_count": alert_count,
-            "timestamp": chrono::Utc::now().timestamp()
+            "timestamp": jiff::Timestamp::now().as_second()
         })
         .to_string();
         conn.publish::<_, _, ()>("scans:complete", json).await?;
@@ -325,9 +325,9 @@ impl DragonflyClient {
         job.status = status.to_string();
 
         if status == "running" {
-            job.started_at = Some(chrono::Utc::now().timestamp());
+            job.started_at = Some(jiff::Timestamp::now().as_second());
         } else if status == "completed" || status == "failed" {
-            job.completed_at = Some(chrono::Utc::now().timestamp());
+            job.completed_at = Some(jiff::Timestamp::now().as_second());
         }
 
         let updated = serde_json::to_string(&job)?;

@@ -55,13 +55,13 @@ fi
 
 LIC_HEAD=$(head -1 "$LICENSE_PATH" | tr -d '\n')
 
-if echo "$LIC_HEAD" | grep -q "MPL-2.0"; then
+if grep -q "MPL-2.0" <<<"$LIC_HEAD"; then
   TARGET="MPL-2.0"
   CATEGORY="sole-owner"
-elif echo "$LIC_HEAD" | grep -q "AGPL-3.0"; then
+elif grep -q "AGPL-3.0" <<<"$LIC_HEAD"; then
   TARGET="AGPL-3.0-or-later"
   CATEGORY="son-shared"
-elif echo "$LIC_HEAD" | grep -q "PMPL-1.0-or-later"; then
+elif grep -q "PMPL-1.0-or-later" <<<"$LIC_HEAD"; then
   echo "INFO: $REPO_NAME LICENSE is PMPL-1.0-or-later (carve-out or staging) — skipping"
   exit 0
 else

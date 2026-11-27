@@ -11,7 +11,7 @@ use crate::forge::{
     WebhookEvent, WebhookPayload, Workflow, WorkflowRun, WorkflowState,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 
@@ -852,9 +852,9 @@ impl ForgeAdapter for BitbucketAdapter {
             conclusion,
             head_sha: head_sha.to_string(),
             url: None,
-            started_at: Some(Utc::now()),
+            started_at: Some(Timestamp::now()),
             completed_at: if matches!(status, CheckStatus::Completed) {
-                Some(Utc::now())
+                Some(Timestamp::now())
             } else {
                 None
             },
@@ -1103,8 +1103,8 @@ struct BitbucketPullRequestFull {
     source: BitbucketPRBranch,
     destination: BitbucketPRBranch,
     links: BitbucketLinks,
-    created_on: DateTime<Utc>,
-    updated_on: DateTime<Utc>,
+    created_on: Timestamp,
+    updated_on: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1130,8 +1130,8 @@ struct BitbucketIssue {
     state: String,
     reporter: BitbucketUser,
     links: BitbucketLinks,
-    created_on: DateTime<Utc>,
-    updated_on: DateTime<Utc>,
+    created_on: Timestamp,
+    updated_on: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1149,8 +1149,8 @@ struct BitbucketComment {
     id: u64,
     content: BitbucketContent,
     user: BitbucketUser,
-    created_on: DateTime<Utc>,
-    updated_on: DateTime<Utc>,
+    created_on: Timestamp,
+    updated_on: Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1164,8 +1164,8 @@ struct BitbucketPipeline {
     build_number: u64,
     state: BitbucketPipelineState,
     target: BitbucketPipelineTarget,
-    created_on: DateTime<Utc>,
-    completed_on: Option<DateTime<Utc>>,
+    created_on: Timestamp,
+    completed_on: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1201,8 +1201,8 @@ struct BitbucketStatus {
     name: Option<String>,
     state: String,
     url: Option<String>,
-    created_on: Option<DateTime<Utc>>,
-    updated_on: Option<DateTime<Utc>>,
+    created_on: Option<Timestamp>,
+    updated_on: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]

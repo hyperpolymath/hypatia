@@ -94,11 +94,79 @@ elif escript_is_stale; then
     fi
 fi
 
+# ─── Run the escript, naming a VM crash ────────────────────────────────
+
+# A crash signal is the Erlang VM dying, not a scan result. Hypatia loads no
+# NIFs, so a SIGSEGV here is the BEAM itself (the known case is the PinSites
+# miscompile, #1062). Callers see only "exit 139", and that reads as a
+# scanner fault or a finding about the scanned repository.
+# report_vm_crash prints the signal and the OTP/erts version to stderr only
+# (stdout carries the JSON/SARIF payload).
+# otp_version prints the OTP release from the installation's OTP_VERSION
+# file and the erts version from `erl +V`; neither starts a shell or
+# evaluates code.
+otp_version() {
+    local erl root otp erts
+    erl="$(command -v erl 2>/dev/null)" || { echo unknown; return 0; }
+    root="$(cd "$(dirname "$(readlink -f "${erl}")")/.." 2>/dev/null && pwd)" || root=""
+    otp="$(cat "${root}"/releases/*/OTP_VERSION 2>/dev/null | head -n 1)" || otp=""
+    erts="$(erl +V 2>&1 | sed -n 's/.*emulator version //p')" || erts=""
+    echo "${otp:-unknown} (erts ${erts:-unknown})"
+}
+
+report_vm_crash() {
+    local status="$1" sig name otp
+    sig=$(( status - 128 ))
+    name="$(kill -l "${sig}" 2>/dev/null || echo "${sig}")"
+    otp="$(otp_version)"
+    {
+        echo "[hypatia] The Erlang VM running the scanner (beam.smp) was killed by SIG${name} (exit ${status}) on OTP ${otp}."
+        echo "[hypatia] This is a runtime crash: no scan result was produced, and it is not a finding about the scanned repository."
+        echo "[hypatia] Re-running on the same input and runtime crashes again. Report the OTP version above; see ci_failure_triage 'toolchain_segfault'."
+    } >&2
+}
+
+# run_escript runs the escript as a child so its exit can be read, and stays
+# transparent to callers as `exec` was: stdin, stdout and stderr pass
+# through, TERM/INT/HUP are forwarded, the exit code is returned unchanged,
+# and a child killed by a signal ends this script by the same signal. The
+# caller's shell therefore still reports "Segmentation fault … hypatia-cli.sh",
+# which the `toolchain_segfault` triage rule matches.
+run_escript() {
+    local child status=0 sig
+    "${ESCRIPT}" "$@" <&0 &
+    child=$!
+    trap 'kill -TERM "${child}" 2>/dev/null' TERM
+    trap 'kill -INT "${child}" 2>/dev/null' INT
+    trap 'kill -HUP "${child}" 2>/dev/null' HUP
+    # `wait` returns early (>128) when a forwarded signal interrupts it; wait
+    # again until the child has actually exited.
+    while :; do
+        status=0
+        wait "${child}" || status=$?
+        kill -0 "${child}" 2>/dev/null || break
+    done
+    trap - TERM INT HUP
+    if (( status > 128 )); then
+        sig=$(( status - 128 ))
+        case "$(kill -l "${sig}" 2>/dev/null)" in
+            SEGV|BUS|ABRT|ILL) report_vm_crash "${status}" ;;
+            # TERM, INT, HUP, KILL and the rest end a run on purpose (CI
+            # cancellation, timeout): not a crash, so no report.
+            *) ;;
+        esac
+        trap - "${sig}" 2>/dev/null || true
+        kill -"${sig}" $$
+    fi
+    return "${status}"
+}
+
 # ─── Forward arguments ─────────────────────────────────────────────────
 
 if [[ -x "${ESCRIPT}" ]]; then
     # Pass HYPATIA_FORMAT / HYPATIA_SEVERITY through the environment
-    exec "${ESCRIPT}" "$@"
+    run_escript "$@"
+    exit $?
 elif [[ -x "${BASH_FALLBACK}" ]]; then
     echo "[hypatia] Warning: escript not built, falling back to bash scanner." >&2
     exec "${BASH_FALLBACK}" "$@"

@@ -63,8 +63,17 @@ fi
 # The ids an AsciiDoc file defines: explicit [[id]], [[id,label]], [#id],
 # anchor:id[], and the default section ids (_title_in_lower_case).
 anchors() {
-  { grep -oE '\[\[[A-Za-z0-9_:.-]+|\[#[A-Za-z0-9_:-]+|anchor:[A-Za-z0-9_:.-]+\[' "$1" | sed -E 's/^(\[\[|\[#|anchor:)//; s/\[$//'
-    sed -nE 's/^=+ +(.*)$/\1/p' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/_/g; s/_+$//; s/^/_/'
+  local file=$1 explicit titles
+  # Each read is captured and checked on its own. The caller runs this in an
+  # `||` list, where errexit is off, so a failure inside a pipeline would
+  # otherwise be lost (CodeRabbit on #1208). grep exits 1 when a file has no
+  # explicit ID: no match, not an error; 2 is an error.
+  explicit=$(grep -oE '\[\[[A-Za-z0-9_:.-]+|\[#[A-Za-z0-9_:-]+|anchor:[A-Za-z0-9_:.-]+\[' "$file") ||
+    [[ $? -eq 1 ]] || return 2
+  titles=$(sed -nE 's/^=+ +(.*)$/\1/p' "$file") || return 2
+  {
+    [[ -z "$explicit" ]] || sed -E 's/^(\[\[|\[#|anchor:)//; s/\[$//' <<<"$explicit"
+    [[ -z "$titles" ]] || tr '[:upper:]' '[:lower:]' <<<"$titles" | sed -E 's/[^a-z0-9]+/_/g; s/_+$//; s/^/_/'
   } | sort -u
 }
 
@@ -80,7 +89,11 @@ for doc in "$readme" EXPLAINME.adoc docs/README.adoc; do
     if [ ! -e "$dir/$path" ]; then say "$doc links $target, which does not exist"; continue; fi
     if [ "$target" != "$path" ] && [[ "$path" == *.adoc ]]; then
       frag=${target#*#}
-      anchors "$dir/$path" | grep -qxF -- "$frag" || say "$doc links $target, and $path defines no anchor $frag"
+      # Captured, then matched (RE011); an unreadable target is said, not skipped.
+      ids=$(anchors "$dir/$path") || { say "$doc links $target, and the anchors of $path cannot be read"; continue; }
+      if [[ -z "$ids" ]] || ! grep -qxF -- "$frag" <<<"$ids"; then
+        say "$doc links $target, and $path defines no anchor $frag"
+      fi
     fi
   done < <(grep -oE 'link:[^[ ]+\[' "$doc" | sed -E 's/^link:(.*)\[$/\1/')
 done

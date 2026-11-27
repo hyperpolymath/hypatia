@@ -43,7 +43,7 @@ pub mod assertions;
 pub mod scenarios;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -312,13 +312,13 @@ pub struct SimulatedBuild {
     /// Build logs (accumulated)
     pub logs: Vec<LogEntry>,
     /// Build start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Build completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Created timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
     /// Last updated timestamp
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Timestamp,
     /// Security findings from the build
     pub security_findings: Vec<SecurityFinding>,
     /// Custom metadata
@@ -328,7 +328,7 @@ pub struct SimulatedBuild {
 impl SimulatedBuild {
     /// Create a new simulated build from configuration
     pub fn from_config(config: &BuildConfig, build_number: u64) -> Self {
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             id: Uuid::new_v4().to_string(),
             number: build_number,
@@ -352,10 +352,10 @@ impl SimulatedBuild {
     }
 
     /// Calculate build duration
-    pub fn duration(&self) -> Option<Duration> {
+    pub fn duration(&self) -> Option<SignedDuration> {
         match (self.started_at, self.completed_at) {
-            (Some(start), Some(end)) => Some(end - start),
-            (Some(start), None) => Some(Utc::now() - start),
+            (Some(start), Some(end)) => Some(end.duration_since(start)),
+            (Some(start), None) => Some(Timestamp::now().duration_since(start)),
             _ => None,
         }
     }
@@ -405,9 +405,9 @@ pub struct SimulatedJob {
     /// Runner information
     pub runner: Option<RunnerInfo>,
     /// Job start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Job completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Job logs
     pub logs: Vec<LogEntry>,
     /// Matrix combination for this job (if part of matrix)
@@ -440,10 +440,10 @@ impl SimulatedJob {
     }
 
     /// Calculate job duration
-    pub fn duration(&self) -> Option<Duration> {
+    pub fn duration(&self) -> Option<SignedDuration> {
         match (self.started_at, self.completed_at) {
-            (Some(start), Some(end)) => Some(end - start),
-            (Some(start), None) => Some(Utc::now() - start),
+            (Some(start), Some(end)) => Some(end.duration_since(start)),
+            (Some(start), None) => Some(Timestamp::now().duration_since(start)),
             _ => None,
         }
     }
@@ -463,9 +463,9 @@ pub struct SimulatedStep {
     /// Conclusion (when completed)
     pub conclusion: Option<BuildConclusion>,
     /// Step start time
-    pub started_at: Option<DateTime<Utc>>,
+    pub started_at: Option<Timestamp>,
     /// Step completion time
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<Timestamp>,
     /// Step logs
     pub logs: Vec<LogEntry>,
 }
@@ -517,7 +517,7 @@ impl Default for RunnerInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     /// Log timestamp
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     /// Log level
     pub level: LogLevel,
     /// Log message
@@ -530,7 +530,7 @@ impl LogEntry {
     /// Create a new log entry
     pub fn new(level: LogLevel, message: impl Into<String>) -> Self {
         Self {
-            timestamp: Utc::now(),
+            timestamp: Timestamp::now(),
             level,
             message: message.into(),
             data: None,
@@ -582,23 +582,23 @@ pub struct SimulatedArtifact {
     /// Artifact content (simulated)
     pub content: Vec<u8>,
     /// Expiration time
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Timestamp,
     /// Created timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: Timestamp,
 }
 
 impl SimulatedArtifact {
     /// Create a new simulated artifact
     pub fn new(name: &str, content: Vec<u8>, content_type: &str) -> Self {
         let size_bytes = content.len() as u64;
-        let now = Utc::now();
+        let now = Timestamp::now();
         Self {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
             size_bytes,
             content_type: content_type.to_string(),
             content,
-            expires_at: now + Duration::days(90),
+            expires_at: now + SignedDuration::from_hours(24 * 90),
             created_at: now,
         }
     }
@@ -803,14 +803,342 @@ pub struct SimulationStats {
 }
 
 // ============================================================================
+// Shared Simulation Core
+// ============================================================================
+
+/// The build store every simulated provider shares.
+///
+/// Each provider keeps one of these and supplies only what differs between
+/// providers (its name and the jobs a new build starts with, see
+/// [`SimProvider`]). The build lifecycle itself is implemented once, for every
+/// provider, by the blanket `impl<P: SimProvider> SimulatedCI for P`.
+#[derive(Debug, Default)]
+pub struct SimBuildStore {
+    builds: Arc<RwLock<HashMap<String, SimulatedBuild>>>,
+    build_counter: Arc<RwLock<u64>>,
+}
+
+impl SimBuildStore {
+    /// Create an empty store
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Run `change` on one build, then stamp its `updated_at`.
+    async fn update<R>(
+        &self,
+        build_id: &str,
+        change: impl FnOnce(&mut SimulatedBuild) -> SimulationResult<R> + Send,
+    ) -> SimulationResult<R> {
+        let mut builds = self.builds.write().await;
+        let build = builds
+            .get_mut(build_id)
+            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
+        let result = change(build)?;
+        build.updated_at = Timestamp::now();
+        Ok(result)
+    }
+
+    /// Run `read` on a copy of one build.
+    async fn read<R>(
+        &self,
+        build_id: &str,
+        read: impl FnOnce(SimulatedBuild) -> R + Send,
+    ) -> SimulationResult<R> {
+        self.builds
+            .read()
+            .await
+            .get(build_id)
+            .cloned()
+            .map(read)
+            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))
+    }
+}
+
+/// What distinguishes one simulated CI provider from another.
+///
+/// Implement this and the provider gets the whole [`SimulatedCI`] interface.
+pub trait SimProvider: Send + Sync {
+    /// The provider being simulated
+    fn kind(&self) -> CIProvider;
+
+    /// The provider's build store
+    fn store(&self) -> &SimBuildStore;
+
+    /// The jobs a new build starts with
+    fn initial_jobs(&self, config: &BuildConfig) -> Vec<SimulatedJob>;
+}
+
+fn check_transition(build: &SimulatedBuild, to: BuildStatus) -> SimulationResult<()> {
+    if build.status.can_transition_to(to) {
+        Ok(())
+    } else {
+        Err(SimulationError::InvalidStateTransition {
+            from: build.status,
+            to,
+        })
+    }
+}
+
+/// One step of a running build: start the next job whose `needs` are met, or
+/// finish the running one, or, once every job is terminal, conclude the build
+/// (failure if any job failed).
+fn advance_running(build: &mut SimulatedBuild) -> BuildStatus {
+    if build.jobs.iter().all(|job| job.status.is_terminal()) {
+        build.completed_at = Some(Timestamp::now());
+        let has_failure = build
+            .jobs
+            .iter()
+            .any(|job| job.conclusion.is_some_and(|c| c.is_failure()));
+        build.conclusion = Some(if has_failure {
+            BuildConclusion::Failure
+        } else {
+            BuildConclusion::Success
+        });
+        return BuildStatus::Completed;
+    }
+
+    let completed: Vec<String> = build
+        .jobs
+        .iter()
+        .filter(|job| job.status.is_terminal())
+        .map(|job| job.name.clone())
+        .collect();
+
+    for job in &mut build.jobs {
+        if job.status == BuildStatus::Queued {
+            if job.needs.iter().all(|need| completed.contains(need)) {
+                job.status = BuildStatus::InProgress;
+                job.started_at = Some(Timestamp::now());
+                break;
+            }
+        } else if job.status == BuildStatus::InProgress {
+            job.status = BuildStatus::Completed;
+            job.conclusion = Some(BuildConclusion::Success);
+            job.completed_at = Some(Timestamp::now());
+            break;
+        }
+    }
+    BuildStatus::InProgress
+}
+
+#[async_trait]
+impl<P: SimProvider> SimulatedCI for P {
+    fn provider(&self) -> CIProvider {
+        self.kind()
+    }
+
+    async fn trigger_build(&mut self, config: BuildConfig) -> SimulationResult<String> {
+        let store = self.store();
+        let build_number = {
+            let mut counter = store.build_counter.write().await;
+            *counter += 1;
+            *counter
+        };
+
+        let mut build = SimulatedBuild::from_config(&config, build_number);
+        build.jobs = self.initial_jobs(&config);
+
+        let build_id = build.id.clone();
+        store.builds.write().await.insert(build_id.clone(), build);
+        Ok(build_id)
+    }
+
+    async fn get_build(&self, build_id: &str) -> SimulationResult<SimulatedBuild> {
+        self.store().read(build_id, |build| build).await
+    }
+
+    async fn get_build_status(&self, build_id: &str) -> SimulationResult<BuildStatus> {
+        self.store().read(build_id, |build| build.status).await
+    }
+
+    async fn cancel_build(&mut self, build_id: &str) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                check_transition(build, BuildStatus::Cancelled)?;
+                build.status = BuildStatus::Cancelled;
+                build.conclusion = Some(BuildConclusion::Cancelled);
+                build.completed_at = Some(Timestamp::now());
+                Ok(())
+            })
+            .await
+    }
+
+    async fn complete_build(
+        &mut self,
+        build_id: &str,
+        conclusion: BuildConclusion,
+    ) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                if build.status == BuildStatus::Queued {
+                    build.status = BuildStatus::InProgress;
+                    build.started_at = Some(Timestamp::now());
+                }
+                check_transition(build, BuildStatus::Completed)?;
+
+                build.status = BuildStatus::Completed;
+                build.conclusion = Some(conclusion);
+                build.completed_at = Some(Timestamp::now());
+                for job in &mut build.jobs {
+                    if job.status != BuildStatus::Completed {
+                        job.status = BuildStatus::Completed;
+                        job.conclusion = Some(conclusion);
+                        job.completed_at = Some(Timestamp::now());
+                    }
+                }
+                Ok(())
+            })
+            .await
+    }
+
+    async fn advance_build(&mut self, build_id: &str) -> SimulationResult<BuildStatus> {
+        self.store()
+            .update(build_id, |build| {
+                let new_status = match build.status {
+                    BuildStatus::Queued => {
+                        build.started_at = Some(Timestamp::now());
+                        BuildStatus::InProgress
+                    }
+                    BuildStatus::InProgress => advance_running(build),
+                    terminal => terminal,
+                };
+                build.status = new_status;
+                Ok(new_status)
+            })
+            .await
+    }
+
+    async fn get_jobs(&self, build_id: &str) -> SimulationResult<Vec<SimulatedJob>> {
+        self.store().read(build_id, |build| build.jobs).await
+    }
+
+    async fn complete_job(
+        &mut self,
+        build_id: &str,
+        job_id: &str,
+        conclusion: BuildConclusion,
+    ) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                let job = build
+                    .jobs
+                    .iter_mut()
+                    .find(|job| job.id == job_id)
+                    .ok_or_else(|| SimulationError::JobNotFound(job_id.to_string()))?;
+                job.status = BuildStatus::Completed;
+                job.conclusion = Some(conclusion);
+                job.completed_at = Some(Timestamp::now());
+                Ok(())
+            })
+            .await
+    }
+
+    async fn get_artifacts(&self, build_id: &str) -> SimulationResult<Vec<SimulatedArtifact>> {
+        self.store().read(build_id, |build| build.artifacts).await
+    }
+
+    async fn add_artifact(
+        &mut self,
+        build_id: &str,
+        artifact: SimulatedArtifact,
+    ) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                build.artifacts.push(artifact);
+                Ok(())
+            })
+            .await
+    }
+
+    async fn get_logs(&self, build_id: &str) -> SimulationResult<Vec<LogEntry>> {
+        self.store().read(build_id, |build| build.logs).await
+    }
+
+    async fn add_log(&mut self, build_id: &str, entry: LogEntry) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                build.logs.push(entry);
+                Ok(())
+            })
+            .await
+    }
+
+    async fn add_security_finding(
+        &mut self,
+        build_id: &str,
+        finding: SecurityFinding,
+    ) -> SimulationResult<()> {
+        self.store()
+            .update(build_id, |build| {
+                build.security_findings.push(finding);
+                Ok(())
+            })
+            .await
+    }
+
+    async fn get_security_findings(
+        &self,
+        build_id: &str,
+    ) -> SimulationResult<Vec<SecurityFinding>> {
+        self.store()
+            .read(build_id, |build| build.security_findings)
+            .await
+    }
+
+    async fn list_builds(&self) -> SimulationResult<Vec<SimulatedBuild>> {
+        Ok(self.store().builds.read().await.values().cloned().collect())
+    }
+
+    async fn reset(&mut self) -> SimulationResult<()> {
+        let store = self.store();
+        store.builds.write().await.clear();
+        *store.build_counter.write().await = 0;
+        Ok(())
+    }
+
+    async fn stats(&self) -> SimulationStats {
+        let builds = self.store().builds.read().await;
+
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
+
+        for build in builds.values() {
+            match build.status {
+                BuildStatus::Completed => match build.conclusion {
+                    Some(c) if c.is_success() => stats.successful_builds += 1,
+                    Some(c) if c.is_failure() => stats.failed_builds += 1,
+                    _ => {}
+                },
+                BuildStatus::Cancelled => stats.cancelled_builds += 1,
+                BuildStatus::InProgress => stats.running_builds += 1,
+                _ => {}
+            }
+
+            stats.total_jobs += build.jobs.len() as u64;
+            stats.total_artifacts += build.artifacts.len() as u64;
+            stats.total_security_findings += build.security_findings.len() as u64;
+            stats.critical_findings += build
+                .security_findings
+                .iter()
+                .filter(|finding| finding.severity.requires_attention())
+                .count() as u64;
+        }
+
+        stats
+    }
+}
+
+// ============================================================================
 // Mock GitHub Actions Implementation
 // ============================================================================
 
 /// Mock implementation of GitHub Actions
 #[derive(Debug)]
 pub struct MockGitHubActions {
-    builds: Arc<RwLock<HashMap<String, SimulatedBuild>>>,
-    build_counter: Arc<RwLock<u64>>,
+    store: SimBuildStore,
     workflows: HashMap<String, WorkflowDefinition>,
 }
 
@@ -861,8 +1189,7 @@ impl MockGitHubActions {
     /// Create a new mock GitHub Actions instance
     pub fn new() -> Self {
         Self {
-            builds: Arc::new(RwLock::new(HashMap::new())),
-            build_counter: Arc::new(RwLock::new(0)),
+            store: SimBuildStore::new(),
             workflows: HashMap::new(),
         }
     }
@@ -936,7 +1263,18 @@ impl MockGitHubActions {
             .iter()
             .map(|job_def| {
                 let mut job = SimulatedJob::new(&job_def.name);
-                job.needs = job_def.needs.clone();
+                // `needs` names job ids; the lifecycle tracks jobs by name.
+                job.needs = job_def
+                    .needs
+                    .iter()
+                    .map(|need| {
+                        workflow
+                            .jobs
+                            .iter()
+                            .find(|other| &other.id == need)
+                            .map_or_else(|| need.clone(), |other| other.name.clone())
+                    })
+                    .collect();
                 job.runner = Some(RunnerInfo {
                     runner_type: job_def.runs_on.clone(),
                     ..Default::default()
@@ -970,892 +1308,75 @@ impl SimulatedJob {
     }
 }
 
-#[async_trait]
-impl SimulatedCI for MockGitHubActions {
-    fn provider(&self) -> CIProvider {
+impl SimProvider for MockGitHubActions {
+    fn kind(&self) -> CIProvider {
         CIProvider::GitHubActions
     }
 
-    async fn trigger_build(&mut self, config: BuildConfig) -> SimulationResult<String> {
-        let mut counter = self.build_counter.write().await;
-        *counter += 1;
-        let build_number = *counter;
-        drop(counter);
-
-        let mut build = SimulatedBuild::from_config(&config, build_number);
-        build.jobs = self.create_jobs_from_workflow(&config.workflow, &config);
-
-        let build_id = build.id.clone();
-        self.builds.write().await.insert(build_id.clone(), build);
-
-        Ok(build_id)
+    fn store(&self) -> &SimBuildStore {
+        &self.store
     }
 
-    async fn get_build(&self, build_id: &str) -> SimulationResult<SimulatedBuild> {
-        self.builds
-            .read()
-            .await
-            .get(build_id)
-            .cloned()
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))
-    }
-
-    async fn get_build_status(&self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.status)
-    }
-
-    async fn cancel_build(&mut self, build_id: &str) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        if !build.status.can_transition_to(BuildStatus::Cancelled) {
-            return Err(SimulationError::InvalidStateTransition {
-                from: build.status,
-                to: BuildStatus::Cancelled,
-            });
-        }
-
-        build.status = BuildStatus::Cancelled;
-        build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn complete_build(
-        &mut self,
-        build_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        // Start the build if it's still queued
-        if build.status == BuildStatus::Queued {
-            build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
-        }
-
-        if !build.status.can_transition_to(BuildStatus::Completed) {
-            return Err(SimulationError::InvalidStateTransition {
-                from: build.status,
-                to: BuildStatus::Completed,
-            });
-        }
-
-        build.status = BuildStatus::Completed;
-        build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        // Complete all jobs
-        for job in &mut build.jobs {
-            if job.status != BuildStatus::Completed {
-                job.status = BuildStatus::Completed;
-                job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn advance_build(&mut self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let new_status = match build.status {
-            BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
-                BuildStatus::InProgress
-            }
-            BuildStatus::InProgress => {
-                // Check if all jobs are completed
-                let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
-                if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
-                    // Determine conclusion based on job results
-                    let has_failure = build.jobs.iter().any(|job| {
-                        job.conclusion
-                            .map(|conclusion| conclusion.is_failure())
-                            .unwrap_or(false)
-                    });
-                    build.conclusion = Some(if has_failure {
-                        BuildConclusion::Failure
-                    } else {
-                        BuildConclusion::Success
-                    });
-                    BuildStatus::Completed
-                } else {
-                    // Advance next pending job
-                    // First, collect completed job names for dependency checking
-                    let completed_jobs: Vec<String> = build
-                        .jobs
-                        .iter()
-                        .filter(|j| j.status.is_terminal())
-                        .map(|j| j.name.clone())
-                        .collect();
-
-                    for job in &mut build.jobs {
-                        if job.status == BuildStatus::Queued {
-                            // Check if dependencies are met
-                            let deps_met =
-                                job.needs.iter().all(|need| completed_jobs.contains(need));
-                            if deps_met {
-                                job.status = BuildStatus::InProgress;
-                                job.started_at = Some(Utc::now());
-                                break;
-                            }
-                        } else if job.status == BuildStatus::InProgress {
-                            job.status = BuildStatus::Completed;
-                            job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
-                            break;
-                        }
-                    }
-                    BuildStatus::InProgress
-                }
-            }
-            status => status, // Terminal states don't advance
-        };
-
-        build.status = new_status;
-        build.updated_at = Utc::now();
-
-        Ok(new_status)
-    }
-
-    async fn get_jobs(&self, build_id: &str) -> SimulationResult<Vec<SimulatedJob>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.jobs)
-    }
-
-    async fn complete_job(
-        &mut self,
-        build_id: &str,
-        job_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let job = build
-            .jobs
-            .iter_mut()
-            .find(|job| job.id == job_id)
-            .ok_or_else(|| SimulationError::JobNotFound(job_id.to_string()))?;
-
-        job.status = BuildStatus::Completed;
-        job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
-
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_artifacts(&self, build_id: &str) -> SimulationResult<Vec<SimulatedArtifact>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.artifacts)
-    }
-
-    async fn add_artifact(
-        &mut self,
-        build_id: &str,
-        artifact: SimulatedArtifact,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_logs(&self, build_id: &str) -> SimulationResult<Vec<LogEntry>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.logs)
-    }
-
-    async fn add_log(&mut self, build_id: &str, entry: LogEntry) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.logs.push(entry);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn add_security_finding(
-        &mut self,
-        build_id: &str,
-        finding: SecurityFinding,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.security_findings.push(finding);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_security_findings(
-        &self,
-        build_id: &str,
-    ) -> SimulationResult<Vec<SecurityFinding>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.security_findings)
-    }
-
-    async fn list_builds(&self) -> SimulationResult<Vec<SimulatedBuild>> {
-        let builds = self.builds.read().await;
-        Ok(builds.values().cloned().collect())
-    }
-
-    async fn reset(&mut self) -> SimulationResult<()> {
-        self.builds.write().await.clear();
-        *self.build_counter.write().await = 0;
-        Ok(())
-    }
-
-    async fn stats(&self) -> SimulationStats {
-        let builds = self.builds.read().await;
-
-        let mut stats = SimulationStats {
-            total_builds: builds.len() as u64,
-            ..Default::default()
-        };
-
-        for build in builds.values() {
-            match build.status {
-                BuildStatus::Completed => {
-                    if let Some(conclusion) = &build.conclusion {
-                        if conclusion.is_success() {
-                            stats.successful_builds += 1;
-                        } else if conclusion.is_failure() {
-                            stats.failed_builds += 1;
-                        }
-                    }
-                }
-                BuildStatus::Cancelled => stats.cancelled_builds += 1,
-                BuildStatus::InProgress => stats.running_builds += 1,
-                _ => {}
-            }
-
-            stats.total_jobs += build.jobs.len() as u64;
-            stats.total_artifacts += build.artifacts.len() as u64;
-            stats.total_security_findings += build.security_findings.len() as u64;
-            stats.critical_findings += build
-                .security_findings
-                .iter()
-                .filter(|finding| finding.severity.requires_attention())
-                .count() as u64;
-        }
-
-        stats
+    fn initial_jobs(&self, config: &BuildConfig) -> Vec<SimulatedJob> {
+        self.create_jobs_from_workflow(&config.workflow, config)
     }
 }
 
 // ============================================================================
-// Mock GitLab CI Implementation
+// Mock GitLab CI and CircleCI Implementations
 // ============================================================================
 
-/// Mock implementation of GitLab CI
-#[derive(Debug)]
+/// Mock implementation of GitLab CI: a pipeline of build, test and deploy jobs
+#[derive(Debug, Default)]
 pub struct MockGitLabCI {
-    builds: Arc<RwLock<HashMap<String, SimulatedBuild>>>,
-    build_counter: Arc<RwLock<u64>>,
-}
-
-impl Default for MockGitLabCI {
-    fn default() -> Self {
-        Self::new()
-    }
+    store: SimBuildStore,
 }
 
 impl MockGitLabCI {
     /// Create a new mock GitLab CI instance
     pub fn new() -> Self {
-        Self {
-            builds: Arc::new(RwLock::new(HashMap::new())),
-            build_counter: Arc::new(RwLock::new(0)),
-        }
+        Self::default()
     }
 }
 
-#[async_trait]
-impl SimulatedCI for MockGitLabCI {
-    fn provider(&self) -> CIProvider {
+impl SimProvider for MockGitLabCI {
+    fn kind(&self) -> CIProvider {
         CIProvider::GitLabCI
     }
 
-    async fn trigger_build(&mut self, config: BuildConfig) -> SimulationResult<String> {
-        let mut counter = self.build_counter.write().await;
-        *counter += 1;
-        let build_number = *counter;
-        drop(counter);
-
-        let mut build = SimulatedBuild::from_config(&config, build_number);
-
-        // GitLab uses pipeline terminology
-        build.jobs = vec![
-            SimulatedJob::new("build"),
-            SimulatedJob::new("test"),
-            SimulatedJob::new("deploy"),
-        ];
-
-        let build_id = build.id.clone();
-        self.builds.write().await.insert(build_id.clone(), build);
-
-        Ok(build_id)
+    fn store(&self) -> &SimBuildStore {
+        &self.store
     }
 
-    async fn get_build(&self, build_id: &str) -> SimulationResult<SimulatedBuild> {
-        self.builds
-            .read()
-            .await
-            .get(build_id)
-            .cloned()
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))
-    }
-
-    async fn get_build_status(&self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.status)
-    }
-
-    async fn cancel_build(&mut self, build_id: &str) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.status = BuildStatus::Cancelled;
-        build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn complete_build(
-        &mut self,
-        build_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        if build.status == BuildStatus::Queued {
-            build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
-        }
-
-        build.status = BuildStatus::Completed;
-        build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        for job in &mut build.jobs {
-            if job.status != BuildStatus::Completed {
-                job.status = BuildStatus::Completed;
-                job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn advance_build(&mut self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let new_status = match build.status {
-            BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
-                BuildStatus::InProgress
-            }
-            BuildStatus::InProgress => {
-                let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
-                if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
-                    build.conclusion = Some(BuildConclusion::Success);
-                    BuildStatus::Completed
-                } else {
-                    for job in &mut build.jobs {
-                        if job.status == BuildStatus::Queued {
-                            job.status = BuildStatus::InProgress;
-                            job.started_at = Some(Utc::now());
-                            break;
-                        } else if job.status == BuildStatus::InProgress {
-                            job.status = BuildStatus::Completed;
-                            job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
-                            break;
-                        }
-                    }
-                    BuildStatus::InProgress
-                }
-            }
-            status => status,
-        };
-
-        build.status = new_status;
-        build.updated_at = Utc::now();
-
-        Ok(new_status)
-    }
-
-    async fn get_jobs(&self, build_id: &str) -> SimulationResult<Vec<SimulatedJob>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.jobs)
-    }
-
-    async fn complete_job(
-        &mut self,
-        build_id: &str,
-        job_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let job = build
-            .jobs
-            .iter_mut()
-            .find(|job| job.id == job_id)
-            .ok_or_else(|| SimulationError::JobNotFound(job_id.to_string()))?;
-
-        job.status = BuildStatus::Completed;
-        job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
-
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_artifacts(&self, build_id: &str) -> SimulationResult<Vec<SimulatedArtifact>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.artifacts)
-    }
-
-    async fn add_artifact(
-        &mut self,
-        build_id: &str,
-        artifact: SimulatedArtifact,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_logs(&self, build_id: &str) -> SimulationResult<Vec<LogEntry>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.logs)
-    }
-
-    async fn add_log(&mut self, build_id: &str, entry: LogEntry) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.logs.push(entry);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn add_security_finding(
-        &mut self,
-        build_id: &str,
-        finding: SecurityFinding,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.security_findings.push(finding);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_security_findings(
-        &self,
-        build_id: &str,
-    ) -> SimulationResult<Vec<SecurityFinding>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.security_findings)
-    }
-
-    async fn list_builds(&self) -> SimulationResult<Vec<SimulatedBuild>> {
-        let builds = self.builds.read().await;
-        Ok(builds.values().cloned().collect())
-    }
-
-    async fn reset(&mut self) -> SimulationResult<()> {
-        self.builds.write().await.clear();
-        *self.build_counter.write().await = 0;
-        Ok(())
-    }
-
-    async fn stats(&self) -> SimulationStats {
-        let builds = self.builds.read().await;
-
-        let mut stats = SimulationStats {
-            total_builds: builds.len() as u64,
-            ..Default::default()
-        };
-
-        for build in builds.values() {
-            match build.status {
-                BuildStatus::Completed => {
-                    if let Some(conclusion) = &build.conclusion {
-                        if conclusion.is_success() {
-                            stats.successful_builds += 1;
-                        } else if conclusion.is_failure() {
-                            stats.failed_builds += 1;
-                        }
-                    }
-                }
-                BuildStatus::Cancelled => stats.cancelled_builds += 1,
-                BuildStatus::InProgress => stats.running_builds += 1,
-                _ => {}
-            }
-
-            stats.total_jobs += build.jobs.len() as u64;
-            stats.total_artifacts += build.artifacts.len() as u64;
-            stats.total_security_findings += build.security_findings.len() as u64;
-        }
-
-        stats
+    fn initial_jobs(&self, _config: &BuildConfig) -> Vec<SimulatedJob> {
+        ["build", "test", "deploy"].map(SimulatedJob::new).into()
     }
 }
 
-// ============================================================================
-// Mock CircleCI Implementation
-// ============================================================================
-
-/// Mock implementation of CircleCI
-#[derive(Debug)]
+/// Mock implementation of CircleCI: a workflow of checkout, build and test jobs
+#[derive(Debug, Default)]
 pub struct MockCircleCI {
-    builds: Arc<RwLock<HashMap<String, SimulatedBuild>>>,
-    build_counter: Arc<RwLock<u64>>,
-}
-
-impl Default for MockCircleCI {
-    fn default() -> Self {
-        Self::new()
-    }
+    store: SimBuildStore,
 }
 
 impl MockCircleCI {
     /// Create a new mock CircleCI instance
     pub fn new() -> Self {
-        Self {
-            builds: Arc::new(RwLock::new(HashMap::new())),
-            build_counter: Arc::new(RwLock::new(0)),
-        }
+        Self::default()
     }
 }
 
-#[async_trait]
-impl SimulatedCI for MockCircleCI {
-    fn provider(&self) -> CIProvider {
+impl SimProvider for MockCircleCI {
+    fn kind(&self) -> CIProvider {
         CIProvider::CircleCI
     }
 
-    async fn trigger_build(&mut self, config: BuildConfig) -> SimulationResult<String> {
-        let mut counter = self.build_counter.write().await;
-        *counter += 1;
-        let build_number = *counter;
-        drop(counter);
-
-        let mut build = SimulatedBuild::from_config(&config, build_number);
-
-        // CircleCI uses workflow/job terminology
-        build.jobs = vec![
-            SimulatedJob::new("checkout"),
-            SimulatedJob::new("build"),
-            SimulatedJob::new("test"),
-        ];
-
-        let build_id = build.id.clone();
-        self.builds.write().await.insert(build_id.clone(), build);
-
-        Ok(build_id)
+    fn store(&self) -> &SimBuildStore {
+        &self.store
     }
 
-    async fn get_build(&self, build_id: &str) -> SimulationResult<SimulatedBuild> {
-        self.builds
-            .read()
-            .await
-            .get(build_id)
-            .cloned()
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))
-    }
-
-    async fn get_build_status(&self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.status)
-    }
-
-    async fn cancel_build(&mut self, build_id: &str) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.status = BuildStatus::Cancelled;
-        build.conclusion = Some(BuildConclusion::Cancelled);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn complete_build(
-        &mut self,
-        build_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        if build.status == BuildStatus::Queued {
-            build.status = BuildStatus::InProgress;
-            build.started_at = Some(Utc::now());
-        }
-
-        build.status = BuildStatus::Completed;
-        build.conclusion = Some(conclusion);
-        build.completed_at = Some(Utc::now());
-        build.updated_at = Utc::now();
-
-        for job in &mut build.jobs {
-            if job.status != BuildStatus::Completed {
-                job.status = BuildStatus::Completed;
-                job.conclusion = Some(conclusion);
-                job.completed_at = Some(Utc::now());
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn advance_build(&mut self, build_id: &str) -> SimulationResult<BuildStatus> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let new_status = match build.status {
-            BuildStatus::Queued => {
-                build.started_at = Some(Utc::now());
-                BuildStatus::InProgress
-            }
-            BuildStatus::InProgress => {
-                let all_jobs_complete = build.jobs.iter().all(|job| job.status.is_terminal());
-                if all_jobs_complete {
-                    build.completed_at = Some(Utc::now());
-                    build.conclusion = Some(BuildConclusion::Success);
-                    BuildStatus::Completed
-                } else {
-                    for job in &mut build.jobs {
-                        if job.status == BuildStatus::Queued {
-                            job.status = BuildStatus::InProgress;
-                            job.started_at = Some(Utc::now());
-                            break;
-                        } else if job.status == BuildStatus::InProgress {
-                            job.status = BuildStatus::Completed;
-                            job.conclusion = Some(BuildConclusion::Success);
-                            job.completed_at = Some(Utc::now());
-                            break;
-                        }
-                    }
-                    BuildStatus::InProgress
-                }
-            }
-            status => status,
-        };
-
-        build.status = new_status;
-        build.updated_at = Utc::now();
-
-        Ok(new_status)
-    }
-
-    async fn get_jobs(&self, build_id: &str) -> SimulationResult<Vec<SimulatedJob>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.jobs)
-    }
-
-    async fn complete_job(
-        &mut self,
-        build_id: &str,
-        job_id: &str,
-        conclusion: BuildConclusion,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        let job = build
-            .jobs
-            .iter_mut()
-            .find(|job| job.id == job_id)
-            .ok_or_else(|| SimulationError::JobNotFound(job_id.to_string()))?;
-
-        job.status = BuildStatus::Completed;
-        job.conclusion = Some(conclusion);
-        job.completed_at = Some(Utc::now());
-
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_artifacts(&self, build_id: &str) -> SimulationResult<Vec<SimulatedArtifact>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.artifacts)
-    }
-
-    async fn add_artifact(
-        &mut self,
-        build_id: &str,
-        artifact: SimulatedArtifact,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.artifacts.push(artifact);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_logs(&self, build_id: &str) -> SimulationResult<Vec<LogEntry>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.logs)
-    }
-
-    async fn add_log(&mut self, build_id: &str, entry: LogEntry) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.logs.push(entry);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn add_security_finding(
-        &mut self,
-        build_id: &str,
-        finding: SecurityFinding,
-    ) -> SimulationResult<()> {
-        let mut builds = self.builds.write().await;
-        let build = builds
-            .get_mut(build_id)
-            .ok_or_else(|| SimulationError::BuildNotFound(build_id.to_string()))?;
-
-        build.security_findings.push(finding);
-        build.updated_at = Utc::now();
-
-        Ok(())
-    }
-
-    async fn get_security_findings(
-        &self,
-        build_id: &str,
-    ) -> SimulationResult<Vec<SecurityFinding>> {
-        let build = self.get_build(build_id).await?;
-        Ok(build.security_findings)
-    }
-
-    async fn list_builds(&self) -> SimulationResult<Vec<SimulatedBuild>> {
-        let builds = self.builds.read().await;
-        Ok(builds.values().cloned().collect())
-    }
-
-    async fn reset(&mut self) -> SimulationResult<()> {
-        self.builds.write().await.clear();
-        *self.build_counter.write().await = 0;
-        Ok(())
-    }
-
-    async fn stats(&self) -> SimulationStats {
-        let builds = self.builds.read().await;
-
-        let mut stats = SimulationStats {
-            total_builds: builds.len() as u64,
-            ..Default::default()
-        };
-
-        for build in builds.values() {
-            match build.status {
-                BuildStatus::Completed => {
-                    if let Some(conclusion) = &build.conclusion {
-                        if conclusion.is_success() {
-                            stats.successful_builds += 1;
-                        } else if conclusion.is_failure() {
-                            stats.failed_builds += 1;
-                        }
-                    }
-                }
-                BuildStatus::Cancelled => stats.cancelled_builds += 1,
-                BuildStatus::InProgress => stats.running_builds += 1,
-                _ => {}
-            }
-
-            stats.total_jobs += build.jobs.len() as u64;
-            stats.total_artifacts += build.artifacts.len() as u64;
-            stats.total_security_findings += build.security_findings.len() as u64;
-        }
-
-        stats
+    fn initial_jobs(&self, _config: &BuildConfig) -> Vec<SimulatedJob> {
+        ["checkout", "build", "test"].map(SimulatedJob::new).into()
     }
 }
 
@@ -2082,5 +1603,147 @@ mod tests {
         assert!(BuildConclusion::Failure.is_failure());
         assert!(BuildConclusion::TimedOut.is_failure());
         assert!(!BuildConclusion::Success.is_failure());
+    }
+
+    /// The three providers, each fresh. Every lifecycle rule below must hold
+    /// for each of them: the lifecycle is one implementation, not three.
+    fn every_provider() -> Vec<Box<dyn SimulatedCI>> {
+        vec![
+            Box::new(MockGitHubActions::new().with_default_ci()),
+            Box::new(MockGitLabCI::new()),
+            Box::new(MockCircleCI::new()),
+        ]
+    }
+
+    #[tokio::test]
+    async fn every_provider_refuses_to_cancel_a_completed_build() {
+        for mut ci in every_provider() {
+            let id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+            ci.complete_build(&id, BuildConclusion::Success)
+                .await
+                .unwrap();
+
+            let refused = ci.cancel_build(&id).await;
+            assert!(
+                matches!(
+                    refused,
+                    Err(SimulationError::InvalidStateTransition {
+                        from: BuildStatus::Completed,
+                        to: BuildStatus::Cancelled
+                    })
+                ),
+                "{}: {refused:?}",
+                ci.provider()
+            );
+            assert_eq!(
+                ci.get_build(&id).await.unwrap().conclusion,
+                Some(BuildConclusion::Success)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn every_provider_concludes_failure_when_a_job_failed() {
+        for mut ci in every_provider() {
+            let id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+            let jobs = ci.get_jobs(&id).await.unwrap();
+            ci.advance_build(&id).await.unwrap();
+            for (index, job) in jobs.iter().enumerate() {
+                let conclusion = if index == 0 {
+                    BuildConclusion::Failure
+                } else {
+                    BuildConclusion::Success
+                };
+                ci.complete_job(&id, &job.id, conclusion).await.unwrap();
+            }
+
+            assert_eq!(
+                ci.advance_build(&id).await.unwrap(),
+                BuildStatus::Completed,
+                "{}",
+                ci.provider()
+            );
+            assert_eq!(
+                ci.get_build(&id).await.unwrap().conclusion,
+                Some(BuildConclusion::Failure),
+                "{}",
+                ci.provider()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn every_provider_counts_critical_findings() {
+        for mut ci in every_provider() {
+            let id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+            for severity in [
+                FindingSeverity::Critical,
+                FindingSeverity::High,
+                FindingSeverity::Low,
+            ] {
+                let finding = create_test_finding(
+                    "SEC001",
+                    severity,
+                    FindingCategory::WorkflowSecurity,
+                    "finding",
+                );
+                ci.add_security_finding(&id, finding).await.unwrap();
+            }
+
+            let stats = ci.stats().await;
+            assert_eq!(stats.total_security_findings, 3, "{}", ci.provider());
+            assert_eq!(stats.critical_findings, 2, "{}", ci.provider());
+        }
+    }
+
+    #[tokio::test]
+    async fn each_provider_keeps_its_own_job_layout() {
+        let names = |jobs: Vec<SimulatedJob>| -> Vec<String> {
+            jobs.into_iter().map(|job| job.name).collect()
+        };
+        let mut gitlab = MockGitLabCI::new();
+        let id = gitlab.trigger_build(BuildConfig::default()).await.unwrap();
+        assert_eq!(
+            names(gitlab.get_jobs(&id).await.unwrap()),
+            ["build", "test", "deploy"]
+        );
+
+        let mut circle = MockCircleCI::new();
+        let id = circle.trigger_build(BuildConfig::default()).await.unwrap();
+        assert_eq!(
+            names(circle.get_jobs(&id).await.unwrap()),
+            ["checkout", "build", "test"]
+        );
+
+        let mut github = MockGitHubActions::new().with_default_ci();
+        let id = github.trigger_build(BuildConfig::default()).await.unwrap();
+        assert_eq!(
+            names(github.get_jobs(&id).await.unwrap()),
+            ["Build", "Test"]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_default_workflow_advances_to_completion_through_its_needs() {
+        // Test `needs` the job id "build"; the job is named "Build".
+        let mut ci = MockGitHubActions::new().with_default_ci();
+        let id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+
+        let mut status = BuildStatus::Queued;
+        for _ in 0..10 {
+            status = ci.advance_build(&id).await.unwrap();
+            if status == BuildStatus::Completed {
+                break;
+            }
+        }
+
+        let jobs = ci.get_jobs(&id).await.unwrap();
+        assert_eq!(status, BuildStatus::Completed, "{jobs:?}");
+        assert_eq!(jobs[1].needs, ["Build"]);
+        assert!(jobs.iter().all(|job| job.status == BuildStatus::Completed));
+        assert_eq!(
+            ci.get_build(&id).await.unwrap().conclusion,
+            Some(BuildConclusion::Success)
+        );
     }
 }

@@ -30,7 +30,7 @@ bb8 = "0.9"
 
 
 # Time
-chrono = { version = "0.4", features = ["serde"] }
+jiff = { version = "1.0", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -285,7 +285,7 @@ async fn test_shared_context_propagation() -> Result<()> {
     // Simulate context file creation
     let context_data = serde_json::json!({
         "session_id": uuid::Uuid::new_v4().to_string(),
-        "started_at": chrono::Utc::now().to_rfc3339(),
+        "started_at": jiff::Timestamp::now().to_string(),
         "bots_executed": [],
         "alerts": [],
         "fixes": []

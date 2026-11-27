@@ -67,15 +67,10 @@ scan_file() {
     local file="$1"
     local findings=()
 
-    # Helper to parse rg output (filepath:linenum:content)
-    # Only split on first TWO colons
-    parse_rg_line() {
-        local line="$1"
-        local filepath=$(echo "$line" | cut -d: -f1)
-        local linenum=$(echo "$line" | cut -d: -f2)
-        local content=$(echo "$line" | cut -d: -f3-)
-        echo "$filepath|$linenum|$content"
-    }
+    # rg -nH prints filepath:linenum:content. `read` splits on the first two
+    # colons and leaves the rest, colons included, in `content`. A plain
+    # here-string from the variable: no substitution whose status is lost
+    # (RE012), and a trailing `|` in content is kept.
 
     # Pattern 1: Any .res / .resi file (CRITICAL — ReScript banned 2026-04)
     if [[ "$file" == *.res || "$file" == *.resi ]]; then
@@ -95,7 +90,7 @@ scan_file() {
     # Pattern 2: Rust unwrap (HIGH)
     if [[ "$file" == *.rs ]]; then
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -113,7 +108,7 @@ scan_file() {
     # Pattern 3: Obj.magic (HIGH)
     if [[ "$file" == *.res ]]; then
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -130,7 +125,7 @@ scan_file() {
 
     # Pattern 4: CORS wildcard (CRITICAL)
     while IFS= read -r match; do
-        IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+        IFS=: read -r filepath linenum content <<<"$match"
         local finding
         finding=$(make_finding \
             "critical" \
@@ -146,7 +141,7 @@ scan_file() {
 
     # Pattern 5: Unverified JWT decode (CRITICAL)
     while IFS= read -r match; do
-        IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+        IFS=: read -r filepath linenum content <<<"$match"
         local finding
         finding=$(make_finding \
             "critical" \
@@ -162,7 +157,7 @@ scan_file() {
 
     # Pattern 6: Google API Key (CRITICAL)
     while IFS= read -r match; do
-        IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+        IFS=: read -r filepath linenum content <<<"$match"
         local finding
         finding=$(make_finding \
             "critical" \
@@ -180,7 +175,7 @@ scan_file() {
     if [[ "$file" == *Cargo.lock ]]; then
         # protobuf recursion crash
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -196,7 +191,7 @@ scan_file() {
 
         # idna punycode mishandling
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -212,7 +207,7 @@ scan_file() {
 
         # jsonwebtoken type confusion
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -228,7 +223,7 @@ scan_file() {
 
         # lru stacked borrows violation
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "low" \
@@ -244,7 +239,7 @@ scan_file() {
 
         # glib variantstriter unsoundness
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -260,7 +255,7 @@ scan_file() {
 
         # crossbeam-utils atomiccell unsoundness
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -276,7 +271,7 @@ scan_file() {
 
         # lock_api data race
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -292,7 +287,7 @@ scan_file() {
 
         # crossbeam-queue segqueue unsoundness
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -311,7 +306,7 @@ scan_file() {
     if [[ "$file" == *yarn.lock ]]; then
         # serialize-javascript
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -327,7 +322,7 @@ scan_file() {
 
         # minimatch
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -343,7 +338,7 @@ scan_file() {
 
         # glob
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
@@ -359,7 +354,7 @@ scan_file() {
 
         # js-yaml
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "medium" \
@@ -375,7 +370,7 @@ scan_file() {
 
         # h3
         while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            IFS=: read -r filepath linenum content <<<"$match"
             local finding
             finding=$(make_finding \
                 "high" \
