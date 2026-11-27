@@ -48,7 +48,7 @@ fi
 PY_FILES=$(echo "$STAGED_FILES" | grep -E '\.py$' | grep -v '^salt/' || true)
 if [ -n "$PY_FILES" ]; then
     echo -e "${RED}ERROR: Python files not allowed per RSR policy (except SaltStack)${NC}"
-    echo "Use ReScript or Rust instead. Files found:"
+    echo "Use AffineScript or Rust instead. Files found:"
     echo "$PY_FILES"
     ERRORS=$((ERRORS + 1))
 fi
