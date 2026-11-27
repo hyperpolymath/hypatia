@@ -452,7 +452,10 @@ jobs:
             test/placeholder_network_test.exs \
             test/test_module_names_test.exs 2>&1 | tee "$RUNNER_TEMP/e0-receipt-tests.log"
           # A skipped test here means that Nickel was not found: the contract was not checked.
-          if grep -Eq '[0-9]+ skipped' <<<"$(tail -n 3 "$RUNNER_TEMP/e0-receipt-tests.log")"; then
+          # Captured first (RE012): an unreadable log stops the step instead of
+          # reading as "nothing skipped".
+          summary=$(tail -n 3 "$RUNNER_TEMP/e0-receipt-tests.log")
+          if grep -Eq '[0-9]+ skipped' <<<"$summary"; then
             echo "::error::a receipt test was skipped: the Nickel contract was NOT checked"
             exit 1
           fi

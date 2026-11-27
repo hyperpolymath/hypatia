@@ -88,7 +88,9 @@ expect_broken "an un-retired tombstone is refused" "$work/tomb.deed" "tombstone 
 row() { local id=$1; awk -v t="\"$id\"" '$1 == ":id" { on = ($2 == t) } on { print }' "$deed"; } # one rule-def
 # Whether a rule-def carries a fact. Captured, then matched: `row | grep -q`
 # loses a match to SIGPIPE under pipefail when awk is still writing (RE011).
-row_has() { local id=$1 fact=$2; grep -q -- "$fact" <<<"$(row "$id")"; }
+# A failed read of the deed is a failure, not a missing fact (RE012): the
+# here-string is fed from the captured row, whose status is checked.
+row_has() { local id=$1 fact=$2 def; def=$(row "$id") || return 2; grep -q -- "$fact" <<<"$def"; }
 if row_has hypatia/branch_protection/BP001 ':severity high' && row_has hypatia/supply_chain/SC001 ':status active'; then ok "opt-in scanner rules are registered"; else bad "BP001/SC001 missing or wrong"; fi
 if row_has hypatia/git_state/GS007 ':class advisory'; then ok "an advisory-severity rule is class advisory"; else bad "GS007 is not class advisory"; fi
 if row_has hypatia/code_scanning_alerts/CSA006 ':severity medium'; then ok "a multi-severity rule keeps its highest severity"; else bad "CSA006 is not medium"; fi
