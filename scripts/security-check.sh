@@ -489,6 +489,24 @@ run_container_checks() {
 # License Compliance
 # ============================================================================
 
+# spdx_in_head N FILE: true when the first N lines of FILE name an SPDX licence.
+# The lines are captured first (RE012): an unreadable file returns 2, which the
+# caller counts as missing, so a failed read is never taken for a header.
+spdx_in_head() {
+    local top
+    top=$(head -n "$1" "$2") || return 2
+    grep -q "SPDX-License-Identifier" <<<"$top"
+}
+
+# spdx_in_head N FILE: true when the first N lines of FILE name an SPDX licence.
+# The lines are captured first (RE012): an unreadable file returns 2, which the
+# caller counts as missing, so a failed read is never taken for a header.
+spdx_in_head() {
+    local top
+    top=$(head -n "$1" "$2") || return 2
+    grep -q "SPDX-License-Identifier" <<<"$top"
+}
+
 check_spdx_headers() {
     print_subheader "SPDX Headers: Checking license headers"
     CHECKS_RUN=$((CHECKS_RUN + 1))
@@ -504,7 +522,7 @@ check_spdx_headers() {
     # Check Rust files
     echo "## Rust Files (.rs)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
+        if ! spdx_in_head 10 "$f"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -514,7 +532,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## Haskell Files (.hs)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
+        if ! spdx_in_head 10 "$f"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -524,7 +542,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## Shell Scripts (.sh)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! grep -q "SPDX-License-Identifier" <<<"$(head -10 "$f")"; then
+        if ! spdx_in_head 10 "$f"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi
@@ -534,7 +552,7 @@ check_spdx_headers() {
     echo "" >> "$report_file"
     echo "## GitHub Workflows (.yml)" >> "$report_file"
     while IFS= read -r -d '' f; do
-        if ! grep -q "SPDX-License-Identifier" <<<"$(head -1 "$f")"; then
+        if ! spdx_in_head 1 "$f"; then
             echo "  - $f" >> "$report_file"
             missing_count=$((missing_count + 1))
         fi

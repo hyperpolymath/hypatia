@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Hypatia roadmap journal
+:toc: macro
+
+This file is the dated journal of working positions. Milestones and known
+gaps are in `.claude/CLAUDE.md` and `docs/DEBT-REGISTER.adoc`.
+
+== Position 2026-11-18
+
+Written on 2026-11-24 for the 2026-11-18 checkpoint. It covers one agent
+thread, a proof-policy and drift review across the estate.
+
+=== What the thread did
+
+* Reviewed proofs against `3-practice/PROOF-POLICY.adoc` §2.1: Agda runs under
+  `--safe --without-K --cubical-compatible`. It corrected the proof-status
+  census in the PROOF-STATUS files that overclaimed, for example to
+  "0 of 7 obligations proven".
+* Opened one small PR per repository for those corrections and for template
+  drift. Merged since the previous checkpoint: metadatastician/knot-knot#36,
+  metadatastician/knot-knot#37, metadatastician/subsystem-warrior#9,
+  hyperpolymath/rsr-template-repo#444, hyperpolymath/rsr-template-repo#447,
+  hyperpolymath/panoply#125, hyperpolymath/ambientops#413,
+  hyperpolymath/civic-connect#111, hyperpolymath/developer-ecosystem#226,
+  hyperpolymath/PolyglotFormalisms.jl#66, hyperpolymath/stateful-artefacts#84,
+  hyperpolymath/universal-extension-format#81, hyperpolymath/dictask#81,
+  catachresis-colloquium/project-ovine#44 and catachresis-colloquium/pong-ping#19.
+* knot-knot#37 fixed the quandle self-distributivity check, the JSON key
+  order, Laurent `length` and integer evaluation with negative exponents. Its
+  Julia 1 test job passed in CI at c10ad70.
+
+=== State
+
+Idle. Nothing in this thread is unpushed except this journal entry.
+
+=== Open PRs and branches
+
+* hyperpolymath/hypatia#1185 (`claude/remove-logtalk`, another session's
+  work): open, 37 commits behind `main`. CodeRabbit has requested changes on
+  three threads: the P8 `proven` grade before a passing receipt for source
+  digest `ac4eefef…`, a stale link to `docs/rules/logtalk-migration.adoc` in
+  `.audittraining/security-errors/czech-file-knife.adoc`, and the attribution
+  of AP005–AP006 to that report. `governance / Validate Hypatia Baseline`
+  fails on its head.
+* hyperpolymath/echo-types#383: auto-merge was turned off on 2026-11-22.
+* hyperpolymath/phronesis#119: green apart from the TLC model-check job, which
+  also fails on `main`.
+* catachresis-colloquium/First-Post#35 and catachresis-colloquium/Cytoville#18:
+  auto-merge on.
+
+=== Owner decisions needed
+
+* Agda compiler pin in CI: pinned or unpinned. The recommendation is unpinned.
+* knot-knot docs: keep AsciiDoc, or move the Documenter pages to Markdown.
+* hypatia#1185: whether P8 stays `proven` until the first Verify Proofs
+  receipt for the renamed file exists.
+
+=== Next steps
+
+* hypatia#1185: merge `main`, answer the three CodeRabbit threads, and let
+  Verify Proofs write the receipt for `AlertTableCorrespondence.agda`.
+* Check the `AGDA_LIBRARIES` hint in `scripts/provision-agda-stdlib.sh` on
+  rsr-template-repo `main`, then copy the fix downstream.
+* Quote the unquoted expansions in `scripts/check-proofs.sh` in
+  hyperpolymath/rsr-template-repo, then carry the fix to the
+  template-derived copies (for example catachresis-colloquium/First-Post).
+  Hypatia has no copy of this script.
+* Reconcile evil-weevil's PROOF-STATUS, and add the Agda CI job to eclexia.
