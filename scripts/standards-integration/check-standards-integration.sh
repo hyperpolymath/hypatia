@@ -105,7 +105,10 @@ EOF_LOCK
 done
 grep -qF "'metadatastician/standards@$PIN':" "$LOCK" \
   || fail "actions.lock has no dependency entry for metadatastician/standards@$PIN"
-grep -qF "commit: 'sha1-$PIN'" <<<"$(grep -A2 -F "'metadatastician/standards@$PIN':" "$LOCK")" \
+# Captured first (RE012): a failed read is said, not taken as a mismatch.
+entry=$(grep -A2 -F "'metadatastician/standards@$PIN':" "$LOCK") \
+  || fail "actions.lock dependency for standards@$PIN cannot be read"
+grep -qF "commit: 'sha1-$PIN'" <<<"$entry" \
   || fail "actions.lock dependency for standards@$PIN does not resolve to sha1-$PIN"
 
 # --- Lock transitive closure: every workflow ref and every transitive
