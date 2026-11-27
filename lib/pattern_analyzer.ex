@@ -80,7 +80,7 @@ defmodule Hypatia.PatternAnalyzer do
 
     # Step 4: Enhance dispatch decisions with neural intelligence.
     # The coordinator provides novelty detection, trust-weighted routing,
-    # and aggregated confidence from all 5 neural networks.
+    # and confidence from locally trained components with valid outputs.
     routed = enhance_with_neural(routed)
 
     # Steps 5-6: Dispatch routed actions to the fleet and write the dispatch
@@ -276,7 +276,8 @@ defmodule Hypatia.PatternAnalyzer do
 
   # Enhance routed actions with neural intelligence. Consults the Neural.Coordinator
   # for each finding to get novelty detection, trust-weighted bot preferences, and
-  # aggregated confidence from all 5 networks (MoE, RBF, LSM, ESN, Graph of Trust).
+  # confidence from locally trained MoE/RBF/LSM/ESN components. Readiness here
+  # describes local model bookkeeping, not corpus or deployment qualification.
   #
   # Novel findings are demoted to :control (report_only) regardless of recipe confidence.
   # For non-novel findings, the neural aggregated confidence can override the recipe's
@@ -287,15 +288,11 @@ defmodule Hypatia.PatternAnalyzer do
 
       case neural_recommendation(pattern) do
         {:ok, rec} ->
-          # Guard the original action first so its original recipe confidence
-          # survives in the audit trail, before a conservative neural adjustment.
-          action
-          |> DispatchGuard.enforce(rec)
-          |> apply_neural_recommendation(rec)
+          apply_neural_recommendation(action, rec)
 
         :unavailable ->
           # Missing neural checks must not leave auto-execution eligible.
-          DispatchGuard.enforce(action, :unavailable)
+          apply_neural_recommendation(action, :unavailable)
       end
     end)
   end
@@ -313,10 +310,38 @@ defmodule Hypatia.PatternAnalyzer do
     end
   end
 
-  # Apply neural recommendation to a routed action.
+  @doc false
+  # The production composition is also a pure regression-test seam. Check
+  # local readiness before DispatchGuard so legacy auto-shaped replies cannot
+  # preserve automatic eligibility, and the original confidence is audited once.
+  # The only implemented readiness contract is advisory. A complete local
+  # contract also cannot authorise automatic execution without a separately
+  # reviewed capability-promotion contract; no reply flag bypasses this ceiling.
+  def apply_neural_recommendation(action, rec) when is_map(rec) do
+    ready = NeuralCoordinator.confidence_ready?(Map.get(rec, :confidence_readiness))
+
+    guarded_rec =
+      cond do
+        Map.get(rec, :is_novel) == true -> rec
+        Map.get(rec, :strategy) == :report_only -> rec
+        Map.get(rec, :strategy) == :auto_execute -> Map.put(rec, :strategy, :review)
+        not ready -> Map.put(rec, :strategy, :review)
+        true -> rec
+      end
+
+    action
+    |> DispatchGuard.enforce(guarded_rec)
+    |> apply_neural_adjustment(rec, ready)
+    |> record_neural_readiness(rec, ready)
+  end
+
+  def apply_neural_recommendation(action, _unavailable),
+    do: DispatchGuard.enforce(action, :unavailable)
+
+  # Apply the confidence adjustment after the dispatch/readiness ceilings.
   # - Novel findings: demote to :control (human review required)
-  # - Non-novel: adjust confidence downward if neural prediction is lower (conservative)
-  defp apply_neural_recommendation(action, %{is_novel: true} = _rec) do
+  # - Non-novel: only ready local predictions can lower recipe confidence.
+  defp apply_neural_adjustment(action, %{is_novel: true} = _rec, _ready) do
     # Novel finding -- force to control tier for human review
     pattern = extract_pattern(action)
 
@@ -327,20 +352,17 @@ defmodule Hypatia.PatternAnalyzer do
     {:control, Map.put(pattern, "neural_novel", true)}
   end
 
-  defp apply_neural_recommendation(
+  defp apply_neural_adjustment(
          {:eliminate, recipe, pattern},
-         %{confidence: neural_conf} = rec
+         %{confidence: neural_conf} = rec,
+         ready
        )
        when is_number(neural_conf) and neural_conf >= 0.0 and neural_conf <= 1.0 do
     recipe_conf = Map.get(recipe, "confidence", 0.0)
     prior_conf = Map.get(recipe, "neural_prior_confidence", recipe_conf)
 
-    # Only let neural confidence override if it's meaningfully trained.
-    # Untrained MoE returns sigmoid(1.0) ~= 0.73 -- don't let that drag down
-    # a proven recipe at 0.99. Neural override kicks in once confidence
-    # diverges from the default sigmoid output (i.e., the network has learned).
-    neural_is_trained = neural_conf < 0.70 or neural_conf > 0.76
-    effective_conf = if neural_is_trained, do: min(recipe_conf, neural_conf), else: recipe_conf
+    # A score's magnitude does not establish training. This remains demote-only.
+    effective_conf = if ready, do: min(recipe_conf, neural_conf), else: recipe_conf
 
     updated_recipe =
       recipe
@@ -352,9 +374,10 @@ defmodule Hypatia.PatternAnalyzer do
     {:eliminate, updated_recipe, pattern}
   end
 
-  defp apply_neural_recommendation(
+  defp apply_neural_adjustment(
          {:substitute, recipe, pattern},
-         %{confidence: neural_conf} = rec
+         %{confidence: neural_conf} = rec,
+         _ready
        ) do
     updated_recipe =
       recipe
@@ -364,7 +387,21 @@ defmodule Hypatia.PatternAnalyzer do
     {:substitute, updated_recipe, pattern}
   end
 
-  defp apply_neural_recommendation(action, _rec), do: action
+  defp apply_neural_adjustment(action, _rec, _ready), do: action
+
+  defp record_neural_readiness({tier, recipe, pattern}, rec, ready)
+       when tier in [:eliminate, :substitute] do
+    {tier, readiness_audit(recipe, rec, ready), pattern}
+  end
+
+  defp record_neural_readiness({:control, pattern}, rec, ready),
+    do: {:control, readiness_audit(pattern, rec, ready)}
+
+  defp readiness_audit(record, rec, ready) do
+    record
+    |> Map.put("neural_confidence_ready", ready)
+    |> Map.put("neural_confidence_readiness", Map.get(rec, :confidence_readiness))
+  end
 
   defp extract_pattern({:eliminate, _recipe, pattern}), do: pattern
   defp extract_pattern({:substitute, _recipe, pattern}), do: pattern

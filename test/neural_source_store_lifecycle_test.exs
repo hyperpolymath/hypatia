@@ -4,7 +4,14 @@
 defmodule Hypatia.Neural.SourceStoreLifecycleTest do
   use ExUnit.Case, async: false
 
-  alias Hypatia.{FleetDispatcher, LearningScheduler, OutcomeTracker}
+  alias Hypatia.{
+    FleetDispatcher,
+    LearningScheduler,
+    OutcomeTracker,
+    PatternAnalyzer,
+    TriangleRouter
+  }
+
   alias Hypatia.Diagnostics.Monitor
   alias Hypatia.Kin.Gate
   alias Hypatia.Watcher.AnomalyDetector
@@ -16,6 +23,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     GraphOfTrust,
     LiquidStateMachine,
     Persistence,
+    RadialNeuralNetwork,
     SourceStore,
     SequenceModel,
     TrainingPipeline
@@ -116,13 +124,23 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     {server, _cohort} = coordinator()
     refute :sys.get_state(server).rbf.trained
 
-    assert %{rbf: %{novelty: :untrained, is_novel: true}, is_novel: true} =
+    assert %{
+             rbf: %{novelty: :untrained, is_novel: true},
+             is_novel: true,
+             aggregated_confidence: 0.5,
+             confidence_readiness: %{scope: :local_training_state, ready: false} = readiness
+           } =
              Coordinator.analyze(@finding, server)
+
+    assert readiness.contributing_models == []
+    assert readiness.components.sequence == :heuristic
+    assert readiness.components.gnn == :placeholder
 
     assert %{
              is_novel: true,
              strategy: :report_only,
              raw_strategy: :report_only,
+             confidence_readiness: %{ready: false},
              reason: reason
            } = Coordinator.dispatch_recommendation(@finding, server)
 
@@ -139,9 +157,17 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     analysis = Coordinator.analyze(@finding, server)
     assert analysis.rbf.novelty != :untrained
     assert analysis.is_novel == match?({:novel, _}, analysis.rbf.novelty)
+    assert Coordinator.confidence_ready?(analysis.confidence_readiness)
+    assert :rbf in analysis.confidence_readiness.contributing_models
+    assert :esn in analysis.confidence_readiness.contributing_models
+    refute :lsm in analysis.confidence_readiness.contributing_models
+    refute :gnn in analysis.confidence_readiness.contributing_models
+    refute :vae in analysis.confidence_readiness.contributing_models
+    refute :sequence in analysis.confidence_readiness.contributing_models
 
     rec = Coordinator.dispatch_recommendation(@finding, server)
     refute rec.reason =~ "untrained"
+    assert Coordinator.confidence_ready?(rec.confidence_readiness)
   end
 
   test "an actual ready cohort can analyze, train and persist its own source", ctx do
@@ -169,6 +195,64 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     end
 
     refute File.exists?(Path.join(ctx.second, "neural-states"))
+  end
+
+  test "a mature recipe and high learned similarity remain advisory through actual composition",
+       ctx do
+    write_training_store(ctx.first)
+    {server, _cohort} = coordinator()
+
+    # Fit the real RBF on a bounded synthetic fixture at this finding. The
+    # resulting similarity is high, but is not a calibration/evaluation receipt.
+    vector = RadialNeuralNetwork.finding_to_vector(@finding)
+
+    rbf =
+      RadialNeuralNetwork.init(num_centers: 1)
+      |> RadialNeuralNetwork.train(List.duplicate(vector, 5), List.duplicate(1.0, 5))
+
+    assert rbf.trained
+    :sys.replace_state(server, fn state -> %{state | rbf: rbf} end)
+
+    # Confirm this is the boundary where the existing maturity gate alone
+    # would permit auto execution; do not manufacture a pre-clamped reply.
+    assert OutcomeTracker.annealed_strategy_from_store(
+             @finding["recipe_id"],
+             :auto_execute,
+             ctx.first
+           ) == :auto_execute
+
+    rec = Coordinator.dispatch_recommendation(@finding, server)
+    assert_in_delta rec.confidence, 1.0, 1.0e-12
+    assert rec.raw_strategy == :auto_execute
+    assert rec.strategy == :review
+    assert rec.advisory_clamped
+    refute rec.annealing_clamped
+    assert rec.confidence_readiness.contributing_models == [:rbf]
+    assert rec.reason =~ "local training state is advisory"
+
+    action = {:eliminate, %{"id" => @finding["recipe_id"], "confidence" => 0.99}, @finding}
+
+    # The consumer independently retains the ceiling even if a legacy or
+    # relabelled reply tries to turn the honest raw strategy into authority.
+    for recommendation <- [rec, %{rec | strategy: :auto_execute, advisory_clamped: false}] do
+      assert {:eliminate, recipe, _} =
+               PatternAnalyzer.apply_neural_recommendation(action, recommendation)
+
+      assert recipe["confidence"] == 0.94
+      assert recipe["neural_prior_confidence"] == 0.99
+      assert recipe["neural_confidence_ready"]
+      assert TriangleRouter.dispatch_strategy(recipe["confidence"]) == :review
+    end
+
+    # A missing maturity history still restricts further. Its clamp remains
+    # distinguishable from the independent advisory ceiling.
+    File.write!(Path.join([ctx.first, "outcomes", "fixture.jsonl"]), "")
+    immature = Coordinator.dispatch_recommendation(@finding, server)
+    assert immature.raw_strategy == :auto_execute
+    assert immature.strategy == :report_only
+    assert immature.advisory_clamped
+    assert immature.annealing_clamped
+    assert {:control, _} = PatternAnalyzer.apply_neural_recommendation(action, immature)
   end
 
   # E0-23: the autoencoder encodes nothing yet (an all-zero latent, cluster 0). Its
@@ -424,6 +508,14 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert :sys.get_state(restored).rbf.trained
     assert :sys.get_state(restored).rbf.output_weights == bound["output_weights"]
 
+    restored_readiness = Coordinator.analyze(@finding, restored).confidence_readiness
+    assert Coordinator.confidence_ready?(restored_readiness)
+    assert :rbf in restored_readiness.contributing_models
+    # ESN/LSM snapshots are summaries; a restart still leaves their actual
+    # local readouts cold. A saved "trained" flag is not their runtime state.
+    refute :esn in restored_readiness.contributing_models
+    refute :lsm in restored_readiness.contributing_models
+
     for diagnostic <- [
           Map.drop(bound, ["source_schema", "source_store", "source_status"]),
           Map.put(bound, "source_store", ctx.second),
@@ -434,6 +526,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       bytes = File.read!(path)
       {cold, _cohort} = coordinator()
       refute :sys.get_state(cold).rbf.trained
+      refute Coordinator.analyze(@finding, cold).confidence_readiness.ready
       assert {:ok, ^diagnostic} = Persistence.load_all(ctx.first).rbf
       assert File.read!(path) == bytes
     end
