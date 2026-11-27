@@ -169,7 +169,7 @@
     (job
       :workflow ".github/workflows/ci-health-sweep.yml"
       :job "sweep"
-      :secrets ("HYPATIA_DISPATCH_PAT")
+      :secrets ("HYPATIA_APP_ID" "HYPATIA_APP_PRIVATE_KEY")
       :endpoints ("github.com:443" "api.github.com:443")
       :enforcement harden-runner-block
       :reason "Checks out this repo, then every call in scripts/ci-health/ is gh against the GitHub API.")
@@ -190,7 +190,7 @@
     (job
       :workflow ".github/workflows/hypatia-remediation-sweep.yml"
       :job "sweep"
-      :secrets ("HYPATIA_SCAN_PAT" "HYPATIA_DISPATCH_PAT")
+      :secrets ("HYPATIA_SCAN_PAT" "HYPATIA_APP_ID" "HYPATIA_APP_PRIVATE_KEY")
       :endpoints ("api.github.com:443" "results-receiver.actions.githubusercontent.com:443" "*.blob.core.windows.net:443")
       :enforcement harden-runner-block
       :reason "Reads vulnerability alerts with the read-only scanner credential, sends repository dispatches with the separate dispatch credential, then uploads the target list as an artifact.")
@@ -204,7 +204,7 @@
     (job
       :workflow ".github/workflows/credential-read-check.yml"
       :job "dispatch"
-      :secrets ("HYPATIA_DISPATCH_PAT")
+      :secrets ("HYPATIA_APP_ID" "HYPATIA_APP_PRIVATE_KEY")
       :endpoints ("api.github.com:443")
       :enforcement harden-runner-block
       :reason "Checks token identity and reads the observation-store main ref; does not validate dispatch or write permissions.")

@@ -73,7 +73,7 @@ jobs:
   #
   # `scan` builds panic-attack and runs it over ~300 repositories' worth of
   # third-party content. Until this split it ran in the same job as
-  # HYPATIA_DISPATCH_PAT, and `Checkout verisimdb-data` left that PAT in the
+  # the old write-capable PAT, and `Checkout verisimdb-data` left that PAT in the
   # clone's .git/config, readable by every later step, the freshly built
   # scanner included. Now `scan` holds no credential and hands its output to
   # `publish` as an artifact; the two jobs that hold the PAT run no fetched

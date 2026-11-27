@@ -54,7 +54,7 @@ The supervision tree starts Bandit on port 9090 (9099 under `MIX_ENV=test`):
 
 | Variable | Purpose |
 |---|---|
-| `HYPATIA_DISPATCH_PAT` | GitHub PAT with `repo` scope for cross-repo dispatch |
+| `HYPATIA_DISPATCH_PAT` | Optional local-run token for `mix hypatia.*` tasks. The remediation, ci-health and credential-check workflows no longer use it: they mint GitHub App tokens from `HYPATIA_APP_ID` / `HYPATIA_APP_PRIVATE_KEY`. The Phase 2 resync fragment (`scripts/sweeps/phase2-canonical.fragment.yml`) still needs it in consuming repos |
 | `HYPATIA_HTTP_PORT` | Override the Bandit listen port (default 9090) |
 | `HYPATIA_VERISIM_URL` | verisim-api base URL. No default: unset or blank turns off prover hints, strategy-shift detection and recommender retraining |
 | `HYPATIA_ECHIDNABOT_URL` | echidnabot base URL (`/graphql` is appended). No default: unset or blank means strategy-shift re-queues are logged and dropped |

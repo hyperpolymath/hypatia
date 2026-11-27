@@ -202,10 +202,23 @@ jobs:
               | sort -t'|' -k3 -nr >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Short-lived (1 h) installation token for the one repository this step
+      # writes to, replacing the long-lived HYPATIA_DISPATCH_PAT.
+      - name: Mint dispatch token (GitHub App)
+        id: dispatch_app
+        if: steps.query.outputs.target_count != '0' && steps.cfg.outputs.dry != 'true'
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          app-id: ${{ secrets.HYPATIA_APP_ID }}
+          private-key: ${{ secrets.HYPATIA_APP_PRIVATE_KEY }}
+          owner: hyperpolymath
+          repositories: gitbot-fleet
+          permission-contents: write  # repository_dispatch needs Contents: write
+
       - name: Dispatch findings to gitbot-fleet
         if: steps.query.outputs.target_count != '0' && steps.cfg.outputs.dry != 'true'
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          GH_TOKEN: ${{ steps.dispatch_app.outputs.token }}
           OWNER: ${{ steps.cfg.outputs.owner }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
